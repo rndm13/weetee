@@ -9,22 +9,31 @@ struct AppState {
     httplib::Client cli;
 };
 
+void homepage(AppState* state) noexcept {
+    ImGui::Text("Hello, this is weetee!");
+}
+
 void tests(AppState* state) noexcept {
     ImGui::Text("Hello, this is tests window!");
 }
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept { 
-    return {};
+    auto log_split = HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
+    auto tests_split = HelloImGui::DockingSplit("MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.15);
+    return {log_split, tests_split};
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState *state) noexcept {
-    auto customers_window = HelloImGui::DockableWindow(
-            "Tests", "MainDockSpace", [state]() { tests(state); });
+    auto homepage_window = HelloImGui::DockableWindow(
+            "Homepage", "MainDockSpace", [state]() { homepage(state); });
+
+    auto tests_window = HelloImGui::DockableWindow(
+            "Tests", "SideBarDockSpace", [state]() { tests(state); });
 
     auto logs_window = HelloImGui::DockableWindow(
-            "Logs", "MainDockSpace", [state]() { HelloImGui::LogGui(); });
+            "Logs", "LogDockSpace", [state]() { HelloImGui::LogGui(); });
 
-    return {customers_window, logs_window};
+    return {tests_window, homepage_window, logs_window};
 }
 
 HelloImGui::DockingParams layout(AppState *state) noexcept {
