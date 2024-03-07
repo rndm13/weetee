@@ -22,18 +22,20 @@ if (NOT TARGET imgui_bundle)
     # set(IMMVISION_FETCH_OPENCV ON)
 endif()
 
-# Build your app
-# ==============
-imgui_bundle_add_app(weetee src/main.cpp ${CMAKE_CURRENT_SOURCE_DIR}/external/cpp-httplib/httplib.h ${CMAKE_CURRENT_SOURCE_DIR}/external/json-include/json.hpp)
+# Add https 
+# =============
 
-# imgui_bundle_add_app is a helper function, similar to cmake's "add_executable"
-# Usage:
-# imgui_bundle_add_app(app_name file1.cpp file2.cpp ...)
-#
-# Features:
-# * It will automatically link the target to the required libraries (hello_imgui, OpenGl, glad, etc)
-# * It will embed the assets (for desktop, mobile, and emscripten apps)
-# * It will perform additional customization (app icon and name on mobile platforms, etc)
-#
-# Now you can build your app with
-#     mkdir build && cd build && cmake .. && cmake --build .
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_package(OpenSSL REQUIRED)
+find_package(httplib COMPONENTS OpenSSL ZLIB Brotli REQUIRED)
+find_package(nlohmann_json 3.2.0 REQUIRED)
+
+# Build app
+# ==============
+imgui_bundle_add_app(weetee src/main.cpp)
+target_link_libraries(
+    weetee PRIVATE
+    OpenSSL::Crypto
+    OpenSSL::SSL
+    httplib::httplib
+    nlohmann_json::nlohmann_json)
