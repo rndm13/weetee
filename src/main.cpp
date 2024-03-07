@@ -1,3 +1,5 @@
+#include "hello_imgui/docking_params.h"
+#include "hello_imgui/runner_params.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_md_wrapper.h"
@@ -25,6 +27,7 @@ enum HTTPType {
   HTTP_PATCH,
 };
 
+struct AppState;
 struct Test;
 struct Group;
 using NestedTest = std::variant<Test, Group>;
@@ -35,10 +38,13 @@ struct Test {
   HTTPType type;
   std::string name;
 
+  HelloImGui::DockableWindow *window;
+
   const std::string label() noexcept {
     return this->name + "##" + std::to_string(this->id);
   }
 };
+
 struct Group {
   Group *parent;
   uint64_t id;
@@ -46,6 +52,8 @@ struct Group {
   std::string name;
   bool open;
   std::vector<NestedTest> children;
+
+  HelloImGui::DockableWindow *window;
 
   const std::string label() noexcept {
     return this->name + "##" + std::to_string(this->id);
@@ -62,7 +70,24 @@ struct AppState {
       .open = true,
       .children = {},
   };
+
+  HelloImGui::RunnerParams *runner_params;
+  std::vector<HelloImGui::DockableWindow> windows;
 };
+
+void test_edit(AppState *app, Test *test) noexcept {
+  ImGui::Text("%s", test->name.c_str());
+}
+
+void open_test_edit(AppState *app, Test *test) noexcept {
+  auto edit_window =
+      HelloImGui::DockableWindow("Edit " + test->name, "MainDockSpace",
+                                 [app, test]() { test_edit(app, test); });
+
+  app->windows = app->runner_params->dockingParams.dockableWindows;
+  app->windows.push_back(edit_window);
+  test->window = &app->windows.back();
+}
 
 void homepage(AppState *state) noexcept {
   ImGui::Text("Hello, this is weetee!");
@@ -72,6 +97,8 @@ void homepage(AppState *state) noexcept {
 bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
+    if (ImGui::MenuItem("Edit")) {
+    }
     if (ImGui::MenuItem("Add a new test")) {
       change = true;
       group->open = true;
@@ -103,6 +130,12 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
           }
         }
       }
+      app->windows = app->runner_params->dockingParams.dockableWindows;
+      for (auto it = app->windows.begin(); it < app->windows.end(); ++it) {
+        if (&*it == group->window) {
+          app->windows.erase(it);
+        }
+      }
       change = true;
     }
     ImGui::EndPopup();
@@ -113,6 +146,9 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
 bool context_menu_visitor(AppState *app, Test *test) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
+    if (ImGui::MenuItem("Edit")) {
+      open_test_edit(app, test);
+    }
     if (ImGui::MenuItem("Delete", nullptr, false, test->parent)) {
       for (auto it = test->parent->children.begin();
            it != test->parent->children.end(); it++) {
@@ -122,6 +158,12 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
             test->parent->children.erase(it);
             break;
           }
+        }
+      }
+      app->windows = app->runner_params->dockingParams.dockableWindows;
+      for (auto it = app->windows.begin(); it < app->windows.end(); ++it) {
+        if (&*it == test->window) {
+          app->windows.erase(it);
         }
       }
       change = true;
@@ -163,8 +205,7 @@ void display_test(AppState *app, NestedTest &test) noexcept {
         leaf.name.c_str());
     bool changed = context_menu_visitor(app, &leaf);
     if (!changed && clicked) {
-      // TODO: open details window
-      printf("clicked %s!\n", leaf.name.c_str());
+      open_test_edit(app, &leaf);
       ImGui::TreeNodeSetOpen(id, false);
     }
   }
@@ -185,37 +226,45 @@ std::vector<HelloImGui::DockingSplit> splits() noexcept {
   return {log_split, tests_split};
 }
 
-std::vector<HelloImGui::DockableWindow> windows(AppState *state) noexcept {
-  auto homepage_window = HelloImGui::DockableWindow(
-      "Homepage", "MainDockSpace", [state]() { homepage(state); });
+std::vector<HelloImGui::DockableWindow> windows(AppState *app) noexcept {
+  auto homepage_window = HelloImGui::DockableWindow("Homepage", "MainDockSpace",
+                                                    [app]() { homepage(app); });
 
   auto tests_window = HelloImGui::DockableWindow("Tests", "SideBarDockSpace",
-                                                 [state]() { tests(state); });
+                                                 [app]() { tests(app); });
 
   auto logs_window = HelloImGui::DockableWindow(
-      "Logs", "LogDockSpace", [state]() { HelloImGui::LogGui(); });
+      "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
   return {tests_window, homepage_window, logs_window};
 }
 
-HelloImGui::DockingParams layout(AppState *state) noexcept {
+HelloImGui::DockingParams layout(AppState *app) noexcept {
   auto params = HelloImGui::DockingParams();
 
-  params.dockableWindows = windows(state);
+  params.dockableWindows = windows(app);
   params.dockingSplits = splits();
 
   return params;
 }
 
-void show_gui(AppState *state) noexcept { auto io = ImGui::GetIO(); }
+void show_gui(AppState *app) noexcept { auto io = ImGui::GetIO(); }
+
+void pre_frame(AppState *app) noexcept {
+  if (!app->windows.empty()) {
+    app->runner_params->dockingParams.dockableWindows = app->windows;
+    app->windows = {};
+  }
+}
 
 int main(int argc, char *argv[]) {
+  HelloImGui::RunnerParams runner_params;
   httplib::Client cli("");
   auto state = AppState{
       .cli = std::move(cli),
+      .runner_params = &runner_params,
   };
 
-  HelloImGui::RunnerParams runner_params;
   runner_params.appWindowParams.windowTitle = "weetee";
 
   runner_params.imGuiWindowParams.showMenuBar = true;
@@ -223,6 +272,7 @@ int main(int argc, char *argv[]) {
   runner_params.imGuiWindowParams.defaultImGuiWindowType =
       HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
   runner_params.callbacks.ShowGui = [&state]() { show_gui(&state); };
+  runner_params.callbacks.PreNewFrame = [&state]() { pre_frame(&state); };
 
   runner_params.dockingParams = layout(&state);
 
