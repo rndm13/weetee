@@ -75,15 +75,41 @@ struct AppState {
   std::vector<HelloImGui::DockableWindow> windows;
 };
 
+void group_edit(AppState *app, Group *group) noexcept {
+  ImGui::Text("%s", group->name.c_str());
+}
+
+void open_group_edit(AppState *app, Group *group) noexcept {
+  if (group->window) {
+    group->window->focusWindowAtNextFrame = true;
+    return;
+  }
+  auto edit_window =
+      HelloImGui::DockableWindow("Edit " + group->label(), "MainDockSpace",
+                                 [app, group]() { group_edit(app, group); });
+
+  // idk probably a bad idea
+  edit_window.includeInViewMenu = false;
+  app->windows = app->runner_params->dockingParams.dockableWindows;
+  app->windows.push_back(edit_window);
+  group->window = &app->windows.back();
+}
+
 void test_edit(AppState *app, Test *test) noexcept {
   ImGui::Text("%s", test->name.c_str());
 }
 
 void open_test_edit(AppState *app, Test *test) noexcept {
+  if (test->window) {
+    test->window->focusWindowAtNextFrame = true;
+    return;
+  }
   auto edit_window =
-      HelloImGui::DockableWindow("Edit " + test->name, "MainDockSpace",
+      HelloImGui::DockableWindow("Edit " + test->label(), "MainDockSpace",
                                  [app, test]() { test_edit(app, test); });
 
+  // idk probably a bad idea
+  edit_window.includeInViewMenu = false;
   app->windows = app->runner_params->dockingParams.dockableWindows;
   app->windows.push_back(edit_window);
   test->window = &app->windows.back();
@@ -98,6 +124,7 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
     if (ImGui::MenuItem("Edit")) {
+      open_group_edit(app, group);
     }
     if (ImGui::MenuItem("Add a new test")) {
       change = true;
@@ -106,7 +133,7 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
           .parent = group,
           .id = ++app->id_counter,
           .type = HTTP_GET,
-          .name = "https:://example.com",
+          .name = "https://example.com",
       });
     }
     if (ImGui::MenuItem("Add a new group")) {
@@ -173,19 +200,25 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
   return change;
 }
 
-void display_test(AppState *app, NestedTest &test) noexcept {
+void display_tree_test(AppState *app, NestedTest &test) noexcept {
+  ImGuiWindow *window = ImGui::GetCurrentWindow();
   ImGui::TableNextRow();
   ImGui::TableNextColumn();
   if (std::holds_alternative<Group>(test)) {
     auto &group = std::get<Group>(test);
-    bool open = ImGui::TreeNodeEx(group.label().c_str(),
-                                  /* ImGuiTreeNodeFlags_UpsideDownArrow | */
-                                  ImGuiTreeNodeFlags_SpanFullWidth);
+    const ImGuiID id = window->GetID(group.label().c_str());
+    if (group.open) {
+      ImGui::TreeNodeSetOpen(id, group.open);
+    }
+    group.open = ImGui::TreeNodeBehavior(id, ImGuiTreeNodeFlags_SpanFullWidth,
+                                         group.label().c_str());
+
     bool changed = context_menu_visitor(app, &group);
-    if (open) {
+
+    if (group.open) {
       if (!changed) {
         for (NestedTest &child_test : group.children) {
-          display_test(app, child_test);
+          display_tree_test(app, child_test);
         }
       }
       ImGui::TreePop();
@@ -193,7 +226,6 @@ void display_test(AppState *app, NestedTest &test) noexcept {
   } else {
     auto &leaf = std::get<Test>(test);
 
-    ImGuiWindow *window = ImGui::GetCurrentWindow();
     const ImGuiID id = window->GetID(leaf.label().c_str());
     // TODO: figure out how to hide arrow while keeping it double clickable
     bool clicked = ImGui::TreeNodeBehavior(
@@ -203,7 +235,9 @@ void display_test(AppState *app, NestedTest &test) noexcept {
             ImGuiTreeNodeFlags_NoTreePushOnOpen |
             ImGuiTreeNodeFlags_SpanFullWidth,
         leaf.name.c_str());
+
     bool changed = context_menu_visitor(app, &leaf);
+
     if (!changed && clicked) {
       open_test_edit(app, &leaf);
       ImGui::TreeNodeSetOpen(id, false);
@@ -213,7 +247,7 @@ void display_test(AppState *app, NestedTest &test) noexcept {
 
 void tests(AppState *app) noexcept {
   if (ImGui::BeginTable("tests", 1)) {
-    display_test(app, app->root_group);
+    display_tree_test(app, app->root_group);
     ImGui::EndTable();
   }
 }
@@ -252,6 +286,7 @@ void show_gui(AppState *app) noexcept { auto io = ImGui::GetIO(); }
 
 void pre_frame(AppState *app) noexcept {
   if (!app->windows.empty()) {
+    app->runner_params->dockingParams.layoutReset = true;
     app->runner_params->dockingParams.dockableWindows = app->windows;
     app->windows = {};
   }
