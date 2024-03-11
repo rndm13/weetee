@@ -1,8 +1,9 @@
+#include "hello_imgui/hello_imgui_logger.h"
 #include "hello_imgui/hello_imgui_theme.h"
+#include "imspinner/imspinner.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
-#include "imgui_md_wrapper.h"
 #include "immapp/immapp.h"
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -12,7 +13,8 @@
 #include "variant"
 #include "unordered_map"
 
-#include "cstdio"
+using HelloImGui::Log;
+using HelloImGui::LogLevel;
 
 template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
@@ -48,6 +50,8 @@ struct Test {
   HTTPType type;
   std::string endpoint;
 
+  bool enabled = true;
+
   const std::string label() const noexcept {
     return this->endpoint + "##" + std::to_string(this->id);
   }
@@ -58,11 +62,20 @@ struct Group {
   uint64_t id;
 
   std::string name;
-  bool open;
   std::vector<size_t> children_idx;
+
+  bool open = false;
+
+  bool enabled = true;
 
   const std::string label() const noexcept {
     return this->name + "##" + std::to_string(this->id);
+  }
+};
+
+struct IDVisit{
+  uint64_t operator()(const auto& idable) const noexcept {
+    return idable.id;
   }
 };
 struct LabelVisit{
@@ -80,8 +93,6 @@ struct AppState {
         .parent_id = static_cast<size_t>(-1),
         .id = 0,
         .name = "root",
-        .open = true,
-        .children_idx = {},
       },
     },
   };
@@ -93,17 +104,12 @@ struct AppState {
   std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
 };
 
+void delete_test(AppState *app, NestedTest test) noexcept;
 void delete_group(AppState *app, const Group *group) noexcept {
   for (auto child_id : group->children_idx) {
     auto child = app->tests[child_id];
-    if (std::holds_alternative<Group>(child)) {
-      const Group group_child = std::get<Group>(child);
-      delete_group(app, &group_child);
-    }
-
-    app->tests.erase(child_id);
+    delete_test(app, child);
   }
-  app->tests.erase(group->id);
 }
 
 void delete_test(AppState *app, NestedTest test) noexcept {
@@ -197,50 +203,64 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
 
 void display_tree_test(AppState *app, NestedTest &test) noexcept {
   ImGuiWindow *window = ImGui::GetCurrentWindow();
+
+  ImGui::PushID(std::visit(IDVisit(), test));
+
   ImGui::TableNextRow();
-  ImGui::TableNextColumn();
-  if (std::holds_alternative<Group>(test)) {
-    auto &group = std::get<Group>(test);
-    const std::string label = group.label();
-    auto id = window->GetID(label.c_str());
-    const bool open =
-        ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
-    const bool changed = context_menu_visitor(app, &group);
-    if (open) {
-      if (!changed) {
-        for (size_t child_id : group.children_idx) {
-          display_tree_test(app, app->tests[child_id]);
+  ImGui::TableNextColumn(); // test
+  std::visit(overloaded{
+    [app, window](Group& group) {
+      const std::string label = group.label();
+      auto id = window->GetID(label.c_str());
+      const bool open =
+          ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+      const bool changed = context_menu_visitor(app, &group);
+
+      ImGui::TableNextColumn(); // spinner for running tests
+      ImSpinner::SpinnerIncDots("running", 5, 1);
+      ImGui::TableNextColumn(); // enabled / disabled
+      ImGui::Checkbox("##enabled", &group.enabled);
+
+      if (open) {
+        if (!changed) {
+          for (size_t child_id : group.children_idx) {
+            display_tree_test(app, app->tests[child_id]);
+          }
         }
+        ImGui::TreePop();
       }
-      ImGui::TreePop();
+    }, 
+    [app, window](Test& test) {
+      const ImGuiID id = window->GetID(test.label().c_str());
+      // TODO: figure out how to hide arrow while keeping it double clickable
+      bool clicked = ImGui::TreeNodeBehavior(
+          id,
+          ImGuiTreeNodeFlags_OpenOnDoubleClick |
+              ImGuiTreeNodeFlags_NoTreePushOnOpen |
+              ImGuiTreeNodeFlags_SpanFullWidth,
+          test.endpoint.c_str());
+      bool changed = context_menu_visitor(app, &test);
+
+      if (!changed && clicked) {
+        app->opened_editor_tabs[test.id] = {.original = &app->tests[test.id], .edit = test};
+        ImGui::TreeNodeSetOpen(id, false);
+      }
+
+      ImGui::TableNextColumn(); // spinner for running tests
+      ImSpinner::SpinnerIncDots("running", 5, 1);
+      ImGui::TableNextColumn(); // enabled / disabled
+      ImGui::Checkbox("##enabled", &test.enabled);
     }
-  } else {
-    auto &leaf = std::get<Test>(test);
+  }, test);
 
-    const ImGuiID id = window->GetID(leaf.label().c_str());
-    // TODO: figure out how to hide arrow while keeping it double clickable
-    bool clicked = ImGui::TreeNodeBehavior(
-        id,
-        ImGuiTreeNodeFlags_OpenOnDoubleClick |
-            ImGuiTreeNodeFlags_NoTreePushOnOpen |
-            ImGuiTreeNodeFlags_SpanFullWidth,
-        leaf.endpoint.c_str());
-    bool changed = context_menu_visitor(app, &leaf);
-
-    if (!changed && clicked) {
-      app->opened_editor_tabs[leaf.id] = {.original = &test, .edit = test};
-      ImGui::TreeNodeSetOpen(id, false);
-    }
-  }
-}
-
-void homepage(AppState *app) noexcept {
-  ImGui::Text("Hello, this is weetee!");
-  ImGui::Text("I'll write more things here soon, maybe.");
+  ImGui::PopID();
 }
 
 void test_tree_view(AppState *app) noexcept {
-  if (ImGui::BeginTable("tests", 1)) {
+  if (ImGui::BeginTable("tests", 3)) {
+    ImGui::TableSetupColumn("test");
+    ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
+    ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
     display_tree_test(app, app->tests[0]);
     ImGui::EndTable();
   }
@@ -326,10 +346,6 @@ std::vector<HelloImGui::DockingSplit> splits() noexcept {
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState *app) noexcept {
-  //   auto homepage_window = HelloImGui::DockableWindow(
-  //       "Homepage", "MainDockSpace", 
-  //       [app]() { homepage(app); });
-
   auto tab_editor_window = HelloImGui::DockableWindow(
       "Editor", "MainDockSpace", 
       [app]() { tabbed_editor(app); });
@@ -354,6 +370,14 @@ HelloImGui::DockingParams layout(AppState *app) noexcept {
   return params;
 }
 
+void show_menus(AppState *app) noexcept {
+    // ImGui::PushStyleColor(0, 0x00000000);
+    if (ImGui::ArrowButton("start", ImGuiDir_Right)) {
+        Log(LogLevel::Info, "Started testing");
+    }
+    // ImGui::PopStyleColor();
+}
+
 void show_gui(AppState *app) noexcept {
     auto io = ImGui::GetIO();
 }
@@ -372,6 +396,7 @@ int main(int argc, char *argv[]) {
   runner_params.imGuiWindowParams.defaultImGuiWindowType =
       HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
   runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
+  runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
 
   runner_params.dockingParams = layout(&app);
   runner_params.fpsIdling.enableIdling = false;
