@@ -217,7 +217,7 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
 }
 
 bool tree_selectable(AppState *app, NestedTest &test) noexcept {
-    ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+    ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick;
     const auto id = std::visit(IDVisit(), test);
     bool item_is_selected = app->selected_tests.contains(id);
     if (ImGui::Selectable("##selectable", item_is_selected, selectable_flags, ImVec2(0, 0))) {
@@ -278,8 +278,9 @@ void display_tree_test(AppState *app, NestedTest &test, float indentation = 10) 
       }
     }, 
     [app, window, ctrl, indentation, original = &test](Test& test) {
+        const auto io = ImGui::GetIO();
       ImGui::TableNextColumn(); // selectable
-      const bool clicked = tree_selectable(app, *original);
+      const bool double_clicked = tree_selectable(app, *original) && io.MouseDoubleClicked[0];
       const bool changed = context_menu_visitor(app, &test);
       ImGui::TableNextColumn(); // text
       ImGui::InvisibleButton("", ImVec2(indentation, 10));
@@ -290,7 +291,7 @@ void display_tree_test(AppState *app, NestedTest &test, float indentation = 10) 
       ImGui::TableNextColumn(); // enabled / disabled
       enabled_checkbox("##enabled", &test.enabled);
 
-      if (!changed && clicked) {
+      if (!changed && double_clicked) {
         app->opened_editor_tabs[test.id] = {.original = &app->tests[test.id], .edit = test};
       }
     }
