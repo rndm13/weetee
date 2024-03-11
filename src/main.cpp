@@ -1,22 +1,24 @@
 #include "hello_imgui/hello_imgui_logger.h"
 #include "hello_imgui/hello_imgui_theme.h"
-#include "imspinner/imspinner.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "immapp/immapp.h"
+#include "imspinner/imspinner.h"
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "../external/cpp-httplib/httplib.h"
 #include "../external/json-include/json.hpp"
 
-#include "variant"
 #include "unordered_map"
+#include "variant"
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
-template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
+};
 
 static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV |
@@ -24,7 +26,7 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
     ImGuiTableFlags_Resizable;
 
-enum HTTPType: int {
+enum HTTPType : int {
   HTTP_GET,
   HTTP_POST,
   HTTP_PUT,
@@ -32,12 +34,12 @@ enum HTTPType: int {
   HTTP_PATCH,
 };
 
-static const char* HTTPTypeLabels[] = {
-  [HTTP_GET] = (const char*)"GET",
-  [HTTP_POST] = (const char*)"POST",
-  [HTTP_PUT] = (const char*)"PUT",
-  [HTTP_DELETE] = (const char*)"DELETE",
-  [HTTP_PATCH] = (const char*)"PATCH",
+static const char *HTTPTypeLabels[] = {
+  [HTTP_GET] = (const char *)"GET",
+  [HTTP_POST] = (const char *)"POST",
+  [HTTP_PUT] = (const char *)"PUT",
+  [HTTP_DELETE] = (const char *)"DELETE",
+  [HTTP_PATCH] = (const char *)"PATCH",
 };
 
 struct Test;
@@ -74,19 +76,15 @@ struct Group {
   }
 };
 
-struct IDVisit{
-  uint64_t operator()(const auto& idable) const noexcept {
-    return idable.id;
-  }
+struct IDVisit {
+  uint64_t operator()(const auto &idable) const noexcept { return idable.id; }
 };
 
-struct LabelVisit{
-  const std::string operator()(const auto& labelable) const noexcept {
+struct LabelVisit {
+  const std::string operator()(const auto &labelable) const noexcept {
     return labelable.label();
   }
 };
-
-// const auto label_visit = overloaded{&Test::label, &Group::label};
 
 struct AppState {
   httplib::Client cli;
@@ -99,9 +97,10 @@ struct AppState {
       },
     },
   };
-  // keys are ids and values are for separate for editing (must be saved to apply changes)
+  // keys are ids and values are for separate for editing (must be saved to
+  // apply changes)
   struct EditorTab {
-    NestedTest* original;
+    NestedTest *original;
     NestedTest edit;
   };
   std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
@@ -132,8 +131,7 @@ void delete_test(AppState *app, NestedTest test) noexcept {
       id = group.id;
       parent_id = group.parent_id;
     },
-  },
-  test);
+  }, test);
 
   // remove it's id from parents child id list
   auto &parent = std::get<Group>(app->tests.at(parent_id));
@@ -144,6 +142,7 @@ void delete_test(AppState *app, NestedTest test) noexcept {
       break;
     };
   }
+
   // remove from tests
   app->tests.erase(id);
   app->opened_editor_tabs.erase(id);
@@ -153,11 +152,14 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
     if (!app->selected_tests.contains(group->id)) {
-        app->selected_tests.clear();
-        app->selected_tests.insert(group->id);
+      app->selected_tests.clear();
+      app->selected_tests.insert(group->id);
     }
     if (ImGui::MenuItem("Edit")) {
-      app->opened_editor_tabs[group->id] = {.original = &app->tests[group->id], .edit = *group};
+      app->opened_editor_tabs[group->id] = {
+        .original = &app->tests[group->id],
+        .edit = *group
+      };
     }
 
     if (ImGui::MenuItem("Add a new test")) {
@@ -199,12 +201,15 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
     if (!app->selected_tests.contains(test->id)) {
-        app->selected_tests.clear();
-        app->selected_tests.insert(test->id);
+      app->selected_tests.clear();
+      app->selected_tests.insert(test->id);
     }
 
     if (ImGui::MenuItem("Edit")) {
-      app->opened_editor_tabs[test->id] = {.original = &app->tests[test->id], .edit = *test};
+      app->opened_editor_tabs[test->id] = {
+        .original = &app->tests[test->id],
+        .edit = *test
+      };
     }
 
     if (ImGui::MenuItem("Delete", nullptr, false, test->id != 0)) {
@@ -217,30 +222,30 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
 }
 
 bool tree_selectable(AppState *app, NestedTest &test) noexcept {
-    ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_AllowDoubleClick;
-    const auto id = std::visit(IDVisit(), test);
-    bool item_is_selected = app->selected_tests.contains(id);
-    if (ImGui::Selectable("##selectable", item_is_selected, selectable_flags, ImVec2(0, 0))) {
-        if (ImGui::GetIO().KeyCtrl) {
-            if (item_is_selected) {
-                app->selected_tests.erase(id);
-            } else { 
-                app->selected_tests.insert(id);
-            }
-        } else {
-            app->selected_tests.clear();
-            app->selected_tests.insert(id);
-            return true;
-        }
+  ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns |
+                                          ImGuiSelectableFlags_AllowOverlap |
+                                          ImGuiSelectableFlags_AllowDoubleClick;
+  const auto id = std::visit(IDVisit(), test);
+  bool item_is_selected = app->selected_tests.contains(id);
+  if (ImGui::Selectable("##selectable", item_is_selected, selectable_flags,
+                        ImVec2(0, 21))) {
+    if (ImGui::GetIO().KeyCtrl) {
+      if (item_is_selected) {
+        app->selected_tests.erase(id);
+      } else {
+        app->selected_tests.insert(id);
+      }
+    } else {
+      app->selected_tests.clear();
+      app->selected_tests.insert(id);
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
-void enabled_checkbox(const char* id, bool* enabled) noexcept {
-    ImGui::Text(ICON_FA_CHECK);
-}
-
-void display_tree_test(AppState *app, NestedTest &test, float indentation = 10) noexcept {
+void display_tree_test(AppState *app, NestedTest &test,
+                       float indentation = 10) noexcept {
   ImGuiWindow *window = ImGui::GetCurrentWindow();
   const bool ctrl = ImGui::GetIO().KeyCtrl;
 
@@ -248,51 +253,53 @@ void display_tree_test(AppState *app, NestedTest &test, float indentation = 10) 
 
   ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
   std::visit(overloaded{
-    [app, window, ctrl, indentation, original = &test](Group& group) {
-
-      ImGui::TableNextColumn(); // selectable
+    [app, window, ctrl, indentation, original = &test] (Group &group) {
+      ImGui::TableNextColumn(); // test
       const bool clicked = tree_selectable(app, *original);
       if (clicked) {
         group.open = !group.open;
       }
       const bool changed = context_menu_visitor(app, &group);
-      ImGui::TableNextColumn(); // text
+      ImGui::SameLine();
       ImGui::InvisibleButton("", ImVec2(indentation, 10));
       ImGui::SameLine();
       if (group.open) {
         ImGui::Text(ICON_FA_CARET_DOWN " %s", group.name.c_str());
       } else {
-        ImGui::Text(ICON_FA_CARET_RIGHT " %s", group.name.c_str());
+        ImGui::Text(ICON_FA_CARET_RIGHT "  %s", group.name.c_str());
       }
       ImGui::TableNextColumn(); // spinner for running tests
       ImSpinner::SpinnerIncDots("running", 5, 1);
       ImGui::TableNextColumn(); // enabled / disabled
-      enabled_checkbox("##enabled", &group.enabled);
+      ImGui::Checkbox("##enabled", &group.enabled);
 
       if (group.open) {
         if (!changed) {
           for (size_t child_id : group.children_idx) {
-            display_tree_test(app, app->tests[child_id], indentation + 20);
+            display_tree_test(app, app->tests[child_id],
+                              indentation + 20);
           }
         }
       }
-    }, 
-    [app, window, ctrl, indentation, original = &test](Test& test) {
-        const auto io = ImGui::GetIO();
-      ImGui::TableNextColumn(); // selectable
-      const bool double_clicked = tree_selectable(app, *original) && io.MouseDoubleClicked[0];
+    },
+    [app, window, ctrl, indentation, original = &test] (Test &test) {
+      const auto io = ImGui::GetIO();
+      ImGui::TableNextColumn(); // test
+      const bool double_clicked =
+          tree_selectable(app, *original) && io.MouseDoubleClicked[0];
       const bool changed = context_menu_visitor(app, &test);
-      ImGui::TableNextColumn(); // text
+      ImGui::SameLine();
       ImGui::InvisibleButton("", ImVec2(indentation, 10));
       ImGui::SameLine();
       ImGui::Text("%s", test.endpoint.c_str());
       ImGui::TableNextColumn(); // spinner for running tests
       ImSpinner::SpinnerIncDots("running", 5, 1);
       ImGui::TableNextColumn(); // enabled / disabled
-      enabled_checkbox("##enabled", &test.enabled);
+      ImGui::Checkbox("##enabled", &test.enabled);
 
       if (!changed && double_clicked) {
-        app->opened_editor_tabs[test.id] = {.original = &app->tests[test.id], .edit = test};
+        app->opened_editor_tabs[test.id] = {
+            .original = &app->tests[test.id], .edit = test};
       }
     }
   }, test);
@@ -301,8 +308,7 @@ void display_tree_test(AppState *app, NestedTest &test, float indentation = 10) 
 }
 
 void test_tree_view(AppState *app) noexcept {
-  if (ImGui::BeginTable("tests", 4)) {
-    ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 1.0f);
+  if (ImGui::BeginTable("tests", 3)) {
     ImGui::TableSetupColumn("test");
     ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
     ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
@@ -312,63 +318,71 @@ void test_tree_view(AppState *app) noexcept {
 }
 
 enum EditorTabResult {
-    TAB_NONE,
-    TAB_CLOSED,
-    TAB_SAVED,
+  TAB_NONE,
+  TAB_CLOSED,
+  TAB_SAVED,
 };
 
-EditorTabResult editor_tab_test(AppState *app, const NestedTest* original, Test& test) {
-    bool open = true;
-    EditorTabResult result = TAB_NONE;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open, ImGuiTabItemFlags_None)) {
-        ImGui::InputText("Endpoint", &test.endpoint);
-        ImGui::Combo("Type", (int*)&test.type, HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+EditorTabResult editor_tab_test(AppState *app, const NestedTest *original,
+                                Test &test) {
+  bool open = true;
+  EditorTabResult result = TAB_NONE;
+  if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open,
+                          ImGuiTabItemFlags_None)) {
+    ImGui::InputText("Endpoint", &test.endpoint);
+    ImGui::Combo("Type", (int *)&test.type, HTTPTypeLabels,
+                 IM_ARRAYSIZE(HTTPTypeLabels));
 
-        if (ImGui::Button("Save")) {
-            result = TAB_SAVED;
-        }
+    if (ImGui::Button("Save")) {
+      result = TAB_SAVED;
+    }
 
-        ImGui::EndTabItem();
-    }
-    if (!open) {
-        result = TAB_CLOSED;
-    }
-    return result;
+    ImGui::EndTabItem();
+  }
+  if (!open) {
+    result = TAB_CLOSED;
+  }
+  return result;
 }
 
-EditorTabResult editor_tab_group(AppState *app, const NestedTest* original, Group& group) {
-    bool open = true;
-    EditorTabResult result = TAB_NONE;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open, ImGuiTabItemFlags_None)) {
-        ImGui::InputText("Name", &group.name);
+EditorTabResult editor_tab_group(AppState *app, const NestedTest *original,
+                                 Group &group) {
+  bool open = true;
+  EditorTabResult result = TAB_NONE;
+  if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open,
+                          ImGuiTabItemFlags_None)) {
+    ImGui::InputText("Name", &group.name);
 
-        if (ImGui::Button("Save")) {
-            result = TAB_SAVED;
-        }
+    if (ImGui::Button("Save")) {
+      result = TAB_SAVED;
+    }
 
-        ImGui::EndTabItem();
-    }
-    if (!open) {
-        result = TAB_CLOSED;
-    }
-    return result;
+    ImGui::EndTabItem();
+  }
+  if (!open) {
+    result = TAB_CLOSED;
+  }
+  return result;
 }
 
 void tabbed_editor(AppState *app) noexcept {
   if (ImGui::BeginTabBar("editor")) {
     size_t closed_id = -1;
-    for (auto& [id, tab] : app->opened_editor_tabs) {
-        const NestedTest* original = tab.original;
+    for (auto &[id, tab] : app->opened_editor_tabs) {
+      const NestedTest *original = tab.original;
       EditorTabResult result = std::visit(overloaded{
-        [app, original](Test& test) {return editor_tab_test(app, original, test);},
-        [app, original](Group& group) {return editor_tab_group(app, original, group);},
+        [app, original](Test &test) {
+          return editor_tab_test(app, original, test);
+        },
+        [app, original](Group &group) {
+          return editor_tab_group(app, original, group);
+        },
       }, tab.edit);
-
       switch (result) {
       case TAB_SAVED:
         *tab.original = tab.edit;
         break;
-      case TAB_CLOSED: 
+      case TAB_CLOSED:
         closed_id = id;
         break;
       case TAB_NONE:
@@ -392,16 +406,13 @@ std::vector<HelloImGui::DockingSplit> splits() noexcept {
 
 std::vector<HelloImGui::DockableWindow> windows(AppState *app) noexcept {
   auto tab_editor_window = HelloImGui::DockableWindow(
-      "Editor", "MainDockSpace", 
-      [app]() { tabbed_editor(app); });
+      "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
 
   auto tests_window = HelloImGui::DockableWindow(
-      "Tests", "SideBarDockSpace",
-      [app]() { test_tree_view(app); });
+      "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
 
   auto logs_window = HelloImGui::DockableWindow(
-      "Logs", "LogDockSpace",
-      [app]() { HelloImGui::LogGui(); });
+      "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
   return {tests_window, tab_editor_window, logs_window};
 }
@@ -416,18 +427,18 @@ HelloImGui::DockingParams layout(AppState *app) noexcept {
 }
 
 void show_menus(AppState *app) noexcept {
-    ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000022);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000011);
-    if (ImGui::ArrowButton("start", ImGuiDir_Right)) {
-        Log(LogLevel::Info, "Started testing");
-    }
-    ImGui::PopStyleColor(3);
+  ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
+  ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000022);
+  ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000011);
+  if (ImGui::ArrowButton("start", ImGuiDir_Right)) {
+    Log(LogLevel::Info, "Started testing");
+  }
+  ImGui::PopStyleColor(3);
 }
 
 void show_gui(AppState *app) noexcept {
-    auto io = ImGui::GetIO();
-    ImGui::ShowDemoWindow();
+  auto io = ImGui::GetIO();
+  ImGui::ShowDemoWindow();
 }
 
 int main(int argc, char *argv[]) {
