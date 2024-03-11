@@ -12,6 +12,11 @@
 
 #include "cstdio"
 
+template <class... Ts> struct overloaded : Ts... {
+  using Ts::operator()...;
+};
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV |
     ImGuiTableFlags_Hideable | ImGuiTableFlags_BordersOuter |
@@ -91,16 +96,19 @@ void delete_group(AppState *app, const Group *group) noexcept {
 void delete_test(AppState *app, NestedTest test) noexcept {
   size_t id;
   size_t parent_id;
-  if (std::holds_alternative<Test>(test)) {
-    const Test leaf_test = std::get<Test>(test);
-    id = leaf_test.id;
-    parent_id = leaf_test.parent_id;
-  } else if (std::holds_alternative<Group>(test)) {
-    const Group group = std::get<Group>(test);
-    delete_group(app, &group);
-    id = group.id;
-    parent_id = group.parent_id;
-  }
+
+  std::visit(overloaded{
+    [&id, &parent_id](Test test) {
+      id = test.id;
+      parent_id = test.parent_id;
+    },
+    [&id, &parent_id, app](Group group) {
+      delete_group(app, &group);
+      id = group.id;
+      parent_id = group.parent_id;
+    },
+  },
+  test);
 
   // remove it's id from parents child id list
   auto &parent = std::get<Group>(app->tests.at(parent_id));
@@ -118,7 +126,6 @@ void delete_test(AppState *app, NestedTest test) noexcept {
 bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
-
     if (ImGui::MenuItem("Add a new test")) {
       change = true;
       group->open = true;
@@ -175,11 +182,7 @@ void display_test(AppState *app, NestedTest &test) noexcept {
     const std::string label = group.label();
     auto id = window->GetID(label.c_str());
     const bool open =
-        ImGui::TreeNodeEx(label.c_str(),
-                          ImGuiTreeNodeFlags_SpanFullWidth);
-    // if (open != group.open) {
-    //   ImGui::TreeNodeSetOpen(id, group.open);
-    // }
+        ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
     const bool changed = context_menu_visitor(app, &group);
     if (open) {
       if (!changed) {
@@ -197,7 +200,6 @@ void display_test(AppState *app, NestedTest &test) noexcept {
     // TODO: figure out how to hide arrow while keeping it double clickable
     bool clicked = ImGui::TreeNodeBehavior(
         id,
-        /* ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | */
         ImGuiTreeNodeFlags_OpenOnDoubleClick |
             ImGuiTreeNodeFlags_NoTreePushOnOpen |
             ImGuiTreeNodeFlags_SpanFullWidth,
