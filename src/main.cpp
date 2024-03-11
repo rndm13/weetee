@@ -134,6 +134,7 @@ void delete_test(AppState *app, NestedTest test) noexcept {
   }
   // remove from tests
   app->tests.erase(id);
+  app->opened_editor_tabs.erase(id);
 }
 
 bool context_menu_visitor(AppState *app, Group *group) noexcept {
