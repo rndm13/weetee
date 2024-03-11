@@ -2,6 +2,7 @@
 #include "imgui_internal.h"
 #include "imgui_md_wrapper.h"
 #include "immapp/immapp.h"
+#include <unordered_map>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "../external/cpp-httplib/httplib.h"
@@ -29,7 +30,7 @@ struct Test;
 struct Group;
 using NestedTest = std::variant<Test, Group>;
 struct Test {
-  Group *parent;
+  size_t parent_id;
   uint64_t id;
 
   HTTPType type;
@@ -40,12 +41,12 @@ struct Test {
   }
 };
 struct Group {
-  Group *parent;
+  size_t parent_id;
   uint64_t id;
 
   std::string name;
   bool open;
-  std::vector<NestedTest> children;
+  std::vector<size_t> children_idx;
 
   const std::string label() noexcept {
     return this->name + "##" + std::to_string(this->id);
@@ -55,12 +56,17 @@ struct Group {
 struct AppState {
   httplib::Client cli;
   uint64_t id_counter = 0;
-  NestedTest root_group = Group{
-      .parent = nullptr,
-      .id = 0,
-      .name = "root",
-      .open = true,
-      .children = {},
+  std::unordered_map<size_t, NestedTest> tests = {
+      {
+          0,
+          Group{
+              .parent_id = static_cast<size_t>(-1),
+              .id = 0,
+              .name = "root",
+              .open = true,
+              .children_idx = {},
+          },
+      },
   };
 };
 
@@ -69,40 +75,78 @@ void homepage(AppState *state) noexcept {
   ImGui::Text("I'll write more things here soon, maybe.");
 }
 
+void delete_group(AppState *app, const Group *group) noexcept {
+  for (auto child_id : group->children_idx) {
+    auto child = app->tests[child_id];
+    if (std::holds_alternative<Group>(child)) {
+      const Group group_child = std::get<Group>(child);
+      delete_group(app, &group_child);
+    }
+
+    app->tests.erase(child_id);
+  }
+  app->tests.erase(group->id);
+}
+
+void delete_test(AppState *app, NestedTest test) noexcept {
+  size_t id;
+  size_t parent_id;
+  if (std::holds_alternative<Test>(test)) {
+    const Test leaf_test = std::get<Test>(test);
+    id = leaf_test.id;
+    parent_id = leaf_test.parent_id;
+  } else if (std::holds_alternative<Group>(test)) {
+    const Group group = std::get<Group>(test);
+    delete_group(app, &group);
+    id = group.id;
+    parent_id = group.parent_id;
+  }
+
+  // remove it's id from parents child id list
+  auto &parent = std::get<Group>(app->tests.at(parent_id));
+  for (auto it = parent.children_idx.begin(); it != parent.children_idx.end();
+       it++) {
+    if (*it == id) {
+      parent.children_idx.erase(it);
+      break;
+    };
+  }
+  // remove from tests
+  app->tests.erase(id);
+}
+
 bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
+
     if (ImGui::MenuItem("Add a new test")) {
       change = true;
       group->open = true;
-      group->children.push_back(Test{
-          .parent = group,
-          .id = ++app->id_counter,
+
+      auto id = ++app->id_counter;
+      app->tests[id] = (Test{
+          .parent_id = group->id,
+          .id = id,
           .type = HTTP_GET,
           .name = "https:://example.com",
       });
+      group->children_idx.push_back(id);
     }
+
     if (ImGui::MenuItem("Add a new group")) {
       change = true;
       group->open = true;
-      group->children.push_back(Group{
-          .parent = group,
-          .id = ++app->id_counter,
+      auto id = ++app->id_counter;
+      app->tests[id] = (Group{
+          .parent_id = group->id,
+          .id = id,
           .name = "New group",
-          .children = {},
       });
+      group->children_idx.push_back(id);
     }
-    if (ImGui::MenuItem("Delete", nullptr, false, group->parent)) {
-      for (auto it = group->parent->children.begin();
-           it != group->parent->children.end(); it++) {
-        if (std::holds_alternative<Group>(*it)) {
-          auto it_g = std::get<Group>(*it);
-          if (group->id == it_g.id) {
-            group->parent->children.erase(it);
-            break;
-          }
-        }
-      }
+
+    if (ImGui::MenuItem("Delete", nullptr, false, group->id != 0)) {
+      delete_test(app, *group);
       change = true;
     }
     ImGui::EndPopup();
@@ -113,17 +157,8 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
 bool context_menu_visitor(AppState *app, Test *test) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
-    if (ImGui::MenuItem("Delete", nullptr, false, test->parent)) {
-      for (auto it = test->parent->children.begin();
-           it != test->parent->children.end(); it++) {
-        if (std::holds_alternative<Test>(*it)) {
-          auto it_t = std::get<Test>(*it);
-          if (test->id == it_t.id) {
-            test->parent->children.erase(it);
-            break;
-          }
-        }
-      }
+    if (ImGui::MenuItem("Delete", nullptr, false, test->id != 0)) {
+      delete_test(app, *test);
       change = true;
     }
     ImGui::EndPopup();
@@ -134,16 +169,22 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
 void display_test(AppState *app, NestedTest &test) noexcept {
   ImGui::TableNextRow();
   ImGui::TableNextColumn();
+  auto window = ImGui::GetCurrentWindow();
   if (std::holds_alternative<Group>(test)) {
     auto &group = std::get<Group>(test);
-    bool open = ImGui::TreeNodeEx(group.label().c_str(),
-                                  /* ImGuiTreeNodeFlags_UpsideDownArrow | */
-                                  ImGuiTreeNodeFlags_SpanFullWidth);
-    bool changed = context_menu_visitor(app, &group);
+    const std::string label = group.label();
+    auto id = window->GetID(label.c_str());
+    const bool open =
+        ImGui::TreeNodeEx(label.c_str(),
+                          ImGuiTreeNodeFlags_SpanFullWidth);
+    // if (open != group.open) {
+    //   ImGui::TreeNodeSetOpen(id, group.open);
+    // }
+    const bool changed = context_menu_visitor(app, &group);
     if (open) {
       if (!changed) {
-        for (NestedTest &child_test : group.children) {
-          display_test(app, child_test);
+        for (size_t child_id : group.children_idx) {
+          display_test(app, app->tests[child_id]);
         }
       }
       ImGui::TreePop();
@@ -172,7 +213,7 @@ void display_test(AppState *app, NestedTest &test) noexcept {
 
 void tests(AppState *app) noexcept {
   if (ImGui::BeginTable("tests", 1)) {
-    display_test(app, app->root_group);
+    display_test(app, app->tests[0]);
     ImGui::EndTable();
   }
 }
