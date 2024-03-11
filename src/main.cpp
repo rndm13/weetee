@@ -33,16 +33,17 @@ enum HTTPType: int {
 };
 
 static const char* HTTPTypeLabels[] = {
-    [HTTP_GET] = (const char*)"GET",
-    [HTTP_POST] = (const char*)"POST",
-    [HTTP_PUT] = (const char*)"PUT",
-    [HTTP_DELETE] = (const char*)"DELETE",
-    [HTTP_PATCH] = (const char*)"PATCH",
+  [HTTP_GET] = (const char*)"GET",
+  [HTTP_POST] = (const char*)"POST",
+  [HTTP_PUT] = (const char*)"PUT",
+  [HTTP_DELETE] = (const char*)"DELETE",
+  [HTTP_PATCH] = (const char*)"PATCH",
 };
 
 struct Test;
 struct Group;
 using NestedTest = std::variant<Test, Group>;
+
 struct Test {
   size_t parent_id;
   uint64_t id;
@@ -78,11 +79,13 @@ struct IDVisit{
     return idable.id;
   }
 };
+
 struct LabelVisit{
   const std::string operator()(const auto& labelable) const noexcept {
     return labelable.label();
   }
 };
+
 // const auto label_visit = overloaded{&Test::label, &Group::label};
 
 struct AppState {
@@ -102,9 +105,12 @@ struct AppState {
     NestedTest edit;
   };
   std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
+  std::unordered_set<size_t> selected_tests = {};
 };
 
+void delete_group(AppState *app, const Group *group) noexcept;
 void delete_test(AppState *app, NestedTest test) noexcept;
+
 void delete_group(AppState *app, const Group *group) noexcept {
   for (auto child_id : group->children_idx) {
     auto child = app->tests[child_id];
@@ -146,6 +152,10 @@ void delete_test(AppState *app, NestedTest test) noexcept {
 bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
+    if (!app->selected_tests.contains(group->id)) {
+        app->selected_tests.clear();
+        app->selected_tests.insert(group->id);
+    }
     if (ImGui::MenuItem("Edit")) {
       app->opened_editor_tabs[group->id] = {.original = &app->tests[group->id], .edit = *group};
     }
@@ -159,7 +169,7 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
           .parent_id = group->id,
           .id = id,
           .type = HTTP_GET,
-          .endpoint = "https:://example.com",
+          .endpoint = "https://example.com",
       });
       group->children_idx.push_back(id);
     }
@@ -188,6 +198,11 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
 bool context_menu_visitor(AppState *app, Test *test) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
+    if (!app->selected_tests.contains(test->id)) {
+        app->selected_tests.clear();
+        app->selected_tests.insert(test->id);
+    }
+
     if (ImGui::MenuItem("Edit")) {
       app->opened_editor_tabs[test->id] = {.original = &app->tests[test->id], .edit = *test};
     }
@@ -201,55 +216,83 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
   return change;
 }
 
-void display_tree_test(AppState *app, NestedTest &test) noexcept {
+bool tree_selectable(AppState *app, NestedTest &test) noexcept {
+    ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap;
+    const auto id = std::visit(IDVisit(), test);
+    bool item_is_selected = app->selected_tests.contains(id);
+    if (ImGui::Selectable("##selectable", item_is_selected, selectable_flags, ImVec2(0, 0))) {
+        if (ImGui::GetIO().KeyCtrl) {
+            if (item_is_selected) {
+                app->selected_tests.erase(id);
+            } else { 
+                app->selected_tests.insert(id);
+            }
+        } else {
+            app->selected_tests.clear();
+            app->selected_tests.insert(id);
+            return true;
+        }
+    }
+    return false;
+}
+
+void enabled_checkbox(const char* id, bool* enabled) noexcept {
+    ImGui::Text(ICON_FA_CHECK);
+}
+
+void display_tree_test(AppState *app, NestedTest &test, float indentation = 10) noexcept {
   ImGuiWindow *window = ImGui::GetCurrentWindow();
+  const bool ctrl = ImGui::GetIO().KeyCtrl;
 
   ImGui::PushID(std::visit(IDVisit(), test));
 
-  ImGui::TableNextRow();
-  ImGui::TableNextColumn(); // test
+  ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
   std::visit(overloaded{
-    [app, window](Group& group) {
-      const std::string label = group.label();
-      auto id = window->GetID(label.c_str());
-      const bool open =
-          ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
-      const bool changed = context_menu_visitor(app, &group);
+    [app, window, ctrl, indentation, original = &test](Group& group) {
 
+      ImGui::TableNextColumn(); // selectable
+      const bool clicked = tree_selectable(app, *original);
+      if (clicked) {
+        group.open = !group.open;
+      }
+      const bool changed = context_menu_visitor(app, &group);
+      ImGui::TableNextColumn(); // text
+      ImGui::InvisibleButton("", ImVec2(indentation, 10));
+      ImGui::SameLine();
+      if (group.open) {
+        ImGui::Text(ICON_FA_CARET_DOWN " %s", group.name.c_str());
+      } else {
+        ImGui::Text(ICON_FA_CARET_RIGHT " %s", group.name.c_str());
+      }
       ImGui::TableNextColumn(); // spinner for running tests
       ImSpinner::SpinnerIncDots("running", 5, 1);
       ImGui::TableNextColumn(); // enabled / disabled
-      ImGui::Checkbox("##enabled", &group.enabled);
+      enabled_checkbox("##enabled", &group.enabled);
 
-      if (open) {
+      if (group.open) {
         if (!changed) {
           for (size_t child_id : group.children_idx) {
-            display_tree_test(app, app->tests[child_id]);
+            display_tree_test(app, app->tests[child_id], indentation + 20);
           }
         }
-        ImGui::TreePop();
       }
     }, 
-    [app, window](Test& test) {
-      const ImGuiID id = window->GetID(test.label().c_str());
-      // TODO: figure out how to hide arrow while keeping it double clickable
-      bool clicked = ImGui::TreeNodeBehavior(
-          id,
-          ImGuiTreeNodeFlags_OpenOnDoubleClick |
-              ImGuiTreeNodeFlags_NoTreePushOnOpen |
-              ImGuiTreeNodeFlags_SpanFullWidth,
-          test.endpoint.c_str());
-      bool changed = context_menu_visitor(app, &test);
+    [app, window, ctrl, indentation, original = &test](Test& test) {
+      ImGui::TableNextColumn(); // selectable
+      const bool clicked = tree_selectable(app, *original);
+      const bool changed = context_menu_visitor(app, &test);
+      ImGui::TableNextColumn(); // text
+      ImGui::InvisibleButton("", ImVec2(indentation, 10));
+      ImGui::SameLine();
+      ImGui::Text("%s", test.endpoint.c_str());
+      ImGui::TableNextColumn(); // spinner for running tests
+      ImSpinner::SpinnerIncDots("running", 5, 1);
+      ImGui::TableNextColumn(); // enabled / disabled
+      enabled_checkbox("##enabled", &test.enabled);
 
       if (!changed && clicked) {
         app->opened_editor_tabs[test.id] = {.original = &app->tests[test.id], .edit = test};
-        ImGui::TreeNodeSetOpen(id, false);
       }
-
-      ImGui::TableNextColumn(); // spinner for running tests
-      ImSpinner::SpinnerIncDots("running", 5, 1);
-      ImGui::TableNextColumn(); // enabled / disabled
-      ImGui::Checkbox("##enabled", &test.enabled);
     }
   }, test);
 
@@ -257,7 +300,8 @@ void display_tree_test(AppState *app, NestedTest &test) noexcept {
 }
 
 void test_tree_view(AppState *app) noexcept {
-  if (ImGui::BeginTable("tests", 3)) {
+  if (ImGui::BeginTable("tests", 4)) {
+    ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 1.0f);
     ImGui::TableSetupColumn("test");
     ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
     ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
@@ -371,15 +415,18 @@ HelloImGui::DockingParams layout(AppState *app) noexcept {
 }
 
 void show_menus(AppState *app) noexcept {
-    // ImGui::PushStyleColor(0, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000022);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000011);
     if (ImGui::ArrowButton("start", ImGuiDir_Right)) {
         Log(LogLevel::Info, "Started testing");
     }
-    // ImGui::PopStyleColor();
+    ImGui::PopStyleColor(3);
 }
 
 void show_gui(AppState *app) noexcept {
     auto io = ImGui::GetIO();
+    ImGui::ShowDemoWindow();
 }
 
 int main(int argc, char *argv[]) {
