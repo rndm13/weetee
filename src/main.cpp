@@ -1,7 +1,7 @@
-#include "hello_imgui/docking_params.h"
-#include "hello_imgui/runner_params.h"
+#include "hello_imgui/hello_imgui_theme.h"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "imgui_stdlib.h"
 #include "imgui_md_wrapper.h"
 #include "immapp/immapp.h"
 
@@ -10,8 +10,11 @@
 #include "../external/json-include/json.hpp"
 
 #include "variant"
+#include "unordered_map"
 
 #include "cstdio"
+
+template <class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
 static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV |
@@ -19,7 +22,7 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
     ImGuiTableFlags_Resizable;
 
-enum HTTPType {
+enum HTTPType: int {
   HTTP_GET,
   HTTP_POST,
   HTTP_PUT,
@@ -27,142 +30,147 @@ enum HTTPType {
   HTTP_PATCH,
 };
 
-struct AppState;
+static const char* HTTPTypeLabels[] = {
+    [HTTP_GET] = (const char*)"GET",
+    [HTTP_POST] = (const char*)"POST",
+    [HTTP_PUT] = (const char*)"PUT",
+    [HTTP_DELETE] = (const char*)"DELETE",
+    [HTTP_PATCH] = (const char*)"PATCH",
+};
+
 struct Test;
 struct Group;
 using NestedTest = std::variant<Test, Group>;
 struct Test {
-  Group *parent;
+  size_t parent_id;
   uint64_t id;
 
   HTTPType type;
-  std::string name;
+  std::string endpoint;
 
-  HelloImGui::DockableWindow *window;
-
-  const std::string label() noexcept {
-    return this->name + "##" + std::to_string(this->id);
+  const std::string label() const noexcept {
+    return this->endpoint + "##" + std::to_string(this->id);
   }
 };
 
 struct Group {
-  Group *parent;
+  size_t parent_id;
   uint64_t id;
 
   std::string name;
   bool open;
-  std::vector<NestedTest> children;
+  std::vector<size_t> children_idx;
 
-  HelloImGui::DockableWindow *window;
-
-  const std::string label() noexcept {
+  const std::string label() const noexcept {
     return this->name + "##" + std::to_string(this->id);
   }
 };
+struct LabelVisit{
+  const std::string operator()(const auto& labelable) const noexcept {
+    return labelable.label();
+  }
+};
+// const auto label_visit = overloaded{&Test::label, &Group::label};
 
 struct AppState {
   httplib::Client cli;
   uint64_t id_counter = 0;
-  NestedTest root_group = Group{
-      .parent = nullptr,
-      .id = 0,
-      .name = "root",
-      .open = true,
-      .children = {},
+  std::unordered_map<size_t, NestedTest> tests = {
+    {0, Group{
+        .parent_id = static_cast<size_t>(-1),
+        .id = 0,
+        .name = "root",
+        .open = true,
+        .children_idx = {},
+      },
+    },
   };
-
-  HelloImGui::RunnerParams *runner_params;
-  std::vector<HelloImGui::DockableWindow> windows;
+  // keys are ids and values are for separate for editing (must be saved to apply changes)
+  struct EditorTab {
+    NestedTest* original;
+    NestedTest edit;
+  };
+  std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
 };
 
-void group_edit(AppState *app, Group *group) noexcept {
-  ImGui::Text("%s", group->name.c_str());
-}
+void delete_group(AppState *app, const Group *group) noexcept {
+  for (auto child_id : group->children_idx) {
+    auto child = app->tests[child_id];
+    if (std::holds_alternative<Group>(child)) {
+      const Group group_child = std::get<Group>(child);
+      delete_group(app, &group_child);
+    }
 
-void open_group_edit(AppState *app, Group *group) noexcept {
-  if (group->window) {
-    group->window->focusWindowAtNextFrame = true;
-    return;
+    app->tests.erase(child_id);
   }
-  auto edit_window =
-      HelloImGui::DockableWindow("Edit " + group->label(), "MainDockSpace",
-                                 [app, group]() { group_edit(app, group); });
-
-  // idk probably a bad idea
-  edit_window.includeInViewMenu = false;
-  app->windows = app->runner_params->dockingParams.dockableWindows;
-  app->windows.push_back(edit_window);
-  group->window = &app->windows.back();
+  app->tests.erase(group->id);
 }
 
-void test_edit(AppState *app, Test *test) noexcept {
-  ImGui::Text("%s", test->name.c_str());
-}
+void delete_test(AppState *app, NestedTest test) noexcept {
+  size_t id;
+  size_t parent_id;
 
-void open_test_edit(AppState *app, Test *test) noexcept {
-  if (test->window) {
-    test->window->focusWindowAtNextFrame = true;
-    return;
+  std::visit(overloaded{
+    [&id, &parent_id](Test test) {
+      id = test.id;
+      parent_id = test.parent_id;
+    },
+    [&id, &parent_id, app](Group group) {
+      delete_group(app, &group);
+      id = group.id;
+      parent_id = group.parent_id;
+    },
+  },
+  test);
+
+  // remove it's id from parents child id list
+  auto &parent = std::get<Group>(app->tests.at(parent_id));
+  for (auto it = parent.children_idx.begin(); it != parent.children_idx.end();
+       it++) {
+    if (*it == id) {
+      parent.children_idx.erase(it);
+      break;
+    };
   }
-  auto edit_window =
-      HelloImGui::DockableWindow("Edit " + test->label(), "MainDockSpace",
-                                 [app, test]() { test_edit(app, test); });
-
-  // idk probably a bad idea
-  edit_window.includeInViewMenu = false;
-  app->windows = app->runner_params->dockingParams.dockableWindows;
-  app->windows.push_back(edit_window);
-  test->window = &app->windows.back();
-}
-
-void homepage(AppState *state) noexcept {
-  ImGui::Text("Hello, this is weetee!");
-  ImGui::Text("I'll write more things here soon, maybe.");
+  // remove from tests
+  app->tests.erase(id);
 }
 
 bool context_menu_visitor(AppState *app, Group *group) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
     if (ImGui::MenuItem("Edit")) {
-      open_group_edit(app, group);
+      app->opened_editor_tabs[group->id] = {.original = &app->tests[group->id], .edit = *group};
     }
+
     if (ImGui::MenuItem("Add a new test")) {
       change = true;
       group->open = true;
-      group->children.push_back(Test{
-          .parent = group,
-          .id = ++app->id_counter,
+
+      auto id = ++app->id_counter;
+      app->tests[id] = (Test{
+          .parent_id = group->id,
+          .id = id,
           .type = HTTP_GET,
-          .name = "https://example.com",
+          .endpoint = "https:://example.com",
       });
+      group->children_idx.push_back(id);
     }
+
     if (ImGui::MenuItem("Add a new group")) {
       change = true;
       group->open = true;
-      group->children.push_back(Group{
-          .parent = group,
-          .id = ++app->id_counter,
+      auto id = ++app->id_counter;
+      app->tests[id] = (Group{
+          .parent_id = group->id,
+          .id = id,
           .name = "New group",
-          .children = {},
       });
+      group->children_idx.push_back(id);
     }
-    if (ImGui::MenuItem("Delete", nullptr, false, group->parent)) {
-      for (auto it = group->parent->children.begin();
-           it != group->parent->children.end(); it++) {
-        if (std::holds_alternative<Group>(*it)) {
-          auto it_g = std::get<Group>(*it);
-          if (group->id == it_g.id) {
-            group->parent->children.erase(it);
-            break;
-          }
-        }
-      }
-      app->windows = app->runner_params->dockingParams.dockableWindows;
-      for (auto it = app->windows.begin(); it < app->windows.end(); ++it) {
-        if (&*it == group->window) {
-          app->windows.erase(it);
-        }
-      }
+
+    if (ImGui::MenuItem("Delete", nullptr, false, group->id != 0)) {
+      delete_test(app, *group);
       change = true;
     }
     ImGui::EndPopup();
@@ -174,25 +182,11 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
   bool change = false;
   if (ImGui::BeginPopupContextItem()) {
     if (ImGui::MenuItem("Edit")) {
-      open_test_edit(app, test);
+      app->opened_editor_tabs[test->id] = {.original = &app->tests[test->id], .edit = *test};
     }
-    if (ImGui::MenuItem("Delete", nullptr, false, test->parent)) {
-      for (auto it = test->parent->children.begin();
-           it != test->parent->children.end(); it++) {
-        if (std::holds_alternative<Test>(*it)) {
-          auto it_t = std::get<Test>(*it);
-          if (test->id == it_t.id) {
-            test->parent->children.erase(it);
-            break;
-          }
-        }
-      }
-      app->windows = app->runner_params->dockingParams.dockableWindows;
-      for (auto it = app->windows.begin(); it < app->windows.end(); ++it) {
-        if (&*it == test->window) {
-          app->windows.erase(it);
-        }
-      }
+
+    if (ImGui::MenuItem("Delete", nullptr, false, test->id != 0)) {
+      delete_test(app, *test);
       change = true;
     }
     ImGui::EndPopup();
@@ -206,19 +200,15 @@ void display_tree_test(AppState *app, NestedTest &test) noexcept {
   ImGui::TableNextColumn();
   if (std::holds_alternative<Group>(test)) {
     auto &group = std::get<Group>(test);
-    const ImGuiID id = window->GetID(group.label().c_str());
-    if (group.open) {
-      ImGui::TreeNodeSetOpen(id, group.open);
-    }
-    group.open = ImGui::TreeNodeBehavior(id, ImGuiTreeNodeFlags_SpanFullWidth,
-                                         group.label().c_str());
-
-    bool changed = context_menu_visitor(app, &group);
-
-    if (group.open) {
+    const std::string label = group.label();
+    auto id = window->GetID(label.c_str());
+    const bool open =
+        ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
+    const bool changed = context_menu_visitor(app, &group);
+    if (open) {
       if (!changed) {
-        for (NestedTest &child_test : group.children) {
-          display_tree_test(app, child_test);
+        for (size_t child_id : group.children_idx) {
+          display_tree_test(app, app->tests[child_id]);
         }
       }
       ImGui::TreePop();
@@ -230,25 +220,99 @@ void display_tree_test(AppState *app, NestedTest &test) noexcept {
     // TODO: figure out how to hide arrow while keeping it double clickable
     bool clicked = ImGui::TreeNodeBehavior(
         id,
-        /* ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_Bullet | */
         ImGuiTreeNodeFlags_OpenOnDoubleClick |
             ImGuiTreeNodeFlags_NoTreePushOnOpen |
             ImGuiTreeNodeFlags_SpanFullWidth,
-        leaf.name.c_str());
-
+        leaf.endpoint.c_str());
     bool changed = context_menu_visitor(app, &leaf);
 
     if (!changed && clicked) {
-      open_test_edit(app, &leaf);
+      app->opened_editor_tabs[leaf.id] = {.original = &test, .edit = test};
       ImGui::TreeNodeSetOpen(id, false);
     }
   }
 }
 
-void tests(AppState *app) noexcept {
+void homepage(AppState *app) noexcept {
+  ImGui::Text("Hello, this is weetee!");
+  ImGui::Text("I'll write more things here soon, maybe.");
+}
+
+void test_tree_view(AppState *app) noexcept {
   if (ImGui::BeginTable("tests", 1)) {
-    display_tree_test(app, app->root_group);
+    display_tree_test(app, app->tests[0]);
     ImGui::EndTable();
+  }
+}
+
+enum EditorTabResult {
+    TAB_NONE,
+    TAB_CLOSED,
+    TAB_SAVED,
+};
+
+EditorTabResult editor_tab_test(AppState *app, const NestedTest* original, Test& test) {
+    bool open = true;
+    EditorTabResult result = TAB_NONE;
+    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open, ImGuiTabItemFlags_None)) {
+        ImGui::InputText("Endpoint", &test.endpoint);
+        ImGui::Combo("Type", (int*)&test.type, HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+
+        if (ImGui::Button("Save")) {
+            result = TAB_SAVED;
+        }
+
+        ImGui::EndTabItem();
+    }
+    if (!open) {
+        result = TAB_CLOSED;
+    }
+    return result;
+}
+
+EditorTabResult editor_tab_group(AppState *app, const NestedTest* original, Group& group) {
+    bool open = true;
+    EditorTabResult result = TAB_NONE;
+    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open, ImGuiTabItemFlags_None)) {
+        ImGui::InputText("Name", &group.name);
+
+        if (ImGui::Button("Save")) {
+            result = TAB_SAVED;
+        }
+
+        ImGui::EndTabItem();
+    }
+    if (!open) {
+        result = TAB_CLOSED;
+    }
+    return result;
+}
+
+void tabbed_editor(AppState *app) noexcept {
+  if (ImGui::BeginTabBar("editor")) {
+    size_t closed_id = -1;
+    for (auto& [id, tab] : app->opened_editor_tabs) {
+        const NestedTest* original = tab.original;
+      EditorTabResult result = std::visit(overloaded{
+        [app, original](Test& test) {return editor_tab_test(app, original, test);},
+        [app, original](Group& group) {return editor_tab_group(app, original, group);},
+      }, tab.edit);
+
+      switch (result) {
+      case TAB_SAVED:
+        *tab.original = tab.edit;
+        break;
+      case TAB_CLOSED: 
+        closed_id = id;
+        break;
+      case TAB_NONE:
+        break;
+      }
+    }
+    if (closed_id != -1) {
+      app->opened_editor_tabs.erase(closed_id);
+    }
+    ImGui::EndTabBar();
   }
 }
 
@@ -261,16 +325,23 @@ std::vector<HelloImGui::DockingSplit> splits() noexcept {
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState *app) noexcept {
-  auto homepage_window = HelloImGui::DockableWindow("Homepage", "MainDockSpace",
-                                                    [app]() { homepage(app); });
+  //   auto homepage_window = HelloImGui::DockableWindow(
+  //       "Homepage", "MainDockSpace", 
+  //       [app]() { homepage(app); });
 
-  auto tests_window = HelloImGui::DockableWindow("Tests", "SideBarDockSpace",
-                                                 [app]() { tests(app); });
+  auto tab_editor_window = HelloImGui::DockableWindow(
+      "Editor", "MainDockSpace", 
+      [app]() { tabbed_editor(app); });
+
+  auto tests_window = HelloImGui::DockableWindow(
+      "Tests", "SideBarDockSpace",
+      [app]() { test_tree_view(app); });
 
   auto logs_window = HelloImGui::DockableWindow(
-      "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+      "Logs", "LogDockSpace",
+      [app]() { HelloImGui::LogGui(); });
 
-  return {tests_window, homepage_window, logs_window};
+  return {tests_window, tab_editor_window, logs_window};
 }
 
 HelloImGui::DockingParams layout(AppState *app) noexcept {
@@ -282,22 +353,15 @@ HelloImGui::DockingParams layout(AppState *app) noexcept {
   return params;
 }
 
-void show_gui(AppState *app) noexcept { auto io = ImGui::GetIO(); }
-
-void pre_frame(AppState *app) noexcept {
-  if (!app->windows.empty()) {
-    app->runner_params->dockingParams.layoutReset = true;
-    app->runner_params->dockingParams.dockableWindows = app->windows;
-    app->windows = {};
-  }
+void show_gui(AppState *app) noexcept {
+    auto io = ImGui::GetIO();
 }
 
 int main(int argc, char *argv[]) {
   HelloImGui::RunnerParams runner_params;
   httplib::Client cli("");
-  auto state = AppState{
+  auto app = AppState{
       .cli = std::move(cli),
-      .runner_params = &runner_params,
   };
 
   runner_params.appWindowParams.windowTitle = "weetee";
@@ -306,10 +370,10 @@ int main(int argc, char *argv[]) {
   runner_params.imGuiWindowParams.showStatusBar = true;
   runner_params.imGuiWindowParams.defaultImGuiWindowType =
       HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
-  runner_params.callbacks.ShowGui = [&state]() { show_gui(&state); };
-  runner_params.callbacks.PreNewFrame = [&state]() { pre_frame(&state); };
+  runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
 
-  runner_params.dockingParams = layout(&state);
+  runner_params.dockingParams = layout(&app);
+  runner_params.fpsIdling.enableIdling = false;
 
   ImmApp::AddOnsParams addOnsParams;
   addOnsParams.withMarkdown = true;
