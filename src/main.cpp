@@ -30,6 +30,11 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
     ImGuiTableFlags_Resizable;
 
+static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
+    ImGuiSelectableFlags_SpanAllColumns |
+    ImGuiSelectableFlags_AllowOverlap |
+    ImGuiSelectableFlags_AllowDoubleClick;
+
 bool arrow(const char* label, ImGuiDir dir) {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
@@ -89,7 +94,8 @@ static const char* MPBDTypeLabels[] = {
 };
 using MultiPartBodyData = std::string;
 struct MultiPartBodyElement {
-    bool enabled;
+    bool enabled = true;
+    bool selected = false;
     std::string name;
     MultiPartBodyDataType type;
     MultiPartBodyData data;
@@ -301,13 +307,9 @@ bool context_menu_visitor(AppState* app, Test* test) noexcept {
 }
 
 bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
-    ImGuiSelectableFlags selectable_flags =
-        ImGuiSelectableFlags_SpanAllColumns |
-        ImGuiSelectableFlags_AllowOverlap |
-        ImGuiSelectableFlags_AllowDoubleClick;
     const auto id = std::visit(IDVisit(), test);
     bool item_is_selected = app->selected_tests.contains(id);
-    if (ImGui::Selectable(label, item_is_selected, selectable_flags,
+    if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS,
                           ImVec2(0, 21))) {
         if (ImGui::GetIO().KeyCtrl) {
             if (item_is_selected) {
@@ -343,6 +345,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
         ImGui::TableNextColumn(); // enabled / disabled
+        // TODO: make this look better
         ImGui::Checkbox("##enabled", &leaf.enabled);
 
         if (!changed && double_clicked) {
@@ -359,7 +362,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
         if (group.open) {
             arrow("down", ImGuiDir_Down);
-        }  else {
+        } else {
             arrow("right", ImGuiDir_Right);
         }
         ImGui::SameLine();
@@ -372,6 +375,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
         ImGui::TableNextColumn(); // enabled / disabled
+        // TODO: make this look better
         ImGui::Checkbox("##enabled", &group.enabled);
 
         if (group.open) {
@@ -406,12 +410,104 @@ enum EditorTabResult {
     TAB_SAVED,
 };
 
+bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) { // enabled and selectable
+        // TODO: make this look less stupid
+        changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
+        ImGui::SameLine();
+        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 22))) {
+            elem->selected = !elem->selected;
+        }
+        if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::MenuItem("Delete")) {
+                Log(LogLevel::Debug, "TODO");
+            }
+            if (ImGui::MenuItem("Enable")) {
+                for (auto& e : mpb->elements) {
+                    e.selected = e.enabled || e.selected;
+                }
+            }
+            if (ImGui::MenuItem("Disable")) {
+                for (auto& e : mpb->elements) {
+                    e.selected = e.enabled || !e.selected;
+                }
+            }
+            ImGui::EndPopup();
+        }
+    }
+    if (ImGui::TableNextColumn()) { // name
+        changed = changed | ImGui::InputText("##name", &elem->name);
+    }
+    if (ImGui::TableNextColumn()) { // type
+        if (ImGui::Combo("##type", (int*)&elem->type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
+            switch (elem->type) {
+            case MPBD_TEXT:
+                elem->data = "";
+                break;
+            case MPBD_FILE:
+                elem->data = "";
+                break;
+            }
+        }
+    }
+    if (ImGui::TableNextColumn()) { // body
+        switch (elem->type) {
+        case MPBD_TEXT:
+            changed = changed | ImGui::InputText("##text", &elem->data);
+            break;
+        case MPBD_FILE:
+            if (ImGui::Button("Open a file##file", ImVec2(-1, 0))) {
+                changed = true;
+                Log(LogLevel::Debug, "TODO!");
+            }
+            break;
+        }
+    }
+
+    return changed;
+}
+
+void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
+    if (ImGui::BeginTable(label, 4, TABLE_FLAGS)) {
+        ImGui::TableSetupColumn("Enabled");
+        ImGui::TableSetupColumn("Name");
+        ImGui::TableSetupColumn("Type");
+        ImGui::TableSetupColumn("Value");
+        ImGui::TableHeadersRow();
+        for (size_t i = 0; i < mpb->elements.size(); i++) {
+            auto* elem = &mpb->elements[i];
+            ImGui::TableNextRow();
+            ImGui::PushID(i);
+            multi_part_body_row(app, mpb, elem);
+            ImGui::PopID();
+        }
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn(); // enabled, skip
+        if (ImGui::TableNextColumn()) {
+            ImGui::Text("Change this to add new elements");
+        }
+        ImGui::TableNextRow();
+        ImGui::PushID(mpb->elements.size());
+        static MultiPartBodyElement elem = {};
+        if (multi_part_body_row(app, mpb, &elem)) {
+            mpb->elements.push_back(elem);
+            elem = {};
+        }
+        ImGui::PopID();
+        ImGui::EndTable();
+    }
+}
+
 void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
     if (ImGui::BeginTabBar("Request")) {
+        ImGui::PushID("request");
+
         if (ImGui::BeginTabItem("Request")) {
             ImGui::Text("Select any of the tabs to edit test's request");
             ImGui::EndTabItem();
         }
+
         if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
                     "Body Type", (int*)&test.body_type,
@@ -472,21 +568,26 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
                 break;
 
             case REQUEST_MULTIPART:
-                ImGui::Text("TODO");
+                auto& mpb = std::get<MultiPartBody>(test.body);
+                multi_part_body(app, &mpb, "##body");
                 break;
             }
             ImGui::EndTabItem();
         }
+
         if (ImGui::BeginTabItem("Parameters")) {
             ImGui::EndTabItem();
         }
+
         if (ImGui::BeginTabItem("Cookies")) {
             ImGui::EndTabItem();
         }
+
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
+        ImGui::PopID();
     }
 }
 
@@ -619,7 +720,7 @@ void show_gui(AppState* app) noexcept {
 }
 
 void load_fonts(AppState* app) noexcept {
-    // TODO: Make this work
+    // TODO: fix log window icons
     app->regular_font = HelloImGui::LoadFont("fonts/DroidSans.ttf", 15);
     app->mono_font = HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15);
 }
