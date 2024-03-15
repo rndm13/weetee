@@ -1,4 +1,5 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
+#include "hello_imgui/hello_imgui_font.h"
 #include "hello_imgui/hello_imgui_logger.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -16,6 +17,8 @@
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
+using json = nlohmann::json;
+
 template <class... Ts>
 struct overloaded : Ts... {
     using Ts::operator()...;
@@ -27,6 +30,21 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
     ImGuiTableFlags_Resizable;
 
+bool arrow(const char* label, ImGuiDir dir) {
+    ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_Border, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_BorderShadow, 0x00000000);
+    bool result = ImGui::ArrowButton(label, dir);
+    ImGui::PopStyleColor(5);
+    return result;
+}
+
+void remove_arrow_offset() {
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
+}
+
 enum HTTPType : int {
     HTTP_GET,
     HTTP_POST,
@@ -34,12 +52,12 @@ enum HTTPType : int {
     HTTP_DELETE,
     HTTP_PATCH,
 };
-static const char *HTTPTypeLabels[] = {
-    [HTTP_GET] = (const char *)"GET",
-    [HTTP_POST] = (const char *)"POST",
-    [HTTP_PUT] = (const char *)"PUT",
-    [HTTP_DELETE] = (const char *)"DELETE",
-    [HTTP_PATCH] = (const char *)"PATCH",
+static const char* HTTPTypeLabels[] = {
+    [HTTP_GET] = (const char*)"GET",
+    [HTTP_POST] = (const char*)"POST",
+    [HTTP_PUT] = (const char*)"PUT",
+    [HTTP_DELETE] = (const char*)"DELETE",
+    [HTTP_PATCH] = (const char*)"PATCH",
 };
 
 enum RequestBodyType : int {
@@ -47,10 +65,10 @@ enum RequestBodyType : int {
     REQUEST_RAW,
     REQUEST_MULTIPART,
 };
-static const char *RequestBodyTypeLabels[] = {
-    [REQUEST_JSON] = (const char *)"JSON",
-    [REQUEST_RAW] = (const char *)"Raw",
-    [REQUEST_MULTIPART] = (const char *)"Multipart",
+static const char* RequestBodyTypeLabels[] = {
+    [REQUEST_JSON] = (const char*)"JSON",
+    [REQUEST_RAW] = (const char*)"Raw",
+    [REQUEST_MULTIPART] = (const char*)"Multipart",
 };
 struct MultiPartBody;
 // NOTE: maybe change std::string to TextEditor?
@@ -65,9 +83,9 @@ enum MultiPartBodyDataType {
     // MPBD_EMAIL,
     // MPBD_URL,
 };
-static const char *MPBDTypeLabels[] = {
-    [MPBD_FILE] = (const char *)"FILE",
-    [MPBD_TEXT] = (const char *)"TEXT",
+static const char* MPBDTypeLabels[] = {
+    [MPBD_FILE] = (const char*)"FILE",
+    [MPBD_TEXT] = (const char*)"TEXT",
 };
 using MultiPartBodyData = std::string;
 struct MultiPartBodyElement {
@@ -125,13 +143,13 @@ struct Group {
 };
 
 struct IDVisit {
-    uint64_t operator()(const auto &idable) const noexcept {
+    uint64_t operator()(const auto& idable) const noexcept {
         return idable.id;
     }
 };
 
 struct LabelVisit {
-    const std::string operator()(const auto &labelable) const noexcept {
+    const std::string operator()(const auto& labelable) const noexcept {
         return labelable.label();
     }
 };
@@ -139,7 +157,7 @@ struct LabelVisit {
 // keys are ids and values are for separate for editing (must be saved to apply changes)
 struct EditorTab {
     bool just_opened;
-    NestedTest *original;
+    NestedTest* original;
     NestedTest edit;
 };
 
@@ -159,31 +177,34 @@ struct AppState {
 
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
     std::unordered_set<size_t> selected_tests = {};
+
+    ImFont* regular_font;
+    ImFont* mono_font;
 };
 
-void delete_group(AppState *app, const Group *group) noexcept;
-void delete_test(AppState *app, NestedTest test) noexcept;
+void delete_group(AppState* app, const Group* group) noexcept;
+void delete_test(AppState* app, NestedTest test) noexcept;
 
-void delete_group(AppState *app, const Group *group) noexcept {
+void delete_group(AppState* app, const Group* group) noexcept {
     for (auto child_id : group->children_idx) {
         auto child = app->tests[child_id];
         delete_test(app, child);
     }
 }
 
-void delete_test(AppState *app, NestedTest test) noexcept {
+void delete_test(AppState* app, NestedTest test) noexcept {
     size_t id;
     size_t parent_id;
 
     switch (test.index()) {
     case TEST_TYPE: {
-        auto &leaf = std::get<Test>(test);
+        auto& leaf = std::get<Test>(test);
 
         id = leaf.id;
         parent_id = leaf.parent_id;
     } break;
     case GROUP_TYPE: {
-        auto &group = std::get<Group>(test);
+        auto& group = std::get<Group>(test);
 
         delete_group(app, &group);
         id = group.id;
@@ -192,7 +213,7 @@ void delete_test(AppState *app, NestedTest test) noexcept {
     }
 
     // remove it's id from parents child id list
-    auto &parent = std::get<Group>(app->tests.at(parent_id));
+    auto& parent = std::get<Group>(app->tests.at(parent_id));
     for (auto it = parent.children_idx.begin(); it != parent.children_idx.end();
          it++) {
         if (*it == id) {
@@ -206,7 +227,7 @@ void delete_test(AppState *app, NestedTest test) noexcept {
     app->opened_editor_tabs.erase(id);
 }
 
-bool context_menu_visitor(AppState *app, Group *group) noexcept {
+bool context_menu_visitor(AppState* app, Group* group) noexcept {
     bool change = false;
     if (ImGui::BeginPopupContextItem()) {
         if (!app->selected_tests.contains(group->id)) {
@@ -255,7 +276,7 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
     return change;
 }
 
-bool context_menu_visitor(AppState *app, Test *test) noexcept {
+bool context_menu_visitor(AppState* app, Test* test) noexcept {
     bool change = false;
     if (ImGui::BeginPopupContextItem()) {
         if (!app->selected_tests.contains(test->id)) {
@@ -279,14 +300,14 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
     return change;
 }
 
-bool tree_selectable(AppState *app, NestedTest &test) noexcept {
+bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
     ImGuiSelectableFlags selectable_flags =
         ImGuiSelectableFlags_SpanAllColumns |
         ImGuiSelectableFlags_AllowOverlap |
         ImGuiSelectableFlags_AllowDoubleClick;
     const auto id = std::visit(IDVisit(), test);
     bool item_is_selected = app->selected_tests.contains(id);
-    if (ImGui::Selectable("##selectable", item_is_selected, selectable_flags,
+    if (ImGui::Selectable(label, item_is_selected, selectable_flags,
                           ImVec2(0, 21))) {
         if (ImGui::GetIO().KeyCtrl) {
             if (item_is_selected) {
@@ -303,9 +324,9 @@ bool tree_selectable(AppState *app, NestedTest &test) noexcept {
     return false;
 }
 
-void display_tree_test(AppState *app, NestedTest &test,
-                       float indentation = 10) noexcept {
-    ImGuiWindow *window = ImGui::GetCurrentWindow();
+void display_tree_test(AppState* app, NestedTest& test,
+                       float indentation = 0) noexcept {
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
     const bool ctrl = ImGui::GetIO().KeyCtrl;
 
     ImGui::PushID(std::visit(IDVisit(), test));
@@ -313,16 +334,12 @@ void display_tree_test(AppState *app, NestedTest &test,
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
     case TEST_TYPE: {
-        auto &leaf = std::get<Test>(test);
+        auto& leaf = std::get<Test>(test);
         const auto io = ImGui::GetIO();
         ImGui::TableNextColumn(); // test
-        const bool double_clicked =
-            tree_selectable(app, test) && io.MouseDoubleClicked[0];
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+        const bool double_clicked = tree_selectable(app, test, leaf.label().c_str()) && io.MouseDoubleClicked[0];
         const bool changed = context_menu_visitor(app, &leaf);
-        ImGui::SameLine();
-        ImGui::InvisibleButton("", ImVec2(indentation, 10));
-        ImGui::SameLine();
-        ImGui::Text("%s", leaf.endpoint.c_str());
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
         ImGui::TableNextColumn(); // enabled / disabled
@@ -336,22 +353,22 @@ void display_tree_test(AppState *app, NestedTest &test,
         }
     } break;
     case GROUP_TYPE: {
-        auto &group = std::get<Group>(test);
+        auto& group = std::get<Group>(test);
 
         ImGui::TableNextColumn(); // test
-        const bool clicked = tree_selectable(app, test);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+        if (group.open) {
+            arrow("down", ImGuiDir_Down);
+        }  else {
+            arrow("right", ImGuiDir_Right);
+        }
+        ImGui::SameLine();
+        remove_arrow_offset();
+        const bool clicked = tree_selectable(app, test, group.label().c_str());
         if (clicked) {
             group.open = !group.open;
         }
         const bool changed = context_menu_visitor(app, &group);
-        ImGui::SameLine();
-        ImGui::InvisibleButton("", ImVec2(indentation, 10));
-        ImGui::SameLine();
-        if (group.open) {
-            ImGui::Text(ICON_FA_CARET_DOWN " %s", group.name.c_str());
-        } else {
-            ImGui::Text(ICON_FA_CARET_RIGHT "  %s", group.name.c_str());
-        }
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
         ImGui::TableNextColumn(); // enabled / disabled
@@ -361,7 +378,7 @@ void display_tree_test(AppState *app, NestedTest &test,
             if (!changed) {
                 for (size_t child_id : group.children_idx) {
                     display_tree_test(app, app->tests[child_id],
-                                      indentation + 20);
+                                      indentation + 22);
                 }
             }
         }
@@ -371,7 +388,8 @@ void display_tree_test(AppState *app, NestedTest &test,
     ImGui::PopID();
 }
 
-void test_tree_view(AppState *app) noexcept {
+void test_tree_view(AppState* app) noexcept {
+    ImGui::PushFont(app->regular_font);
     if (ImGui::BeginTable("tests", 3)) {
         ImGui::TableSetupColumn("test");
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
@@ -379,6 +397,7 @@ void test_tree_view(AppState *app) noexcept {
         display_tree_test(app, app->tests[0]);
         ImGui::EndTable();
     }
+    ImGui::PopFont();
 }
 
 enum EditorTabResult {
@@ -387,7 +406,7 @@ enum EditorTabResult {
     TAB_SAVED,
 };
 
-void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
+void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
     if (ImGui::BeginTabBar("Request")) {
         if (ImGui::BeginTabItem("Request")) {
             ImGui::Text("Select any of the tabs to edit test's request");
@@ -395,7 +414,7 @@ void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
         }
         if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
-                    "Body Type", (int *)&test.body_type,
+                    "Body Type", (int*)&test.body_type,
                     RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
 
                 // TODO: convert between current body types
@@ -405,7 +424,10 @@ void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
                     if (!std::holds_alternative<std::string>(test.body)) {
                         test.body = "{}";
                         test.editor.SetText("{}");
+                        // TODO: allow for palette change within view settings
+                        test.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
+
                     break;
 
                 case REQUEST_RAW:
@@ -413,6 +435,8 @@ void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
                     if (!std::holds_alternative<std::string>(test.body)) {
                         test.body = "";
                         test.editor.SetText("");
+                        // TODO: allow for palette change within view settings
+                        test.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
                     break;
 
@@ -424,11 +448,27 @@ void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
 
             switch (test.body_type) {
             case REQUEST_JSON:
+                ImGui::SameLine();
+                if (ImGui::Button("Format")) {
+                    try {
+                        test.editor.SetText(json::parse(test.editor.GetText()).dump(4));
+                    } catch (json::parse_error& error) {
+                        Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
+                    }
+                }
+
+                ImGui::PushFont(app->mono_font);
                 test.editor.Render("##body", false, ImVec2(0, 300));
+                ImGui::PopFont();
+
+                test.body = test.editor.GetText();
                 break;
 
             case REQUEST_RAW:
+                ImGui::PushFont(app->mono_font);
                 test.editor.Render("##body", false, ImVec2(0, 300));
+                ImGui::PopFont();
+                test.body = test.editor.GetText();
                 break;
 
             case REQUEST_MULTIPART:
@@ -450,17 +490,17 @@ void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
     }
 }
 
-EditorTabResult editor_tab_test(AppState *app, EditorTab& tab) {
+EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) {
     assert(std::holds_alternative<Test>(tab.edit));
-    auto &test = std::get<Test>(tab.edit);
+    auto& test = std::get<Test>(tab.edit);
 
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(std::visit(LabelVisit(), *tab.original).c_str(), &open, ImGuiTabItemFlags_None)) {
         ImGui::InputText("Endpoint", &test.endpoint);
         ImGui::Combo(
-                "Type", (int *)&test.type,
-                HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+            "Type", (int*)&test.type,
+            HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
 
         editor_tab_test_requests(app, tab, test);
 
@@ -476,15 +516,15 @@ EditorTabResult editor_tab_test(AppState *app, EditorTab& tab) {
     return result;
 }
 
-EditorTabResult editor_tab_group(AppState *app, EditorTab& tab) {
+EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) {
     assert(std::holds_alternative<Group>(tab.edit));
-    auto &group = std::get<Group>(tab.edit);
+    auto& group = std::get<Group>(tab.edit);
 
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(
-                std::visit(LabelVisit(), *tab.original).c_str(), &open,
-                tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
+            std::visit(LabelVisit(), *tab.original).c_str(), &open,
+            tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
         ImGui::InputText("Name", &group.name);
 
         if (ImGui::Button("Save")) {
@@ -499,33 +539,34 @@ EditorTabResult editor_tab_group(AppState *app, EditorTab& tab) {
     return result;
 }
 
-void tabbed_editor(AppState *app) noexcept {
+void tabbed_editor(AppState* app) noexcept {
+    ImGui::PushFont(app->regular_font);
     if (ImGui::BeginTabBar("editor")) {
         size_t closed_id = -1;
-        for (auto &[id, tab] : app->opened_editor_tabs) {
-            const NestedTest *original = tab.original;
+        for (auto& [id, tab] : app->opened_editor_tabs) {
+            const NestedTest* original = tab.original;
             EditorTabResult result;
             switch (tab.edit.index()) {
-                case TEST_TYPE: {
-                                    result = editor_tab_test(app, tab);
-                                } break;
-                case GROUP_TYPE: {
-                                     result = editor_tab_group(app, tab);
-                                 } break;
+            case TEST_TYPE: {
+                result = editor_tab_test(app, tab);
+            } break;
+            case GROUP_TYPE: {
+                result = editor_tab_group(app, tab);
+            } break;
             }
 
             tab.just_opened = false;
 
             // hopefully can't close 2 tabs in a single frame
             switch (result) {
-                case TAB_SAVED:
-                    *tab.original = tab.edit;
-                    break;
-                case TAB_CLOSED:
-                    closed_id = id;
-                    break;
-                case TAB_NONE:
-                    break;
+            case TAB_SAVED:
+                *tab.original = tab.edit;
+                break;
+            case TAB_CLOSED:
+                closed_id = id;
+                break;
+            case TAB_NONE:
+                break;
             }
         }
         if (closed_id != -1) {
@@ -533,30 +574,31 @@ void tabbed_editor(AppState *app) noexcept {
         }
         ImGui::EndTabBar();
     }
+    ImGui::PopFont();
 }
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
     auto log_split = HelloImGui::DockingSplit(
-            "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
+        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
     auto tests_split = HelloImGui::DockingSplit(
-            "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
+        "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
     return {log_split, tests_split};
 }
 
-std::vector<HelloImGui::DockableWindow> windows(AppState *app) noexcept {
+std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
     auto tab_editor_window = HelloImGui::DockableWindow(
-            "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
+        "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
 
     auto tests_window = HelloImGui::DockableWindow(
-            "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
+        "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
 
     auto logs_window = HelloImGui::DockableWindow(
-            "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+        "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, logs_window};
 }
 
-HelloImGui::DockingParams layout(AppState *app) noexcept {
+HelloImGui::DockingParams layout(AppState* app) noexcept {
     auto params = HelloImGui::DockingParams();
 
     params.dockableWindows = windows(app);
@@ -565,22 +607,24 @@ HelloImGui::DockingParams layout(AppState *app) noexcept {
     return params;
 }
 
-void show_menus(AppState *app) noexcept {
-    ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000022);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000011);
-    if (ImGui::ArrowButton("start", ImGuiDir_Right)) {
+void show_menus(AppState* app) noexcept {
+    if (arrow("start", ImGuiDir_Right)) {
         Log(LogLevel::Info, "Started testing");
     }
-    ImGui::PopStyleColor(3);
 }
 
-void show_gui(AppState *app) noexcept {
+void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
     ImGui::ShowDemoWindow();
 }
 
-int main(int argc, char *argv[]) {
+void load_fonts(AppState* app) noexcept {
+    // TODO: Make this work
+    app->regular_font = HelloImGui::LoadFont("fonts/DroidSans.ttf", 15);
+    app->mono_font = HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15);
+}
+
+int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
     httplib::Client cli("");
     auto app = AppState{
@@ -594,6 +638,7 @@ int main(int argc, char *argv[]) {
     runner_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
     runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
+    runner_params.callbacks.LoadAdditionalFonts = [&app]() { load_fonts(&app); };
 
     runner_params.dockingParams = layout(&app);
     runner_params.fpsIdling.enableIdling = false;
