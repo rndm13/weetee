@@ -16,7 +16,8 @@
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
-template <class... Ts> struct overloaded : Ts... {
+template <class... Ts>
+struct overloaded : Ts... {
     using Ts::operator()...;
 };
 
@@ -102,8 +103,8 @@ struct AppState {
             },
         },
     };
-    // keys are ids and values are for separate for editing (must be saved to
-    // apply changes)
+
+    // keys are ids and values are for separate for editing (must be saved to apply changes)
     struct EditorTab {
         NestedTest *original;
         NestedTest edit;
@@ -338,11 +339,11 @@ EditorTabResult editor_tab_test(AppState *app, const NestedTest *original,
                                 Test &test) {
     bool open = true;
     EditorTabResult result = TAB_NONE;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open,
-                            ImGuiTabItemFlags_None)) {
+    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open, ImGuiTabItemFlags_None)) {
         ImGui::InputText("Endpoint", &test.endpoint);
-        ImGui::Combo("Type", (int *)&test.type, HTTPTypeLabels,
-                     IM_ARRAYSIZE(HTTPTypeLabels));
+        ImGui::Combo(
+            "Type", (int *)&test.type,
+            HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
 
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
@@ -412,8 +413,8 @@ void tabbed_editor(AppState *app) noexcept {
 }
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
-    auto log_split = HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace",
-                                              ImGuiDir_Down, 0.2);
+    auto log_split = HelloImGui::DockingSplit(
+        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
     auto tests_split = HelloImGui::DockingSplit(
         "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
     return {log_split, tests_split};
@@ -467,8 +468,7 @@ int main(int argc, char *argv[]) {
 
     runner_params.imGuiWindowParams.showMenuBar = true;
     runner_params.imGuiWindowParams.showStatusBar = true;
-    runner_params.imGuiWindowParams.defaultImGuiWindowType =
-        HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
+    runner_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
     runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
 
