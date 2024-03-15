@@ -1,5 +1,5 @@
+#include "ImGuiColorTextEdit/TextEditor.h"
 #include "hello_imgui/hello_imgui_logger.h"
-#include "hello_imgui/hello_imgui_theme.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
@@ -42,11 +42,50 @@ static const char *HTTPTypeLabels[] = {
     [HTTP_PATCH] = (const char *)"PATCH",
 };
 
+enum RequestBodyType : int {
+    REQUEST_JSON,
+    REQUEST_RAW,
+    REQUEST_MULTIPART,
+};
+static const char *RequestBodyTypeLabels[] = {
+    [REQUEST_JSON] = (const char *)"JSON",
+    [REQUEST_RAW] = (const char *)"Raw",
+    [REQUEST_MULTIPART] = (const char *)"Multipart",
+};
+struct MultiPartBody;
+// NOTE: maybe change std::string to TextEditor?
+using RequestBody = std::variant<std::string, MultiPartBody>;
+
+enum MultiPartBodyDataType {
+    MPBD_FILE,
+    MPBD_TEXT,
+
+    // // Additional
+    // MPBD_NUMBER,
+    // MPBD_EMAIL,
+    // MPBD_URL,
+};
+static const char *MPBDTypeLabels[] = {
+    [MPBD_FILE] = (const char *)"FILE",
+    [MPBD_TEXT] = (const char *)"TEXT",
+};
+using MultiPartBodyData = std::string;
+struct MultiPartBodyElement {
+    bool enabled;
+    std::string name;
+    MultiPartBodyDataType type;
+    MultiPartBodyData data;
+};
+
+struct MultiPartBody {
+    std::vector<MultiPartBodyElement> elements;
+};
+
 struct Test;
 struct Group;
 enum NestedTestType : int {
-    TEST_TYPE = 0,
-    GROUP_TYPE = 1,
+    TEST_TYPE,
+    GROUP_TYPE,
 };
 using NestedTest = std::variant<Test, Group>;
 
@@ -58,6 +97,11 @@ struct Test {
     std::string endpoint;
 
     bool enabled = true;
+
+    RequestBodyType body_type = REQUEST_JSON;
+    RequestBody body = "{}";
+
+    TextEditor editor;
 
     const std::string label() const noexcept {
         return this->endpoint + "##" + std::to_string(this->id);
@@ -81,7 +125,9 @@ struct Group {
 };
 
 struct IDVisit {
-    uint64_t operator()(const auto &idable) const noexcept { return idable.id; }
+    uint64_t operator()(const auto &idable) const noexcept {
+        return idable.id;
+    }
 };
 
 struct LabelVisit {
@@ -341,16 +387,82 @@ enum EditorTabResult {
     TAB_SAVED,
 };
 
-EditorTabResult editor_tab_test(AppState *app, EditorTab tab) {
+void editor_tab_test_requests(AppState *app, EditorTab tab, Test &test) {
+    if (ImGui::BeginTabBar("Request")) {
+        if (ImGui::BeginTabItem("Request")) {
+            ImGui::Text("Select any of the tabs to edit test's request");
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Body")) {
+            if (ImGui::Combo(
+                    "Body Type", (int *)&test.body_type,
+                    RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
+
+                // TODO: convert between current body types
+                switch (test.body_type) {
+                case REQUEST_JSON:
+                    test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    if (!std::holds_alternative<std::string>(test.body)) {
+                        test.body = "{}";
+                        test.editor.SetText("{}");
+                    }
+                    break;
+
+                case REQUEST_RAW:
+                    test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    if (!std::holds_alternative<std::string>(test.body)) {
+                        test.body = "";
+                        test.editor.SetText("");
+                    }
+                    break;
+
+                case REQUEST_MULTIPART:
+                    test.body = MultiPartBody{};
+                    break;
+                }
+            }
+
+            switch (test.body_type) {
+            case REQUEST_JSON:
+                test.editor.Render("##body", false, ImVec2(0, 300));
+                break;
+
+            case REQUEST_RAW:
+                test.editor.Render("##body", false, ImVec2(0, 300));
+                break;
+
+            case REQUEST_MULTIPART:
+                ImGui::Text("TODO");
+                break;
+            }
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Parameters")) {
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Cookies")) {
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("Headers")) {
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
+}
+
+EditorTabResult editor_tab_test(AppState *app, EditorTab& tab) {
     assert(std::holds_alternative<Test>(tab.edit));
     auto &test = std::get<Test>(tab.edit);
-    bool open = true;
+
     EditorTabResult result = TAB_NONE;
+    bool open = true;
     if (ImGui::BeginTabItem(std::visit(LabelVisit(), *tab.original).c_str(), &open, ImGuiTabItemFlags_None)) {
         ImGui::InputText("Endpoint", &test.endpoint);
         ImGui::Combo(
-            "Type", (int *)&test.type,
-            HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+                "Type", (int *)&test.type,
+                HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+
+        editor_tab_test_requests(app, tab, test);
 
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
@@ -364,14 +476,15 @@ EditorTabResult editor_tab_test(AppState *app, EditorTab tab) {
     return result;
 }
 
-EditorTabResult editor_tab_group(AppState *app, EditorTab tab) {
+EditorTabResult editor_tab_group(AppState *app, EditorTab& tab) {
     assert(std::holds_alternative<Group>(tab.edit));
     auto &group = std::get<Group>(tab.edit);
+
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(
-            std::visit(LabelVisit(), *tab.original).c_str(), &open,
-            tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
+                std::visit(LabelVisit(), *tab.original).c_str(), &open,
+                tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
         ImGui::InputText("Name", &group.name);
 
         if (ImGui::Button("Save")) {
@@ -393,26 +506,26 @@ void tabbed_editor(AppState *app) noexcept {
             const NestedTest *original = tab.original;
             EditorTabResult result;
             switch (tab.edit.index()) {
-            case TEST_TYPE: {
-                result = editor_tab_test(app, tab);
-            } break;
-            case GROUP_TYPE: {
-                result = editor_tab_group(app, tab);
-            } break;
+                case TEST_TYPE: {
+                                    result = editor_tab_test(app, tab);
+                                } break;
+                case GROUP_TYPE: {
+                                     result = editor_tab_group(app, tab);
+                                 } break;
             }
 
             tab.just_opened = false;
 
             // hopefully can't close 2 tabs in a single frame
             switch (result) {
-            case TAB_SAVED:
-                *tab.original = tab.edit;
-                break;
-            case TAB_CLOSED:
-                closed_id = id;
-                break;
-            case TAB_NONE:
-                break;
+                case TAB_SAVED:
+                    *tab.original = tab.edit;
+                    break;
+                case TAB_CLOSED:
+                    closed_id = id;
+                    break;
+                case TAB_NONE:
+                    break;
             }
         }
         if (closed_id != -1) {
@@ -424,21 +537,21 @@ void tabbed_editor(AppState *app) noexcept {
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
     auto log_split = HelloImGui::DockingSplit(
-        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
+            "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
     auto tests_split = HelloImGui::DockingSplit(
-        "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
+            "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
     return {log_split, tests_split};
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState *app) noexcept {
     auto tab_editor_window = HelloImGui::DockableWindow(
-        "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
+            "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
 
     auto tests_window = HelloImGui::DockableWindow(
-        "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
+            "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
 
     auto logs_window = HelloImGui::DockableWindow(
-        "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+            "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, logs_window};
 }
