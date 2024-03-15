@@ -89,8 +89,8 @@ enum MultiPartBodyDataType {
     // MPBD_URL,
 };
 static const char* MPBDTypeLabels[] = {
-    [MPBD_FILE] = (const char*)"FILE",
-    [MPBD_TEXT] = (const char*)"TEXT",
+    [MPBD_FILE] = (const char*)"File",
+    [MPBD_TEXT] = (const char*)"Text",
 };
 using MultiPartBodyData = std::string;
 struct MultiPartBodyElement {
@@ -416,8 +416,15 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
         // TODO: make this look less stupid
         changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
         ImGui::SameLine();
-        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 22))) {
-            elem->selected = !elem->selected;
+        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 21))) {
+            if (ImGui::GetIO().KeyCtrl) {
+                elem->selected = !elem->selected;
+            } else {
+                for (auto& e : mpb->elements) {
+                    e.selected = false;
+                }
+                elem->selected = true;
+            }
         }
         if (ImGui::BeginPopupContextItem()) {
             if (ImGui::MenuItem("Delete")) {
@@ -425,21 +432,23 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
             }
             if (ImGui::MenuItem("Enable")) {
                 for (auto& e : mpb->elements) {
-                    e.selected = e.enabled || e.selected;
+                    e.enabled = e.enabled || e.selected;
                 }
             }
             if (ImGui::MenuItem("Disable")) {
                 for (auto& e : mpb->elements) {
-                    e.selected = e.enabled || !e.selected;
+                    e.enabled = e.enabled && !e.selected;
                 }
             }
             ImGui::EndPopup();
         }
     }
     if (ImGui::TableNextColumn()) { // name
+        ImGui::SetNextItemWidth(-1);
         changed = changed | ImGui::InputText("##name", &elem->name);
     }
     if (ImGui::TableNextColumn()) { // type
+        ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##type", (int*)&elem->type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
             switch (elem->type) {
             case MPBD_TEXT:
@@ -454,6 +463,7 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
     if (ImGui::TableNextColumn()) { // body
         switch (elem->type) {
         case MPBD_TEXT:
+            ImGui::SetNextItemWidth(-1);
             changed = changed | ImGui::InputText("##text", &elem->data);
             break;
         case MPBD_FILE:
