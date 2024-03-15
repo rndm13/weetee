@@ -90,6 +90,13 @@ struct LabelVisit {
     }
 };
 
+// keys are ids and values are for separate for editing (must be saved to apply changes)
+struct EditorTab {
+    bool just_opened;
+    NestedTest *original;
+    NestedTest edit;
+};
+
 struct AppState {
     httplib::Client cli;
     uint64_t id_counter = 0;
@@ -104,11 +111,6 @@ struct AppState {
         },
     };
 
-    // keys are ids and values are for separate for editing (must be saved to apply changes)
-    struct EditorTab {
-        NestedTest *original;
-        NestedTest edit;
-    };
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
     std::unordered_set<size_t> selected_tests = {};
 };
@@ -167,7 +169,9 @@ bool context_menu_visitor(AppState *app, Group *group) noexcept {
         }
         if (ImGui::MenuItem("Edit")) {
             app->opened_editor_tabs[group->id] = {
-                .original = &app->tests[group->id], .edit = *group};
+                .just_opened = true,
+                .original = &app->tests[group->id],
+                .edit = *group};
         }
 
         if (ImGui::MenuItem("Add a new test")) {
@@ -215,7 +219,9 @@ bool context_menu_visitor(AppState *app, Test *test) noexcept {
 
         if (ImGui::MenuItem("Edit")) {
             app->opened_editor_tabs[test->id] = {
-                .original = &app->tests[test->id], .edit = *test};
+                .just_opened = true,
+                .original = &app->tests[test->id],
+                .edit = *test};
         }
 
         if (ImGui::MenuItem("Delete", nullptr, false, test->id != 0)) {
@@ -278,7 +284,9 @@ void display_tree_test(AppState *app, NestedTest &test,
 
         if (!changed && double_clicked) {
             app->opened_editor_tabs[leaf.id] = {
-                .original = &app->tests[leaf.id], .edit = leaf};
+                .just_opened = true,
+                .original = &app->tests[leaf.id],
+                .edit = leaf};
         }
     } break;
     case GROUP_TYPE: {
@@ -320,10 +328,8 @@ void display_tree_test(AppState *app, NestedTest &test,
 void test_tree_view(AppState *app) noexcept {
     if (ImGui::BeginTable("tests", 3)) {
         ImGui::TableSetupColumn("test");
-        ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed,
-                                15.0f);
-        ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed,
-                                23.0f);
+        ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
+        ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
         display_tree_test(app, app->tests[0]);
         ImGui::EndTable();
     }
@@ -335,11 +341,12 @@ enum EditorTabResult {
     TAB_SAVED,
 };
 
-EditorTabResult editor_tab_test(AppState *app, const NestedTest *original,
-                                Test &test) {
+EditorTabResult editor_tab_test(AppState *app, EditorTab tab) {
+    assert(std::holds_alternative<Test>(tab.edit));
+    auto &test = std::get<Test>(tab.edit);
     bool open = true;
     EditorTabResult result = TAB_NONE;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open, ImGuiTabItemFlags_None)) {
+    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *tab.original).c_str(), &open, ImGuiTabItemFlags_None)) {
         ImGui::InputText("Endpoint", &test.endpoint);
         ImGui::Combo(
             "Type", (int *)&test.type,
@@ -357,12 +364,14 @@ EditorTabResult editor_tab_test(AppState *app, const NestedTest *original,
     return result;
 }
 
-EditorTabResult editor_tab_group(AppState *app, const NestedTest *original,
-                                 Group &group) {
-    bool open = true;
+EditorTabResult editor_tab_group(AppState *app, EditorTab tab) {
+    assert(std::holds_alternative<Group>(tab.edit));
+    auto &group = std::get<Group>(tab.edit);
     EditorTabResult result = TAB_NONE;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *original).c_str(), &open,
-                            ImGuiTabItemFlags_None)) {
+    bool open = true;
+    if (ImGui::BeginTabItem(
+            std::visit(LabelVisit(), *tab.original).c_str(), &open,
+            tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
         ImGui::InputText("Name", &group.name);
 
         if (ImGui::Button("Save")) {
@@ -385,15 +394,16 @@ void tabbed_editor(AppState *app) noexcept {
             EditorTabResult result;
             switch (tab.edit.index()) {
             case TEST_TYPE: {
-                result =
-                    editor_tab_test(app, original, std::get<Test>(tab.edit));
+                result = editor_tab_test(app, tab);
             } break;
             case GROUP_TYPE: {
-                result =
-                    editor_tab_group(app, original, std::get<Group>(tab.edit));
+                result = editor_tab_group(app, tab);
             } break;
             }
 
+            tab.just_opened = false;
+
+            // hopefully can't close 2 tabs in a single frame
             switch (result) {
             case TAB_SAVED:
                 *tab.original = tab.edit;
