@@ -33,7 +33,6 @@ enum HTTPType : int {
     HTTP_DELETE,
     HTTP_PATCH,
 };
-
 static const char *HTTPTypeLabels[] = {
     [HTTP_GET] = (const char *)"GET",
     [HTTP_POST] = (const char *)"POST",
@@ -45,8 +44,8 @@ static const char *HTTPTypeLabels[] = {
 struct Test;
 struct Group;
 enum NestedTestType : int {
-    TEST_TYPE,
-    GROUP_TYPE,
+    TEST_TYPE = 0,
+    GROUP_TYPE = 1,
 };
 using NestedTest = std::variant<Test, Group>;
 
@@ -261,6 +260,27 @@ void display_tree_test(AppState *app, NestedTest &test,
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
     case TEST_TYPE: {
+        auto &leaf = std::get<Test>(test);
+        const auto io = ImGui::GetIO();
+        ImGui::TableNextColumn(); // test
+        const bool double_clicked =
+            tree_selectable(app, test) && io.MouseDoubleClicked[0];
+        const bool changed = context_menu_visitor(app, &leaf);
+        ImGui::SameLine();
+        ImGui::InvisibleButton("", ImVec2(indentation, 10));
+        ImGui::SameLine();
+        ImGui::Text("%s", leaf.endpoint.c_str());
+        ImGui::TableNextColumn(); // spinner for running tests
+        ImSpinner::SpinnerIncDots("running", 5, 1);
+        ImGui::TableNextColumn(); // enabled / disabled
+        ImGui::Checkbox("##enabled", &leaf.enabled);
+
+        if (!changed && double_clicked) {
+            app->opened_editor_tabs[leaf.id] = {
+                .original = &app->tests[leaf.id], .edit = leaf};
+        }
+    } break;
+    case GROUP_TYPE: {
         auto &group = std::get<Group>(test);
 
         ImGui::TableNextColumn(); // test
@@ -289,27 +309,6 @@ void display_tree_test(AppState *app, NestedTest &test,
                                       indentation + 20);
                 }
             }
-        }
-    } break;
-    case GROUP_TYPE: {
-        auto &leaf = std::get<Test>(test);
-        const auto io = ImGui::GetIO();
-        ImGui::TableNextColumn(); // test
-        const bool double_clicked =
-            tree_selectable(app, test) && io.MouseDoubleClicked[0];
-        const bool changed = context_menu_visitor(app, &leaf);
-        ImGui::SameLine();
-        ImGui::InvisibleButton("", ImVec2(indentation, 10));
-        ImGui::SameLine();
-        ImGui::Text("%s", leaf.endpoint.c_str());
-        ImGui::TableNextColumn(); // spinner for running tests
-        ImSpinner::SpinnerIncDots("running", 5, 1);
-        ImGui::TableNextColumn(); // enabled / disabled
-        ImGui::Checkbox("##enabled", &leaf.enabled);
-
-        if (!changed && double_clicked) {
-            app->opened_editor_tabs[leaf.id] = {
-                .original = &app->tests[leaf.id], .edit = leaf};
         }
     } break;
     }

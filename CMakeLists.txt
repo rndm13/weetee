@@ -32,6 +32,7 @@ find_package(nlohmann_json 3.2.0 REQUIRED)
 
 # Build app
 # ==============
+
 imgui_bundle_add_app(weetee src/main.cpp)
 target_link_libraries(
     weetee PRIVATE
