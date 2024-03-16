@@ -1,11 +1,16 @@
-#include "ImGuiColorTextEdit/TextEditor.h"
 #include "hello_imgui/hello_imgui_font.h"
 #include "hello_imgui/hello_imgui_logger.h"
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
+
 #include "immapp/immapp.h"
+
 #include "imspinner/imspinner.h"
+#include "ImGuiColorTextEdit/TextEditor.h"
+#include "portable_file_dialogs/portable_file_dialogs.h"
+#include <sstream>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "../external/cpp-httplib/httplib.h"
@@ -80,7 +85,7 @@ struct MultiPartBody;
 using RequestBody = std::variant<std::string, MultiPartBody>;
 
 enum MultiPartBodyDataType {
-    MPBD_FILE,
+    MPBD_FILES,
     MPBD_TEXT,
 
     // // Additional
@@ -89,16 +94,18 @@ enum MultiPartBodyDataType {
     // MPBD_URL,
 };
 static const char* MPBDTypeLabels[] = {
-    [MPBD_FILE] = (const char*)"File",
+    [MPBD_FILES] = (const char*)"Files",
     [MPBD_TEXT] = (const char*)"Text",
 };
-using MultiPartBodyData = std::string;
+using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
 struct MultiPartBodyElement {
     bool enabled = true;
     bool selected = false;
     std::string name;
     MultiPartBodyDataType type;
     MultiPartBodyData data;
+
+    std::optional<pfd::open_file> open_file;
 };
 
 struct MultiPartBody {
@@ -453,9 +460,13 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
             switch (elem->type) {
             case MPBD_TEXT:
                 elem->data = "";
+                if (elem->open_file.has_value()) {
+                    elem->open_file->kill();
+                    elem->open_file.reset();
+                }
                 break;
-            case MPBD_FILE:
-                elem->data = "";
+            case MPBD_FILES:
+                elem->data = std::vector<std::string>{};
                 break;
             }
         }
@@ -464,12 +475,29 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
         switch (elem->type) {
         case MPBD_TEXT:
             ImGui::SetNextItemWidth(-1);
-            changed = changed | ImGui::InputText("##text", &elem->data);
+            assert(std::holds_alternative<std::string>(elem->data));
+            changed = changed | ImGui::InputText("##text", &std::get<std::string>(elem->data));
             break;
-        case MPBD_FILE:
-            if (ImGui::Button("Open a file##file", ImVec2(-1, 0))) {
-                changed = true;
-                Log(LogLevel::Debug, "TODO!");
+        case MPBD_FILES:
+            assert(std::holds_alternative<std::vector<std::string>>(elem->data));
+            auto& files = std::get<std::vector<std::string>>(elem->data);
+            std::string text = files.empty() ? "Select Files" : "Selected " + std::to_string(files.size()) + " Files (Hover to see names)";
+            if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
+                elem->open_file = pfd::open_file("Select Files", ".", { "All Files", "*" }, pfd::opt::multiselect);
+            }
+
+            if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                // NOTE: could be slow to do this every frame
+                std::stringstream ss;
+                for (auto& file : files) {
+                    ss << file << '\n';
+                }
+                ImGui::SetTooltip("%s", ss.str().c_str());
+            }
+
+            if (elem->open_file.has_value() && elem->open_file->ready()) {
+                elem->data = elem->open_file->result();
+                elem->open_file = std::nullopt;
             }
             break;
         }
@@ -480,7 +508,7 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
 
 void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
     if (ImGui::BeginTable(label, 4, TABLE_FLAGS)) {
-        ImGui::TableSetupColumn("Enabled");
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("Name");
         ImGui::TableSetupColumn("Type");
         ImGui::TableSetupColumn("Value");
@@ -731,8 +759,8 @@ void show_gui(AppState* app) noexcept {
 
 void load_fonts(AppState* app) noexcept {
     // TODO: fix log window icons
-    app->regular_font = HelloImGui::LoadFont("fonts/DroidSans.ttf", 15);
-    app->mono_font = HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15);
+    app->regular_font = HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
+    app->mono_font = HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15, {.useFullGlyphRange = true});
 }
 
 int main(int argc, char* argv[]) {
