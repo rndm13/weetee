@@ -92,6 +92,7 @@ struct PartialDictElement {
 };
 template <typename Data>
 struct PartialDict {
+    using DataType = Data;
     using ElementType = PartialDictElement<Data>;
     std::vector<PartialDictElement<Data>> elements;
 };
@@ -115,27 +116,19 @@ struct MultiPartBodyElementData {
     MultiPartBodyData data;
 
     std::optional<pfd::open_file> open_file;
+
+    static constexpr size_t field_count = 2;
+    static const char* field_labels[field_count]; 
+};
+const char* MultiPartBodyElementData::field_labels[field_count] = {
+    (const char*)"Type",
+    (const char*)"Data",
 };
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;
 using MultiPartBodyElement = MultiPartBody::ElementType;
 
 // NOTE: maybe change std::string to TextEditor?
 using RequestBody = std::variant<std::string, MultiPartBody>;
-
-// struct MultiPartBodyElement {
-//     bool enabled = true;
-//     std::string key;
-//     MultiPartBodyDataType type;
-//     MultiPartBodyData data;
-// 
-//     bool selected = false;
-//     std::optional<pfd::open_file> open_file;
-//     bool to_delete = false;
-// };
-// 
-// struct MultiPartBody {
-//     std::vector<MultiPartBodyElement> elements;
-// };
 
 struct Test;
 struct Group;
@@ -438,10 +431,11 @@ void test_tree_view(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
-bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) {
+template <typename Data>
+bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem) noexcept {
     bool changed = false;
-    auto select_only_this = [mpb, elem]() {
-        for (auto& e : mpb->elements) {
+    auto select_only_this = [pd, elem]() {
+        for (auto& e : pd->elements) {
             e.selected = false;
         }
         elem->selected = true;
@@ -464,19 +458,19 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
 
             if (ImGui::MenuItem("Delete")) {
                 changed = true;
-                for (auto& e : mpb->elements) {
+                for (auto& e : pd->elements) {
                     e.to_delete = e.selected;
                 }
             }
 
             if (ImGui::MenuItem("Enable")) {
-                for (auto& e : mpb->elements) {
+                for (auto& e : pd->elements) {
                     e.enabled = e.enabled || e.selected;
                 }
             }
 
             if (ImGui::MenuItem("Disable")) {
-                for (auto& e : mpb->elements) {
+                for (auto& e : pd->elements) {
                     e.enabled = e.enabled && !e.selected;
                 }
             }
@@ -487,6 +481,13 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
         ImGui::SetNextItemWidth(-1);
         changed = changed | ImGui::InputText("##name", &elem->key);
     }
+
+    changed = changed | partial_dict_data_row(app, pd, elem);
+    return changed;
+}
+
+bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) noexcept {
+    bool changed = false;
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##type", (int*)&elem->data.type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
@@ -535,30 +536,33 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
             break;
         }
     }
-
     return changed;
 }
 
-void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
-    if (ImGui::BeginTable(label, 4, TABLE_FLAGS, ImVec2(0, 300))) {
+template<typename Data>
+void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label) noexcept {
+    using DataType = PartialDict<Data>::DataType;
+    using ElementType = PartialDict<Data>::ElementType;
+    if (ImGui::BeginTable(label, 2 + DataType::field_count, TABLE_FLAGS, ImVec2(0, 300))) {
         ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("Name");
-        ImGui::TableSetupColumn("Type");
-        ImGui::TableSetupColumn("Value");
+        for (size_t i = 0; i < DataType::field_count; i++) {
+            ImGui::TableSetupColumn(DataType::field_labels[i]);
+        }
         ImGui::TableHeadersRow();
         bool deletion = false;
-        for (size_t i = 0; i < mpb->elements.size(); i++) {
-            auto* elem = &mpb->elements[i];
+        for (size_t i = 0; i < pd->elements.size(); i++) {
+            auto* elem = &pd->elements[i];
             ImGui::TableNextRow();
             ImGui::PushID(i);
-            multi_part_body_row(app, mpb, elem);
+            partial_dict_row(app, pd, elem);
             deletion |= elem->to_delete;
             ImGui::PopID();
         }
         if (deletion) {
-            for (int i = mpb->elements.size() - 1; i >= 0; i--) {
-                if (mpb->elements[i].to_delete) {
-                    mpb->elements.erase(mpb->elements.begin() + i);
+            for (int i = pd->elements.size() - 1; i >= 0; i--) {
+                if (pd->elements[i].to_delete) {
+                    pd->elements.erase(pd->elements.begin() + i);
                 }
             }
         }
@@ -568,10 +572,10 @@ void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
             ImGui::Text("Change this to add new elements");
         }
         ImGui::TableNextRow();
-        ImGui::PushID(mpb->elements.size());
-        static MultiPartBodyElement elem = {};
-        if (multi_part_body_row(app, mpb, &elem)) {
-            mpb->elements.push_back(elem);
+        ImGui::PushID(pd->elements.size());
+        static ElementType elem = {};
+        if (partial_dict_row(app, pd, &elem)) {
+            pd->elements.push_back(elem);
             elem = {};
         }
         ImGui::PopID();
@@ -579,7 +583,7 @@ void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
     }
 }
 
-void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
+void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
     if (ImGui::BeginTabBar("Request")) {
         ImGui::PushID("request");
 
@@ -649,7 +653,7 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
 
             case REQUEST_MULTIPART:
                 auto& mpb = std::get<MultiPartBody>(test.body);
-                multi_part_body(app, &mpb, "##body");
+                partial_dict(app, &mpb, "##body");
                 break;
             }
             ImGui::EndTabItem();
@@ -680,7 +684,7 @@ enum EditorTabResult {
     TAB_SAVED,
 };
 
-EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) {
+EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Test>(tab.edit));
     auto& test = std::get<Test>(tab.edit);
 
@@ -706,7 +710,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) {
     return result;
 }
 
-EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) {
+EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Group>(tab.edit));
     auto& group = std::get<Group>(tab.edit);
 
