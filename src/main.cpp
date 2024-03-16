@@ -128,7 +128,7 @@ using MultiPartBody = PartialDict<MultiPartBodyElementData>;
 using MultiPartBodyElement = MultiPartBody::ElementType;
 
 struct CookiesElementData {
-    std::string text;
+    std::string data;
 
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count]; 
@@ -138,6 +138,18 @@ const char* CookiesElementData::field_labels[field_count] = {
 };
 using Cookies = PartialDict<CookiesElementData>;
 using CookiesElement = Cookies::ElementType;
+
+struct ParametersElementData {
+    std::string data;
+
+    static constexpr size_t field_count = 1;
+    static const char* field_labels[field_count]; 
+};
+const char* ParametersElementData::field_labels[field_count] = {
+    (const char*)"Data",
+};
+using Parameters = PartialDict<ParametersElementData>;
+using ParametersElement = Parameters::ElementType;
 
 // NOTE: maybe change std::string to TextEditor?
 using RequestBody = std::variant<std::string, MultiPartBody>;
@@ -163,6 +175,7 @@ struct Test {
     RequestBody body = "{}";
     
     Cookies cookies;
+    Parameters parameters;
     std::string headers;
 
     TextEditor editor;
@@ -503,7 +516,15 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
 bool partial_dict_data_row(AppState* app, Cookies* pd, CookiesElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.text);
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
+    }
+    return changed;
+}
+
+bool partial_dict_data_row(AppState* app, Parameters* pd, ParametersElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
     }
     return changed;
 }
@@ -682,7 +703,8 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept
         }
 
         if (ImGui::BeginTabItem("Parameters")) {
-            ImGui::Text("TODO!");
+            // TODO: make this unable to add/remove elements and do it automatically by tracking endpoint text changes
+            partial_dict(app, &test.parameters, "##parameters");
             ImGui::EndTabItem();
         }
 
