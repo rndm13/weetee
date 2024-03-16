@@ -127,6 +127,18 @@ const char* MultiPartBodyElementData::field_labels[field_count] = {
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;
 using MultiPartBodyElement = MultiPartBody::ElementType;
 
+struct CookiesElementData {
+    std::string text;
+
+    static constexpr size_t field_count = 1;
+    static const char* field_labels[field_count]; 
+};
+const char* CookiesElementData::field_labels[field_count] = {
+    (const char*)"Data",
+};
+using Cookies = PartialDict<CookiesElementData>;
+using CookiesElement = Cookies::ElementType;
+
 // NOTE: maybe change std::string to TextEditor?
 using RequestBody = std::variant<std::string, MultiPartBody>;
 
@@ -149,6 +161,8 @@ struct Test {
 
     RequestBodyType body_type = REQUEST_JSON;
     RequestBody body = "{}";
+    
+    Cookies cookies;
     std::string headers;
 
     TextEditor editor;
@@ -486,6 +500,14 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
     return changed;
 }
 
+bool partial_dict_data_row(AppState* app, Cookies* pd, CookiesElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.text);
+    }
+    return changed;
+}
+
 bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) { // type
@@ -665,7 +687,7 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
-            ImGui::Text("TODO!");
+            partial_dict(app, &test.cookies, "##cookies");
             ImGui::EndTabItem();
         }
 
