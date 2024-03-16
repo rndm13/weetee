@@ -133,6 +133,7 @@ struct Test {
 
     RequestBodyType body_type = REQUEST_JSON;
     RequestBody body = "{}";
+    std::string headers;
 
     TextEditor editor;
 
@@ -415,7 +416,7 @@ void test_tree_view(AppState* app) noexcept {
 
 bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) {
     bool changed = false;
-    auto select_only_this = [mpb, elem] () {
+    auto select_only_this = [mpb, elem]() {
         for (auto& e : mpb->elements) {
             e.selected = false;
         }
@@ -515,7 +516,7 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
 }
 
 void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
-    if (ImGui::BeginTable(label, 4, TABLE_FLAGS)) {
+    if (ImGui::BeginTable(label, 4, TABLE_FLAGS, ImVec2(0, 300))) {
         ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("Name");
         ImGui::TableSetupColumn("Type");
@@ -639,6 +640,7 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
         }
 
         if (ImGui::BeginTabItem("Headers")) {
+            ImGui::InputTextMultiline("##headers", &test.headers, ImVec2(0, 300));
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -719,11 +721,11 @@ void tabbed_editor(AppState* app) noexcept {
 
             tab.just_opened = false;
 
-            // hopefully can't close 2 tabs in a single frame
             switch (result) {
             case TAB_SAVED:
                 *tab.original = tab.edit;
                 break;
+            // hopefully can't close 2 tabs in a single frame
             case TAB_CLOSED:
                 closed_id = id;
                 break;
