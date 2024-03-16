@@ -81,9 +81,20 @@ static const char* RequestBodyTypeLabels[] = {
     [REQUEST_MULTIPART] = (const char*)"Multipart",
 };
 
-struct MultiPartBody;
-// NOTE: maybe change std::string to TextEditor?
-using RequestBody = std::variant<std::string, MultiPartBody>;
+template <typename Data>
+struct PartialDictElement {
+    bool enabled = true;
+    std::string key;
+    Data data;
+
+    bool selected = false;
+    bool to_delete = false;
+};
+template <typename Data>
+struct PartialDict {
+    using ElementType = PartialDictElement<Data>;
+    std::vector<PartialDictElement<Data>> elements;
+};
 
 enum MultiPartBodyDataType {
     MPBD_FILES,
@@ -99,20 +110,32 @@ static const char* MPBDTypeLabels[] = {
     [MPBD_TEXT] = (const char*)"Text",
 };
 using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
-struct MultiPartBodyElement {
-    bool enabled = true;
-    bool selected = false;
-    std::string name;
+struct MultiPartBodyElementData {
     MultiPartBodyDataType type;
     MultiPartBodyData data;
 
     std::optional<pfd::open_file> open_file;
-    bool to_delete = false;
 };
+using MultiPartBody = PartialDict<MultiPartBodyElementData>;
+using MultiPartBodyElement = MultiPartBody::ElementType;
 
-struct MultiPartBody {
-    std::vector<MultiPartBodyElement> elements;
-};
+// NOTE: maybe change std::string to TextEditor?
+using RequestBody = std::variant<std::string, MultiPartBody>;
+
+// struct MultiPartBodyElement {
+//     bool enabled = true;
+//     std::string key;
+//     MultiPartBodyDataType type;
+//     MultiPartBodyData data;
+// 
+//     bool selected = false;
+//     std::optional<pfd::open_file> open_file;
+//     bool to_delete = false;
+// };
+// 
+// struct MultiPartBody {
+//     std::vector<MultiPartBodyElement> elements;
+// };
 
 struct Test;
 struct Group;
@@ -243,6 +266,7 @@ void delete_test(AppState* app, NestedTest test) noexcept {
     app->opened_editor_tabs.erase(id);
 }
 
+// TODO: make this a single function instead that analyzes selected tests instead
 bool context_menu_visitor(AppState* app, Group* group) noexcept {
     bool change = false;
     if (ImGui::BeginPopupContextItem()) {
@@ -461,38 +485,38 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
     }
     if (ImGui::TableNextColumn()) { // name
         ImGui::SetNextItemWidth(-1);
-        changed = changed | ImGui::InputText("##name", &elem->name);
+        changed = changed | ImGui::InputText("##name", &elem->key);
     }
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##type", (int*)&elem->type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
-            switch (elem->type) {
+        if (ImGui::Combo("##type", (int*)&elem->data.type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
+            switch (elem->data.type) {
             case MPBD_TEXT:
-                elem->data = "";
-                if (elem->open_file.has_value()) {
-                    elem->open_file->kill();
-                    elem->open_file.reset();
+                elem->data.data = "";
+                if (elem->data.open_file.has_value()) {
+                    elem->data.open_file->kill();
+                    elem->data.open_file.reset();
                 }
                 break;
             case MPBD_FILES:
-                elem->data = std::vector<std::string>{};
+                elem->data.data = std::vector<std::string>{};
                 break;
             }
         }
     }
     if (ImGui::TableNextColumn()) { // body
-        switch (elem->type) {
+        switch (elem->data.type) {
         case MPBD_TEXT:
             ImGui::SetNextItemWidth(-1);
-            assert(std::holds_alternative<std::string>(elem->data));
-            changed = changed | ImGui::InputText("##text", &std::get<std::string>(elem->data));
+            assert(std::holds_alternative<std::string>(elem->data.data));
+            changed = changed | ImGui::InputText("##text", &std::get<std::string>(elem->data.data));
             break;
         case MPBD_FILES:
-            assert(std::holds_alternative<std::vector<std::string>>(elem->data));
-            auto& files = std::get<std::vector<std::string>>(elem->data);
+            assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
+            auto& files = std::get<std::vector<std::string>>(elem->data.data);
             std::string text = files.empty() ? "Select Files" : "Selected " + std::to_string(files.size()) + " Files (Hover to see names)";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
-                elem->open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
+                elem->data.open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
             }
 
             if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -504,9 +528,9 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
                 ImGui::SetTooltip("%s", ss.str().c_str());
             }
 
-            if (elem->open_file.has_value() && elem->open_file->ready()) {
-                elem->data = elem->open_file->result();
-                elem->open_file = std::nullopt;
+            if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
+                elem->data.data = elem->data.open_file->result();
+                elem->data.open_file = std::nullopt;
             }
             break;
         }
@@ -632,10 +656,12 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
         }
 
         if (ImGui::BeginTabItem("Parameters")) {
+            ImGui::Text("TODO!");
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
+            ImGui::Text("TODO!");
             ImGui::EndTabItem();
         }
 
