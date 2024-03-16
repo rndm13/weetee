@@ -7,8 +7,8 @@
 
 #include "immapp/immapp.h"
 
-#include "imspinner/imspinner.h"
 #include "ImGuiColorTextEdit/TextEditor.h"
+#include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 #include <sstream>
 
@@ -80,6 +80,7 @@ static const char* RequestBodyTypeLabels[] = {
     [REQUEST_RAW] = (const char*)"Raw",
     [REQUEST_MULTIPART] = (const char*)"Multipart",
 };
+
 struct MultiPartBody;
 // NOTE: maybe change std::string to TextEditor?
 using RequestBody = std::variant<std::string, MultiPartBody>;
@@ -106,6 +107,7 @@ struct MultiPartBodyElement {
     MultiPartBodyData data;
 
     std::optional<pfd::open_file> open_file;
+    bool to_delete = false;
 };
 
 struct MultiPartBody {
@@ -411,14 +413,14 @@ void test_tree_view(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
-enum EditorTabResult {
-    TAB_NONE,
-    TAB_CLOSED,
-    TAB_SAVED,
-};
-
 bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) {
     bool changed = false;
+    auto select_only_this = [mpb, elem] () {
+        for (auto& e : mpb->elements) {
+            e.selected = false;
+        }
+        elem->selected = true;
+    };
     if (ImGui::TableNextColumn()) { // enabled and selectable
         // TODO: make this look less stupid
         changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
@@ -427,21 +429,27 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
             if (ImGui::GetIO().KeyCtrl) {
                 elem->selected = !elem->selected;
             } else {
-                for (auto& e : mpb->elements) {
-                    e.selected = false;
-                }
-                elem->selected = true;
+                select_only_this();
             }
         }
         if (ImGui::BeginPopupContextItem()) {
-            if (ImGui::MenuItem("Delete")) {
-                Log(LogLevel::Debug, "TODO");
+            if (!elem->selected) {
+                select_only_this();
             }
+
+            if (ImGui::MenuItem("Delete")) {
+                changed = true;
+                for (auto& e : mpb->elements) {
+                    e.to_delete = e.selected;
+                }
+            }
+
             if (ImGui::MenuItem("Enable")) {
                 for (auto& e : mpb->elements) {
                     e.enabled = e.enabled || e.selected;
                 }
             }
+
             if (ImGui::MenuItem("Disable")) {
                 for (auto& e : mpb->elements) {
                     e.enabled = e.enabled && !e.selected;
@@ -483,7 +491,7 @@ bool multi_part_body_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement
             auto& files = std::get<std::vector<std::string>>(elem->data);
             std::string text = files.empty() ? "Select Files" : "Selected " + std::to_string(files.size()) + " Files (Hover to see names)";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
-                elem->open_file = pfd::open_file("Select Files", ".", { "All Files", "*" }, pfd::opt::multiselect);
+                elem->open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
             }
 
             if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -513,12 +521,21 @@ void multi_part_body(AppState* app, MultiPartBody* mpb, const char* label) {
         ImGui::TableSetupColumn("Type");
         ImGui::TableSetupColumn("Value");
         ImGui::TableHeadersRow();
+        bool deletion = false;
         for (size_t i = 0; i < mpb->elements.size(); i++) {
             auto* elem = &mpb->elements[i];
             ImGui::TableNextRow();
             ImGui::PushID(i);
             multi_part_body_row(app, mpb, elem);
+            deletion |= elem->to_delete;
             ImGui::PopID();
+        }
+        if (deletion) {
+            for (int i = mpb->elements.size() - 1; i >= 0; i--) {
+                if (mpb->elements[i].to_delete) {
+                    mpb->elements.erase(mpb->elements.begin() + i);
+                }
+            }
         }
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); // enabled, skip
@@ -628,6 +645,12 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) {
         ImGui::PopID();
     }
 }
+
+enum EditorTabResult {
+    TAB_NONE,
+    TAB_CLOSED,
+    TAB_SAVED,
+};
 
 EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) {
     assert(std::holds_alternative<Test>(tab.edit));
