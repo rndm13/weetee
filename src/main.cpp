@@ -10,7 +10,6 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
-#include <sstream>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "../external/cpp-httplib/httplib.h"
@@ -18,6 +17,7 @@
 
 #include "unordered_map"
 #include "variant"
+#include "sstream"
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -54,32 +54,6 @@ bool arrow(const char* label, ImGuiDir dir) {
 void remove_arrow_offset() {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
 }
-
-enum HTTPType : int {
-    HTTP_GET,
-    HTTP_POST,
-    HTTP_PUT,
-    HTTP_DELETE,
-    HTTP_PATCH,
-};
-static const char* HTTPTypeLabels[] = {
-    [HTTP_GET] = (const char*)"GET",
-    [HTTP_POST] = (const char*)"POST",
-    [HTTP_PUT] = (const char*)"PUT",
-    [HTTP_DELETE] = (const char*)"DELETE",
-    [HTTP_PATCH] = (const char*)"PATCH",
-};
-
-enum RequestBodyType : int {
-    REQUEST_JSON,
-    REQUEST_RAW,
-    REQUEST_MULTIPART,
-};
-static const char* RequestBodyTypeLabels[] = {
-    [REQUEST_JSON] = (const char*)"JSON",
-    [REQUEST_RAW] = (const char*)"Raw",
-    [REQUEST_MULTIPART] = (const char*)"Multipart",
-};
 
 template <typename Data>
 struct PartialDictElement {
@@ -118,7 +92,7 @@ struct MultiPartBodyElementData {
     std::optional<pfd::open_file> open_file;
 
     static constexpr size_t field_count = 2;
-    static const char* field_labels[field_count]; 
+    static const char* field_labels[field_count];
 };
 const char* MultiPartBodyElementData::field_labels[field_count] = {
     (const char*)"Type",
@@ -131,7 +105,7 @@ struct CookiesElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static const char* field_labels[field_count]; 
+    static const char* field_labels[field_count];
 };
 const char* CookiesElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -143,16 +117,13 @@ struct ParametersElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static const char* field_labels[field_count]; 
+    static const char* field_labels[field_count];
 };
 const char* ParametersElementData::field_labels[field_count] = {
     (const char*)"Data",
 };
 using Parameters = PartialDict<ParametersElementData>;
 using ParametersElement = Parameters::ElementType;
-
-// NOTE: maybe change std::string to TextEditor?
-using RequestBody = std::variant<std::string, MultiPartBody>;
 
 struct Test;
 struct Group;
@@ -162,21 +133,79 @@ enum NestedTestType : int {
 };
 using NestedTest = std::variant<Test, Group>;
 
+enum RequestBodyType : int {
+    REQUEST_JSON,
+    REQUEST_RAW,
+    REQUEST_MULTIPART,
+};
+static const char* RequestBodyTypeLabels[] = {
+    [REQUEST_JSON] = (const char*)"JSON",
+    [REQUEST_RAW] = (const char*)"Raw",
+    [REQUEST_MULTIPART] = (const char*)"Multipart",
+};
+
+// NOTE: maybe change std::string to TextEditor?
+using RequestBody = std::variant<std::string, MultiPartBody>;
+
+struct Request {
+    RequestBodyType body_type = REQUEST_JSON;
+    RequestBody body = "{}";
+
+    Cookies cookies;
+    Parameters parameters;
+    std::string headers;
+};
+
+enum ResponseBodyType : int {
+    RESPONSE_JSON,
+    RESPONSE_HTML,
+    RESPONSE_RAW,
+    RESPONSE_MULTIPART,
+};
+static const char* ResponseBodyTypeLabels[] = {
+    [RESPONSE_JSON] = (const char*)"JSON",
+    [RESPONSE_HTML] = (const char*)"HTML",
+    [RESPONSE_RAW] = (const char*)"Raw",
+    [RESPONSE_MULTIPART] = (const char*)"Multipart",
+};
+
+// NOTE: maybe change std::string to TextEditor?
+using ResponseBody = std::variant<std::string, MultiPartBody>;
+
+struct Response {
+    ResponseBodyType body_type = RESPONSE_JSON;
+    ResponseBody body = "{}";
+
+    Cookies cookies;
+    std::string headers;
+};
+
+enum HTTPType : int {
+    HTTP_GET,
+    HTTP_POST,
+    HTTP_PUT,
+    HTTP_DELETE,
+    HTTP_PATCH,
+};
+static const char* HTTPTypeLabels[] = {
+    [HTTP_GET] = (const char*)"GET",
+    [HTTP_POST] = (const char*)"POST",
+    [HTTP_PUT] = (const char*)"PUT",
+    [HTTP_DELETE] = (const char*)"DELETE",
+    [HTTP_PATCH] = (const char*)"PATCH",
+};
+
 struct Test {
+    bool enabled = true;
+
     size_t parent_id;
     uint64_t id;
 
     HTTPType type;
     std::string endpoint;
-
-    bool enabled = true;
-
-    RequestBodyType body_type = REQUEST_JSON;
-    RequestBody body = "{}";
     
-    Cookies cookies;
-    Parameters parameters;
-    std::string headers;
+    Request request;
+    Response response;
 
     TextEditor editor;
 
@@ -582,7 +611,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
     return changed;
 }
 
-template<typename Data>
+template <typename Data>
 void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label) noexcept {
     using DataType = PartialDict<Data>::DataType;
     using ElementType = PartialDict<Data>::ElementType;
@@ -626,37 +655,37 @@ void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label) noexc
     }
 }
 
-void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
+void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
     if (ImGui::BeginTabBar("Request")) {
         ImGui::PushID("request");
 
         if (ImGui::BeginTabItem("Request")) {
             ImGui::Text("Select any of the tabs to edit test's request");
+            ImGui::Text("TODO: add a summary of request here");
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
-                    "Body Type", (int*)&test.body_type,
+                    "Body Type", (int*)&test.request.body_type,
                     RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
 
                 // TODO: convert between current body types
-                switch (test.body_type) {
+                switch (test.request.body_type) {
                 case REQUEST_JSON:
                     test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
-                    if (!std::holds_alternative<std::string>(test.body)) {
-                        test.body = "{}";
+                    if (!std::holds_alternative<std::string>(test.request.body)) {
+                        test.request.body = "{}";
                         test.editor.SetText("{}");
                         // TODO: allow for palette change within view settings
                         test.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
-
                     break;
 
                 case REQUEST_RAW:
                     test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
-                    if (!std::holds_alternative<std::string>(test.body)) {
-                        test.body = "";
+                    if (!std::holds_alternative<std::string>(test.request.body)) {
+                        test.request.body = "";
                         test.editor.SetText("");
                         // TODO: allow for palette change within view settings
                         test.editor.SetPalette(TextEditor::GetDarkPalette());
@@ -664,12 +693,12 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept
                     break;
 
                 case REQUEST_MULTIPART:
-                    test.body = MultiPartBody{};
+                    test.request.body = MultiPartBody{};
                     break;
                 }
             }
 
-            switch (test.body_type) {
+            switch (test.request.body_type) {
             case REQUEST_JSON:
                 ImGui::SameLine();
                 if (ImGui::Button("Format")) {
@@ -684,18 +713,18 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept
                 test.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
 
-                test.body = test.editor.GetText();
+                test.request.body = test.editor.GetText();
                 break;
 
             case REQUEST_RAW:
                 ImGui::PushFont(app->mono_font);
                 test.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
-                test.body = test.editor.GetText();
+                test.request.body = test.editor.GetText();
                 break;
 
             case REQUEST_MULTIPART:
-                auto& mpb = std::get<MultiPartBody>(test.body);
+                auto& mpb = std::get<MultiPartBody>(test.request.body);
                 partial_dict(app, &mpb, "##body");
                 break;
             }
@@ -704,19 +733,105 @@ void editor_tab_test_requests(AppState* app, EditorTab tab, Test& test) noexcept
 
         if (ImGui::BeginTabItem("Parameters")) {
             // TODO: make this unable to add/remove elements and do it automatically by tracking endpoint text changes
-            partial_dict(app, &test.parameters, "##parameters");
+            ImGui::Text("TODO: Will be ignored for now");
+            partial_dict(app, &test.request.parameters, "##parameters");
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
-            partial_dict(app, &test.cookies, "##cookies");
+            partial_dict(app, &test.request.cookies, "##cookies");
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
-            ImGui::InputTextMultiline("##headers", &test.headers, ImVec2(0, 300));
+            ImGui::InputTextMultiline("##headers", &test.request.headers, ImVec2(0, 300));
             ImGui::EndTabItem();
         }
+
+        ImGui::EndTabBar();
+        ImGui::PopID();
+    }
+}
+
+void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
+    if (ImGui::BeginTabBar("Response")) {
+        ImGui::PushID("response");
+
+        if (ImGui::BeginTabItem("Response")) {
+            ImGui::Text("Select any of the tabs to edit test's expected response");
+            ImGui::Text("TODO: add a summary of expected response here");
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Body")) {
+            if (ImGui::Combo(
+                    "Body Type", (int*)&test.response.body_type,
+                    ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
+
+                // TODO: convert between current body types
+                switch (test.response.body_type) {
+                case RESPONSE_JSON:
+                case RESPONSE_HTML:
+                case RESPONSE_RAW:
+                    test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    if (!std::holds_alternative<std::string>(test.response.body)) {
+                        test.response.body = "";
+                        test.editor.SetText("");
+                        // TODO: allow for palette change within view settings
+                        test.editor.SetPalette(TextEditor::GetDarkPalette());
+                    }
+                    break;
+
+                case RESPONSE_MULTIPART:
+                    test.response.body = MultiPartBody{};
+                    break;
+                }
+            }
+
+            switch (test.response.body_type) {
+            case RESPONSE_JSON:
+                ImGui::SameLine();
+                if (ImGui::Button("Format")) {
+                    try {
+                        test.editor.SetText(json::parse(test.editor.GetText()).dump(4));
+                    } catch (json::parse_error& error) {
+                        Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
+                    }
+                }
+
+                // ImGui::PushFont(app->mono_font);
+                // test.editor.Render("##body", false, ImVec2(0, 300));
+                // ImGui::PopFont();
+
+                // test.response.body = test.editor.GetText();
+                // break;
+
+            case RESPONSE_HTML:
+            case RESPONSE_RAW:
+                ImGui::PushFont(app->mono_font);
+                test.editor.Render("##body", false, ImVec2(0, 300));
+                ImGui::PopFont();
+                test.response.body = test.editor.GetText();
+                break;
+
+            case RESPONSE_MULTIPART:
+                auto& mpb = std::get<MultiPartBody>(test.response.body);
+                partial_dict(app, &mpb, "##body");
+                break;
+            }
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Cookies")) {
+            partial_dict(app, &test.response.cookies, "##cookies");
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Headers")) {
+            ImGui::InputTextMultiline("##headers", &test.response.headers, ImVec2(0, 300));
+            ImGui::EndTabItem();
+        }
+
         ImGui::EndTabBar();
         ImGui::PopID();
     }
@@ -740,7 +855,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             "Type", (int*)&test.type,
             HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
 
-        editor_tab_test_requests(app, tab, test);
+        editor_test_requests(app, tab, test);
+        editor_test_response(app, tab, test);
 
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
