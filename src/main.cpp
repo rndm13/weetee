@@ -295,6 +295,20 @@ struct AppState {
     ImFont* mono_font;
 };
 
+void move_children_up(AppState* app, Group* group) noexcept {
+    assert(group->id != 0); // not root
+    auto& parent = app->tests[group->parent_id];
+    assert(std::holds_alternative<Group>(parent));
+    auto& parent_group = std::get<Group>(parent);
+
+    for (auto child_id : group->children_idx) {
+        auto& child = app->tests[child_id];
+        std::visit(ParentIDSetVisit(parent_group.id), child);
+        parent_group.children_idx.push_back(child_id);
+    }
+    group->children_idx.clear();
+}
+
 void delete_group(AppState* app, const Group* group) noexcept;
 void delete_test(AppState* app, NestedTest* test) noexcept;
 
@@ -345,6 +359,13 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         bool selected_root = false;
         size_t parent_id = -1;
         size_t selected_count = app->selected_tests.size();
+        // TODO: allow same_parent when a directory was selected with all it's children_idx
+        // example:
+        // root
+        // * \ group
+        // *   \ test 1
+        // * \ test 2
+        // and also make a parent_selected flag for tests
         auto check_parent = [&parent_id, &same_parent, &selected_root](size_t id) {
             if (!same_parent || selected_root) {
                 return;
@@ -376,46 +397,65 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             }
         }
 
-        if (selected_count == 1 && group) {
+        if (group && !test) {
             assert(std::holds_alternative<Group>(*nested_test));
             auto& selected_group = std::get<Group>(*nested_test);
-            if (ImGui::MenuItem("Add a new test")) {
-                change = true;
-                selected_group.open = true;
+            if (selected_count == 1) {
+                if (ImGui::MenuItem("Add a new test")) {
+                    change = true;
+                    selected_group.open = true;
 
-                auto id = ++app->id_counter;
-                app->tests[id] = (Test{
-                    .parent_id = selected_group.id,
-                    .id = id,
-                    .type = HTTP_GET,
-                    .endpoint = "https://example.com",
-                });
-                selected_group.children_idx.push_back(id);
+                    auto id = ++app->id_counter;
+                    app->tests[id] = (Test{
+                        .parent_id = selected_group.id,
+                        .id = id,
+                        .type = HTTP_GET,
+                        .endpoint = "https://example.com",
+                    });
+                    selected_group.children_idx.push_back(id);
+                }
+
+                if (ImGui::MenuItem("Add a new group")) {
+                    change = true;
+                    selected_group.open = true;
+                    auto id = ++app->id_counter;
+                    app->tests[id] = (Group{
+                        .parent_id = selected_group.id,
+                        .id = id,
+                        .name = "New group",
+                    });
+                    selected_group.children_idx.push_back(id);
+                }
             }
-            if (ImGui::MenuItem("Add a new group")) {
+
+            if (ImGui::MenuItem("Ungroup", nullptr, false, !selected_root && same_parent)) {
                 change = true;
-                selected_group.open = true;
-                auto id = ++app->id_counter;
-                app->tests[id] = (Group{
-                    .parent_id = selected_group.id,
-                    .id = id,
-                    .name = "New group",
-                });
-                selected_group.children_idx.push_back(id);
+                for (auto selected_idx : app->selected_tests) {
+                    auto& selected = app->tests[selected_idx];
+
+                    assert(std::holds_alternative<Group>(selected));
+                    auto& selected_group = std::get<Group>(selected);
+
+                    move_children_up(app, &selected_group);
+                    delete_test(app, &selected);
+                }
             }
         }
-        if (selected_count == 1 && ImGui::MenuItem("Edit")) {
+
+        if (ImGui::MenuItem("Edit", nullptr, false, selected_count == 1)) {
             app->opened_editor_tabs[nested_test_id] = {
                 .just_opened = true,
                 .original = nested_test,
                 .edit = *nested_test};
         }
+
         if (ImGui::MenuItem("Delete", nullptr, false, !selected_root)) {
             change = true;
             for (auto test_idx : app->selected_tests) {
                 delete_test(app, &app->tests[test_idx]);
             }
         }
+
         if (same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !selected_root)) {
             change = true;
 
