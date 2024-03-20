@@ -440,6 +440,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                     delete_test(app, &selected);
                 }
             }
+            ImGui::Separator();
         }
 
         if (ImGui::MenuItem("Edit", nullptr, false, selected_count == 1)) {
