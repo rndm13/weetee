@@ -38,7 +38,8 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
 static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
     ImGuiSelectableFlags_SpanAllColumns |
     ImGuiSelectableFlags_AllowOverlap |
-    ImGuiSelectableFlags_AllowDoubleClick;
+    ImGuiSelectableFlags_AllowDoubleClick ; // | 
+    // ImGuiSelectableFlags_NoPadWithHalfSpacing;
 
 bool arrow(const char* label, ImGuiDir dir) {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
@@ -392,8 +393,7 @@ bool context_menu_visitor(AppState* app, Test* test) noexcept {
 bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
     const auto id = std::visit(IDVisit(), test);
     bool item_is_selected = app->selected_tests.contains(id);
-    if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS,
-                          ImVec2(0, 21))) {
+    if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS)) {
         if (ImGui::GetIO().KeyCtrl) {
             if (item_is_selected) {
                 app->selected_tests.erase(id);
@@ -421,15 +421,22 @@ void display_tree_test(AppState* app, NestedTest& test,
     case TEST_TYPE: {
         auto& leaf = std::get<Test>(test);
         const auto io = ImGui::GetIO();
+
         ImGui::TableNextColumn(); // test
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-        const bool double_clicked = tree_selectable(app, test, leaf.label().c_str()) && io.MouseDoubleClicked[0];
-        const bool changed = context_menu_visitor(app, &leaf);
+        ImGui::Text("%s", leaf.endpoint.c_str());
+
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
+
         ImGui::TableNextColumn(); // enabled / disabled
         // TODO: make this look better
         ImGui::Checkbox("##enabled", &leaf.enabled);
+
+        ImGui::TableNextColumn(); // selectable
+        const bool double_clicked = tree_selectable(app, test, ("##" + std::to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
+        const bool changed = context_menu_visitor(app, &leaf);
+
 
         if (!changed && double_clicked) {
             app->opened_editor_tabs[leaf.id] = {
@@ -450,16 +457,21 @@ void display_tree_test(AppState* app, NestedTest& test,
         }
         ImGui::SameLine();
         remove_arrow_offset();
-        const bool clicked = tree_selectable(app, test, group.label().c_str());
+        ImGui::Text("%s", group.name.c_str());
+
+        ImGui::TableNextColumn(); // spinner for running tests
+        ImSpinner::SpinnerIncDots("running", 5, 1);
+
+        ImGui::TableNextColumn(); // enabled / disabled
+        // TODO: make this look better
+        ImGui::Checkbox("##enabled", &group.enabled);
+
+        ImGui::TableNextColumn(); // selectable
+        const bool clicked = tree_selectable(app, test, ("##" + std::to_string(group.id)).c_str());
         if (clicked) {
             group.open = !group.open;
         }
         const bool changed = context_menu_visitor(app, &group);
-        ImGui::TableNextColumn(); // spinner for running tests
-        ImSpinner::SpinnerIncDots("running", 5, 1);
-        ImGui::TableNextColumn(); // enabled / disabled
-        // TODO: make this look better
-        ImGui::Checkbox("##enabled", &group.enabled);
 
         if (group.open) {
             if (!changed) {
@@ -477,10 +489,11 @@ void display_tree_test(AppState* app, NestedTest& test,
 
 void test_tree_view(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
-    if (ImGui::BeginTable("tests", 3)) {
+    if (ImGui::BeginTable("tests", 4)) {
         ImGui::TableSetupColumn("test");
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
+        ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 0.0f);
         display_tree_test(app, app->tests[0]);
         ImGui::EndTable();
     }
@@ -500,7 +513,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         // TODO: make this look less stupid
         changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
         ImGui::SameLine();
-        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 21))) {
+        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS)) {
             if (ImGui::GetIO().KeyCtrl) {
                 elem->selected = !elem->selected;
             } else {
@@ -744,7 +757,9 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Headers")) {
+            ImGui::PushFont(app->mono_font);
             ImGui::InputTextMultiline("##headers", &test.request.headers, ImVec2(0, 300));
+            ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
@@ -798,14 +813,6 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                         Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
                     }
                 }
-
-                // ImGui::PushFont(app->mono_font);
-                // test.editor.Render("##body", false, ImVec2(0, 300));
-                // ImGui::PopFont();
-
-                // test.response.body = test.editor.GetText();
-                // break;
-
             case RESPONSE_HTML:
             case RESPONSE_RAW:
                 ImGui::PushFont(app->mono_font);
@@ -828,7 +835,9 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Headers")) {
+            ImGui::PushFont(app->mono_font);
             ImGui::InputTextMultiline("##headers", &test.response.headers, ImVec2(0, 300));
+            ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
