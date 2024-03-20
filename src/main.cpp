@@ -15,9 +15,9 @@
 #include "../external/cpp-httplib/httplib.h"
 #include "../external/json-include/json.hpp"
 
+#include "sstream"
 #include "unordered_map"
 #include "variant"
-#include "sstream"
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -38,8 +38,8 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
 static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
     ImGuiSelectableFlags_SpanAllColumns |
     ImGuiSelectableFlags_AllowOverlap |
-    ImGuiSelectableFlags_AllowDoubleClick ; // | 
-    // ImGuiSelectableFlags_NoPadWithHalfSpacing;
+    ImGuiSelectableFlags_AllowDoubleClick; // |
+// ImGuiSelectableFlags_NoPadWithHalfSpacing;
 
 bool arrow(const char* label, ImGuiDir dir) {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
@@ -215,7 +215,7 @@ struct Test {
 
     HTTPType type;
     std::string endpoint;
-    
+
     Request request;
     Response response;
 
@@ -245,6 +245,19 @@ struct Group {
 struct IDVisit {
     uint64_t operator()(const auto& idable) const noexcept {
         return idable.id;
+    }
+};
+
+struct ParentIDVisit {
+    uint64_t operator()(const auto& parent_idable) const noexcept {
+        return parent_idable.parent_id;
+    }
+};
+
+struct ParentIDSetVisit {
+    const size_t new_id;
+    uint64_t operator()(auto& parent_idable) const noexcept {
+        return parent_idable.parent_id = this->new_id;
     }
 };
 
@@ -283,39 +296,26 @@ struct AppState {
 };
 
 void delete_group(AppState* app, const Group* group) noexcept;
-void delete_test(AppState* app, NestedTest test) noexcept;
+void delete_test(AppState* app, NestedTest* test) noexcept;
 
 void delete_group(AppState* app, const Group* group) noexcept {
     for (auto child_id : group->children_idx) {
-        auto child = app->tests[child_id];
-        delete_test(app, child);
+        delete_test(app, &app->tests[child_id]);
     }
 }
 
-void delete_test(AppState* app, NestedTest test) noexcept {
-    size_t id;
-    size_t parent_id;
+void delete_test(AppState* app, NestedTest* test) noexcept {
+    size_t id = std::visit(IDVisit(), *test);
+    size_t parent_id = std::visit(ParentIDVisit(), *test);
 
-    switch (test.index()) {
-    case TEST_TYPE: {
-        auto& leaf = std::get<Test>(test);
-
-        id = leaf.id;
-        parent_id = leaf.parent_id;
-    } break;
-    case GROUP_TYPE: {
-        auto& group = std::get<Group>(test);
-
+    if (std::holds_alternative<Group>(*test)) {
+        auto& group = std::get<Group>(*test);
         delete_group(app, &group);
-        id = group.id;
-        parent_id = group.parent_id;
-    } break;
     }
 
     // remove it's id from parents child id list
-    auto& parent = std::get<Group>(app->tests.at(parent_id));
-    for (auto it = parent.children_idx.begin(); it != parent.children_idx.end();
-         it++) {
+    auto& parent = std::get<Group>(app->tests[parent_id]);
+    for (auto it = parent.children_idx.begin(); it != parent.children_idx.end(); it++) {
         if (*it == id) {
             parent.children_idx.erase(it);
             break;
@@ -327,84 +327,145 @@ void delete_test(AppState* app, NestedTest test) noexcept {
     app->opened_editor_tabs.erase(id);
 }
 
-// TODO: make this a single function instead that analyzes selected tests instead
-bool context_menu_visitor(AppState* app, Group* group) noexcept {
+bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     bool change = false;
+    size_t nested_test_id = std::visit(IDVisit(), *nested_test);
+
     if (ImGui::BeginPopupContextItem()) {
-        if (!app->selected_tests.contains(group->id)) {
+        if (!app->selected_tests.contains(nested_test_id)) {
             app->selected_tests.clear();
-            app->selected_tests.insert(group->id);
+            app->selected_tests.insert(nested_test_id);
         }
-        if (ImGui::MenuItem("Edit")) {
-            app->opened_editor_tabs[group->id] = {
+
+        // analyzes selected tests first
+        // looks for this data
+        bool group = false;
+        bool test = false;
+        bool same_parent = true;
+        bool selected_root = false;
+        size_t parent_id = -1;
+        size_t selected_count = app->selected_tests.size();
+        auto check_parent = [&parent_id, &same_parent, &selected_root](size_t id) {
+            if (!same_parent || selected_root) {
+                return;
+            }
+
+            if (parent_id == -1) {
+                parent_id = id;
+            } else if (parent_id != id) {
+                same_parent = false;
+            }
+        };
+        for (auto test_idx : app->selected_tests) {
+            auto* selected = &app->tests[test_idx];
+
+            switch (selected->index()) {
+            case TEST_TYPE: {
+                assert(std::holds_alternative<Test>(*selected));
+                auto& selected_test = std::get<Test>(*selected);
+                test = true;
+                check_parent(selected_test.parent_id);
+            } break;
+            case GROUP_TYPE: {
+                assert(std::holds_alternative<Group>(*selected));
+                auto& selected_group = std::get<Group>(*selected);
+                group = true;
+                selected_root |= selected_group.id == 0;
+                check_parent(selected_group.parent_id);
+            } break;
+            }
+        }
+
+        if (selected_count == 1 && group) {
+            assert(std::holds_alternative<Group>(*nested_test));
+            auto& selected_group = std::get<Group>(*nested_test);
+            if (ImGui::MenuItem("Add a new test")) {
+                change = true;
+                selected_group.open = true;
+
+                auto id = ++app->id_counter;
+                app->tests[id] = (Test{
+                    .parent_id = selected_group.id,
+                    .id = id,
+                    .type = HTTP_GET,
+                    .endpoint = "https://example.com",
+                });
+                selected_group.children_idx.push_back(id);
+            }
+            if (ImGui::MenuItem("Add a new group")) {
+                change = true;
+                selected_group.open = true;
+                auto id = ++app->id_counter;
+                app->tests[id] = (Group{
+                    .parent_id = selected_group.id,
+                    .id = id,
+                    .name = "New group",
+                });
+                selected_group.children_idx.push_back(id);
+            }
+        }
+        if (selected_count == 1 && ImGui::MenuItem("Edit")) {
+            app->opened_editor_tabs[nested_test_id] = {
                 .just_opened = true,
-                .original = &app->tests[group->id],
-                .edit = *group};
+                .original = nested_test,
+                .edit = *nested_test};
         }
-
-        if (ImGui::MenuItem("Add a new test")) {
+        if (ImGui::MenuItem("Delete", nullptr, false, !selected_root)) {
             change = true;
-            group->open = true;
-
-            auto id = ++app->id_counter;
-            app->tests[id] = (Test{
-                .parent_id = group->id,
-                .id = id,
-                .type = HTTP_GET,
-                .endpoint = "https://example.com",
-            });
-            group->children_idx.push_back(id);
+            for (auto test_idx : app->selected_tests) {
+                delete_test(app, &app->tests[test_idx]);
+            }
         }
-
-        if (ImGui::MenuItem("Add a new group")) {
+        if (same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !selected_root)) {
             change = true;
-            group->open = true;
+
+            auto* parent_test = &app->tests[parent_id];
+            assert(std::holds_alternative<Group>(*parent_test));
+            auto& parent_group = std::get<Group>(*parent_test);
+
+            // remove selected from old parent
+            for (auto test_idx : app->selected_tests) {
+                for (auto it = parent_group.children_idx.begin(); it != parent_group.children_idx.end(); it++) {
+                    if (*it == test_idx) {
+                        parent_group.children_idx.erase(it);
+                        break;
+                    }
+                }
+            }
+
+            parent_group.open = true;
             auto id = ++app->id_counter;
-            app->tests[id] = (Group{
-                .parent_id = group->id,
+            auto new_group = Group{
+                .parent_id = parent_group.id,
                 .id = id,
                 .name = "New group",
-            });
-            group->children_idx.push_back(id);
+                .open = true,
+            };
+            // add selected to new parent
+            for (auto test_idx : app->selected_tests) {
+                new_group.children_idx.push_back(test_idx);
+                // set new parent id to tests
+                std::visit(ParentIDSetVisit(id), app->tests[test_idx]);
+            }
+
+            parent_group.children_idx.push_back(id);
+            app->tests[id] = new_group;
         }
 
-        if (ImGui::MenuItem("Delete", nullptr, false, group->id != 0)) {
-            delete_test(app, *group);
-            change = true;
-        }
         ImGui::EndPopup();
     }
-    return change;
-}
 
-bool context_menu_visitor(AppState* app, Test* test) noexcept {
-    bool change = false;
-    if (ImGui::BeginPopupContextItem()) {
-        if (!app->selected_tests.contains(test->id)) {
-            app->selected_tests.clear();
-            app->selected_tests.insert(test->id);
-        }
-
-        if (ImGui::MenuItem("Edit")) {
-            app->opened_editor_tabs[test->id] = {
-                .just_opened = true,
-                .original = &app->tests[test->id],
-                .edit = *test};
-        }
-
-        if (ImGui::MenuItem("Delete", nullptr, false, test->id != 0)) {
-            delete_test(app, *test);
-            change = true;
-        }
-        ImGui::EndPopup();
+    if (change) {
+        app->selected_tests.clear();
     }
+
     return change;
 }
 
 bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
     const auto id = std::visit(IDVisit(), test);
     bool item_is_selected = app->selected_tests.contains(id);
-    if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS)) {
+    if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
         if (ImGui::GetIO().KeyCtrl) {
             if (item_is_selected) {
                 app->selected_tests.erase(id);
@@ -457,8 +518,7 @@ void display_tree_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // selectable
         const bool double_clicked = tree_selectable(app, test, ("##" + std::to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
-        const bool changed = context_menu_visitor(app, &leaf);
-
+        const bool changed = context_menu_tree_view(app, &test);
 
         if (!changed && double_clicked) {
             app->opened_editor_tabs[leaf.id] = {
@@ -493,7 +553,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         if (clicked) {
             group.open = !group.open;
         }
-        const bool changed = context_menu_visitor(app, &group);
+        const bool changed = context_menu_tree_view(app, &test);
 
         if (group.open) {
             if (!changed) {
@@ -535,7 +595,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         // TODO: make this look less stupid
         changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
         ImGui::SameLine();
-        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS)) {
+        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
             if (ImGui::GetIO().KeyCtrl) {
                 elem->selected = !elem->selected;
             } else {
@@ -995,9 +1055,11 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
 }
 
 void show_menus(AppState* app) noexcept {
+    ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (arrow("start", ImGuiDir_Right)) {
         Log(LogLevel::Info, "Started testing");
     }
+    ImGui::PopStyleColor(1);
 }
 
 void show_gui(AppState* app) noexcept {
