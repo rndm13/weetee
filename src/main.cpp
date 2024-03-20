@@ -428,7 +428,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 }
             }
 
-            if (ImGui::MenuItem("Ungroup", nullptr, false, !selected_root && same_parent)) {
+            if (ImGui::MenuItem("Ungroup", nullptr, false, !selected_root)) {
                 change = true;
                 for (auto selected_idx : app->selected_tests) {
                     auto& selected = app->tests[selected_idx];
