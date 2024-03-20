@@ -56,6 +56,10 @@ void remove_arrow_offset() {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
 }
 
+constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
+    return ImVec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+}
+
 template <typename Data>
 struct PartialDictElement {
     bool enabled = true;
@@ -194,6 +198,13 @@ static const char* HTTPTypeLabels[] = {
     [HTTP_PUT] = (const char*)"PUT",
     [HTTP_DELETE] = (const char*)"DELETE",
     [HTTP_PATCH] = (const char*)"PATCH",
+};
+static ImVec4 HTTPTypeColor[] = {
+    [HTTP_GET] = rgb_to_ImVec4(58, 142, 48, 255),
+    [HTTP_POST] = rgb_to_ImVec4(160, 173, 64, 255),
+    [HTTP_PUT] = rgb_to_ImVec4(181, 94, 65, 255),
+    [HTTP_DELETE] = rgb_to_ImVec4(201, 61, 22, 255),
+    [HTTP_PATCH] = rgb_to_ImVec4(99, 22, 90, 255),
 };
 
 struct Test {
@@ -409,6 +420,15 @@ bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcep
     return false;
 }
 
+bool http_type_button(HTTPType type) noexcept {
+    ImGui::PushStyleColor(ImGuiCol_Button, HTTPTypeColor[type]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, HTTPTypeColor[type]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HTTPTypeColor[type]);
+    bool result = ImGui::SmallButton(HTTPTypeLabels[type]);
+    ImGui::PopStyleColor(3);
+    return result;
+}
+
 void display_tree_test(AppState* app, NestedTest& test,
                        float indentation = 0) noexcept {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
@@ -424,6 +444,8 @@ void display_tree_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // test
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+        http_type_button(leaf.type);
+        ImGui::SameLine();
         ImGui::Text("%s", leaf.endpoint.c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
@@ -873,6 +895,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
         ImGui::EndTabItem();
     }
+    // TODO: add a modal that warns of unsaved changes
     if (!open) {
         result = TAB_CLOSED;
     }
@@ -896,6 +919,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
         ImGui::EndTabItem();
     }
+    // TODO: add a modal that warns of unsaved changes
     if (!open) {
         result = TAB_CLOSED;
     }
