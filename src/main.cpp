@@ -15,7 +15,10 @@
 #include "../external/cpp-httplib/httplib.h"
 #include "../external/json-include/json.hpp"
 
+#include "BS_thread_pool.hpp"
+
 #include "sstream"
+#include "future"
 #include "unordered_map"
 #include "variant"
 
@@ -130,6 +133,18 @@ const char* ParametersElementData::field_labels[field_count] = {
 using Parameters = PartialDict<ParametersElementData>;
 using ParametersElement = Parameters::ElementType;
 
+struct HeadersElementData {
+    std::string data;
+
+    static constexpr size_t field_count = 1;
+    static const char* field_labels[field_count];
+};
+const char* HeadersElementData::field_labels[field_count] = {
+    (const char*)"Data",
+};
+using Headers = PartialDict<HeadersElementData>;
+using HeadersElement = Headers::ElementType;
+
 struct Test;
 struct Group;
 enum NestedTestType : int {
@@ -158,7 +173,7 @@ struct Request {
 
     Cookies cookies;
     Parameters parameters;
-    std::string headers;
+    Headers headers;
 };
 
 enum ResponseBodyType : int {
@@ -182,7 +197,7 @@ struct Response {
     ResponseBody body = "{}";
 
     Cookies cookies;
-    std::string headers;
+    Headers headers;
 };
 
 enum HTTPType : int {
@@ -224,6 +239,10 @@ struct Test {
     const std::string label() const noexcept {
         return this->endpoint + "##" + std::to_string(this->id);
     }
+};
+
+struct TestResult {
+    httplib::Response response;
 };
 
 struct Group {
@@ -275,6 +294,7 @@ struct EditorTab {
 };
 
 struct AppState {
+    BS::thread_pool thr_pool;
     httplib::Client cli;
     uint64_t id_counter = 0;
     std::unordered_map<size_t, NestedTest> tests = {
@@ -694,6 +714,14 @@ bool partial_dict_data_row(AppState* app, Parameters* pd, ParametersElement* ele
     return changed;
 }
 
+bool partial_dict_data_row(AppState* app, Headers* pd, HeadersElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
+    }
+    return changed;
+}
+
 bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) { // type
@@ -868,20 +896,24 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Parameters")) {
-            // TODO: make this unable to add/remove elements and do it automatically by tracking endpoint text changes
-            ImGui::Text("TODO: Will be ignored for now");
+            ImGui::Text("TODO: make this unable to add/remove elements and do it automatically by tracking endpoint text changes");
+            ImGui::PushFont(app->mono_font);
             partial_dict(app, &test.request.parameters, "##parameters");
+            ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
+            ImGui::PushFont(app->mono_font);
             partial_dict(app, &test.request.cookies, "##cookies");
+            ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
+            ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
-            ImGui::InputTextMultiline("##headers", &test.request.headers, ImVec2(0, 300));
+            partial_dict(app, &test.request.headers, "##headers");
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -953,13 +985,16 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
+            ImGui::PushFont(app->mono_font);
             partial_dict(app, &test.response.cookies, "##cookies");
+            ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
+            ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
-            ImGui::InputTextMultiline("##headers", &test.response.headers, ImVec2(0, 300));
+            partial_dict(app, &test.response.headers, "##headers");
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1095,6 +1130,32 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
     return params;
 }
 
+httplib::Headers test_headers(Test* test) noexcept {
+}
+
+httplib::Response make_request(AppState* app, Test* test) noexcept {
+    switch (test->type) {
+        case HTTP_GET:
+            app->cli.Get(test->endpoint);
+            break;
+        case HTTP_POST:
+            break;
+        case HTTP_PUT:
+            break;
+        case HTTP_PATCH:
+            break;
+        case HTTP_DELETE:
+            break;
+    }
+}
+
+TestResult run_test(AppState* app, Test* test) noexcept {
+}
+
+void run_tests(AppState* app, std::vector<Test>* tests) noexcept {
+
+}
+
 void show_menus(AppState* app) noexcept {
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (arrow("start", ImGuiDir_Right)) {
@@ -1118,6 +1179,7 @@ int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
     httplib::Client cli("");
     auto app = AppState{
+        .thr_pool = BS::thread_pool(),
         .cli = std::move(cli),
     };
 

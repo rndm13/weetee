@@ -22,21 +22,41 @@ if (NOT TARGET imgui_bundle)
     # set(IMMVISION_FETCH_OPENCV ON)
 endif()
 
-# Add https 
-# =============
-
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-find_package(OpenSSL REQUIRED)
-find_package(httplib COMPONENTS OpenSSL ZLIB Brotli REQUIRED)
-find_package(nlohmann_json 3.2.0 REQUIRED)
-
 # Build app
 # ==============
 
 imgui_bundle_add_app(weetee src/main.cpp)
+
+# Add https and json
+# ==================
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+find_package(OpenSSL)
+if (${OpenSSL_FOUND})
+    target_link_libraries(
+        weetee PRIVATE
+        OpenSSL::Crypto
+        OpenSSL::SSL)
+    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "OPENSSL=1")
+else (${OpenSSL_FOUND})
+    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "OPENSSL=0")
+endif (${OpenSSL_FOUND})
+
+add_subdirectory(external/cpp-httplib)
+add_subdirectory(external/json)
+
 target_link_libraries(
     weetee PRIVATE
-    OpenSSL::Crypto
-    OpenSSL::SSL
     httplib::httplib
     nlohmann_json::nlohmann_json)
+
+# Add Thread Pool
+# ===============
+
+set(BS_thread_pool_SOURCE_DIR external/thread-pool/)
+add_library(BS_thread_pool INTERFACE)
+target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}/include)
+
+target_link_libraries(
+    weetee PRIVATE
+    BS_thread_pool)
