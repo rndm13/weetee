@@ -10,7 +10,6 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
-#include <algorithm>
 
 #if OPENSSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -204,10 +203,11 @@ struct Response {
     Headers headers;
 };
 
-enum HTTPType : int {
+enum HTTPType : uint64_t {
     HTTP_GET,
     HTTP_POST,
     HTTP_PUT,
+
     HTTP_DELETE,
     HTTP_PATCH,
 };
@@ -226,11 +226,15 @@ static ImVec4 HTTPTypeColor[] = {
     [HTTP_PATCH] = rgb_to_ImVec4(99, 22, 90, 255),
 };
 
-struct Test {
-    bool enabled = true;
+enum TestFlags : uint64_t {
+    TEST_DISABLED = 1 << 0,
+    TEST_PARENT_DISABLED = 1 << 1,
+};
 
+struct Test {
     size_t parent_id;
-    uint64_t id;
+    size_t id;
+    uint64_t flags;
 
     HTTPType type;
     std::string endpoint;
@@ -249,16 +253,19 @@ struct TestResult {
     httplib::Response response;
 };
 
+enum GroupFlags : uint64_t {
+    GROUP_DISABLED = 1 << 0,
+    GROUP_PARENT_DISABLED = 1 << 1,
+    GROUP_OPEN = 1 << 2,
+};
+
 struct Group {
     size_t parent_id;
-    uint64_t id;
+    size_t id;
+    uint64_t flags;
 
     std::string name;
     std::vector<size_t> children_idx;
-
-    bool open = false;
-
-    bool enabled = true;
 
     const std::string label() const noexcept {
         return this->name + "##" + to_string(this->id);
@@ -266,20 +273,20 @@ struct Group {
 };
 
 struct IDVisit {
-    uint64_t operator()(const auto& idable) const noexcept {
+    size_t operator()(const auto& idable) const noexcept {
         return idable.id;
     }
 };
 
 struct ParentIDVisit {
-    uint64_t operator()(const auto& parent_idable) const noexcept {
+    size_t operator()(const auto& parent_idable) const noexcept {
         return parent_idable.parent_id;
     }
 };
 
 struct ParentIDSetVisit {
     const size_t new_id;
-    uint64_t operator()(auto& parent_idable) const noexcept {
+    size_t operator()(auto& parent_idable) const noexcept {
         return parent_idable.parent_id = this->new_id;
     }
 };
@@ -300,7 +307,7 @@ struct EditorTab {
 struct AppState {
     BS::thread_pool thr_pool;
     // httplib::Client cli;
-    uint64_t id_counter = 0;
+    size_t id_counter = 0;
     std::unordered_map<size_t, NestedTest> tests = {
         {
             0,
@@ -427,7 +434,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             if (selected_count == 1) {
                 if (ImGui::MenuItem("Add a new test")) {
                     change = true;
-                    selected_group.open = true;
+                    selected_group.flags |= GROUP_OPEN;
 
                     auto id = ++app->id_counter;
                     app->tests[id] = (Test{
@@ -441,7 +448,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
                 if (ImGui::MenuItem("Add a new group")) {
                     change = true;
-                    selected_group.open = true;
+                    selected_group.flags |= GROUP_OPEN;
                     auto id = ++app->id_counter;
                     app->tests[id] = (Group{
                         .parent_id = selected_group.id,
@@ -498,13 +505,13 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 }
             }
 
-            parent_group.open = true;
+            parent_group.flags |= GROUP_OPEN;
             auto id = ++app->id_counter;
             auto new_group = Group{
                 .parent_id = parent_group.id,
                 .id = id,
+                .flags = GROUP_OPEN,
                 .name = "New group",
-                .open = true,
             };
             // add selected to new parent
             for (auto test_idx : app->selected_tests) {
@@ -578,8 +585,14 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImSpinner::SpinnerIncDots("running", 5, 1);
 
         ImGui::TableNextColumn(); // enabled / disabled
-        // TODO: make this look better
-        ImGui::Checkbox("##enabled", &leaf.enabled);
+        bool enabled = !(leaf.flags & TEST_DISABLED);
+        if (ImGui::Checkbox("##enabled", &enabled)) {
+            if (!enabled) {
+                leaf.flags |= TEST_DISABLED;
+            } else {
+                leaf.flags &= ~TEST_DISABLED; 
+            }
+        }
 
         ImGui::TableNextColumn(); // selectable
         const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
@@ -597,7 +610,7 @@ void display_tree_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // test
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-        if (group.open) {
+        if (group.flags & GROUP_OPEN) {
             arrow("down", ImGuiDir_Down);
         } else {
             arrow("right", ImGuiDir_Right);
@@ -611,16 +624,24 @@ void display_tree_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // enabled / disabled
         // TODO: make this look better
-        ImGui::Checkbox("##enabled", &group.enabled);
+        
+        bool enabled = !(group.flags & GROUP_DISABLED);
+        if (ImGui::Checkbox("##enabled", &enabled)) {
+            if (!enabled) {
+                group.flags |= GROUP_DISABLED;
+            } else {
+                group.flags &= ~GROUP_DISABLED; 
+            }
+        }
 
         ImGui::TableNextColumn(); // selectable
         const bool clicked = tree_selectable(app, test, ("##" + to_string(group.id)).c_str());
         if (clicked) {
-            group.open = !group.open;
+            group.flags ^= GROUP_OPEN; // toggle
         }
         const bool changed = context_menu_tree_view(app, &test);
 
-        if (group.open) {
+        if (group.flags & GROUP_OPEN) {
             if (!changed) {
                 for (size_t child_id : group.children_idx) {
                     display_tree_test(app, app->tests[child_id],
@@ -1086,6 +1107,7 @@ void tabbed_editor(AppState* app) noexcept {
 
             switch (result) {
             case TAB_SAVED:
+                // TODO: remember this tab as focused so when there are more than 1 tabs the focused one remains focused
                 *tab.original = tab.edit;
                 break;
             // hopefully can't close 2 tabs in a single frame
@@ -1249,7 +1271,7 @@ void show_menus(AppState* app) noexcept {
                 assert(std::holds_alternative<Test>(nested_test));
                 const auto& test = std::get<Test>(nested_test);
 
-                if (test.enabled) {
+                if (!(test.flags & TEST_DISABLED)) {
                     tests_to_run.push_back(test);
                 }
             } break;
