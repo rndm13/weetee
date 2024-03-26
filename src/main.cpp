@@ -1,6 +1,10 @@
 #include "hello_imgui/hello_imgui_font.h"
 #include "hello_imgui/hello_imgui_logger.h"
 
+#include "hello_imgui/hello_imgui_theme.h"
+#include "hello_imgui/imgui_theme.h"
+#include "hello_imgui/internal/hello_imgui_ini_settings.h"
+#include "hello_imgui/runner_params.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
@@ -322,6 +326,7 @@ struct AppState {
 
     ImFont* regular_font;
     ImFont* mono_font;
+    HelloImGui::RunnerParams* runner_params;
 };
 
 bool nested_test_parent_disabled(AppState* app, const NestedTest* nt) noexcept {
@@ -410,7 +415,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         // * \ group
         // *   \ test 1
         // * \ test 2
-        // and also make a parent_selected flag for tests
+        // and check for selected parent in tests
         auto check_parent = [&parent_id, &same_parent, &selected_root](size_t id) {
             if (!same_parent || selected_root) {
                 return;
@@ -422,6 +427,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 same_parent = false;
             }
         };
+
         for (auto test_idx : app->selected_tests) {
             auto* selected = &app->tests[test_idx];
 
@@ -610,7 +616,7 @@ void display_tree_test(AppState* app, NestedTest& test,
             if (!enabled) {
                 leaf.flags |= TEST_DISABLED;
             } else {
-                leaf.flags &= ~TEST_DISABLED; 
+                leaf.flags &= ~TEST_DISABLED;
             }
         }
 
@@ -647,7 +653,6 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImSpinner::SpinnerIncDots("running", 5, 1);
 
         ImGui::TableNextColumn(); // enabled / disabled
-        // TODO: make this look better
 
         bool parent_disabled = nested_test_parent_disabled(app, &test);
         if (parent_disabled) {
@@ -659,7 +664,7 @@ void display_tree_test(AppState* app, NestedTest& test,
             if (!enabled) {
                 group.flags |= GROUP_DISABLED;
             } else {
-                group.flags &= ~GROUP_DISABLED; 
+                group.flags &= ~GROUP_DISABLED;
             }
         }
 
@@ -927,7 +932,7 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                     try {
                         test.editor.SetText(json::parse(test.editor.GetText()).dump(4));
                     } catch (json::parse_error& error) {
-                        Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
+                        Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
                     }
                 }
 
@@ -954,7 +959,7 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Parameters")) {
-            ImGui::Text("TODO: make this unable to add/remove elements and do it automatically by tracking endpoint text changes");
+            ImGui::Text("TODO: add undeletable params for url");
             ImGui::PushFont(app->mono_font);
             partial_dict(app, &test.request.parameters, "##parameters");
             ImGui::PopFont();
@@ -1140,8 +1145,8 @@ void tabbed_editor(AppState* app) noexcept {
 
             switch (result) {
             case TAB_SAVED:
-                // TODO: remember this tab as focused so when there are more than 1 tabs the focused one remains focused
                 *tab.original = tab.edit;
+                tab.just_opened = true;
                 break;
             // hopefully can't close 2 tabs in a single frame
             case TAB_CLOSED:
@@ -1151,6 +1156,7 @@ void tabbed_editor(AppState* app) noexcept {
                 break;
             }
         }
+
         if (closed_id != -1) {
             app->opened_editor_tabs.erase(closed_id);
         }
@@ -1281,7 +1287,7 @@ TestResult run_test(AppState* app, Test test) noexcept {
         Log(LogLevel::Debug, "%d %s", result->status, result->body.c_str());
     }
 
-    return {}; // temp
+    return {}; // TODO: return proper value
 }
 
 void run_tests(AppState* app, std::vector<Test>* tests) noexcept {
@@ -1321,6 +1327,7 @@ void show_menus(AppState* app) noexcept {
 void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
     ImGui::ShowDemoWindow();
+    ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }
 
 void load_fonts(AppState* app) noexcept {
@@ -1329,22 +1336,34 @@ void load_fonts(AppState* app) noexcept {
     app->mono_font = HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15, {.useFullGlyphRange = true});
 }
 
+void post_init(AppState* app) noexcept {
+    std::string ini = HelloImGui::IniSettingsLocation(*app->runner_params);
+    Log(LogLevel::Debug, "Ini: %s", ini.c_str());
+    HelloImGui::HelloImGuiIniSettings::LoadHelloImGuiMiscSettings(ini, app->runner_params);
+    Log(LogLevel::Debug, "Theme: %s", ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
+    // NOTE: you have to do this in show_gui instead because imgui is stupid
+    // ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
+}
+
 int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
-    // httplib::Client cli("");
     auto app = AppState{
         .thr_pool = BS::thread_pool(),
-        // .cli = std::move(cli),
+        .runner_params = &runner_params,
     };
 
     runner_params.appWindowParams.windowTitle = "weetee";
 
     runner_params.imGuiWindowParams.showMenuBar = true;
     runner_params.imGuiWindowParams.showStatusBar = true;
+    runner_params.imGuiWindowParams.rememberTheme = true;
+
     runner_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
+
     runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
     runner_params.callbacks.LoadAdditionalFonts = [&app]() { load_fonts(&app); };
+    runner_params.callbacks.PostInit = [&app]() { post_init(&app); };
 
     runner_params.dockingParams = layout(&app);
     runner_params.fpsIdling.enableIdling = false;
