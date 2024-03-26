@@ -228,7 +228,6 @@ static ImVec4 HTTPTypeColor[] = {
 
 enum TestFlags : uint64_t {
     TEST_DISABLED = 1 << 0,
-    TEST_PARENT_DISABLED = 1 << 1,
 };
 
 struct Test {
@@ -255,8 +254,7 @@ struct TestResult {
 
 enum GroupFlags : uint64_t {
     GROUP_DISABLED = 1 << 0,
-    GROUP_PARENT_DISABLED = 1 << 1,
-    GROUP_OPEN = 1 << 2,
+    GROUP_OPEN = 1 << 1,
 };
 
 struct Group {
@@ -325,6 +323,22 @@ struct AppState {
     ImFont* regular_font;
     ImFont* mono_font;
 };
+
+bool nested_test_parent_disabled(AppState* app, const NestedTest* nt) noexcept {
+    // TODO: maybe add some cache for every test that clears every frame?
+    // if performance becomes a problem
+    size_t id = std::visit(ParentIDVisit(), *nt);
+    while (id != -1) {
+        nt = &app->tests[id];
+        assert(std::holds_alternative<Group>(*nt));
+        const Group& group = std::get<Group>(*nt);
+        if (group.flags & GROUP_DISABLED) {
+            return true;
+        }
+        id = group.parent_id;
+    }
+    return false;
+}
 
 void move_children_up(AppState* app, Group* group) noexcept {
     assert(group->id != 0); // not root
@@ -585,6 +599,12 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImSpinner::SpinnerIncDots("running", 5, 1);
 
         ImGui::TableNextColumn(); // enabled / disabled
+
+        bool parent_disabled = nested_test_parent_disabled(app, &test);
+        if (parent_disabled) {
+            ImGui::BeginDisabled();
+        }
+
         bool enabled = !(leaf.flags & TEST_DISABLED);
         if (ImGui::Checkbox("##enabled", &enabled)) {
             if (!enabled) {
@@ -592,6 +612,10 @@ void display_tree_test(AppState* app, NestedTest& test,
             } else {
                 leaf.flags &= ~TEST_DISABLED; 
             }
+        }
+
+        if (parent_disabled) {
+            ImGui::EndDisabled();
         }
 
         ImGui::TableNextColumn(); // selectable
@@ -624,7 +648,12 @@ void display_tree_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // enabled / disabled
         // TODO: make this look better
-        
+
+        bool parent_disabled = nested_test_parent_disabled(app, &test);
+        if (parent_disabled) {
+            ImGui::BeginDisabled();
+        }
+
         bool enabled = !(group.flags & GROUP_DISABLED);
         if (ImGui::Checkbox("##enabled", &enabled)) {
             if (!enabled) {
@@ -632,6 +661,10 @@ void display_tree_test(AppState* app, NestedTest& test,
             } else {
                 group.flags &= ~GROUP_DISABLED; 
             }
+        }
+
+        if (parent_disabled) {
+            ImGui::EndDisabled();
         }
 
         ImGui::TableNextColumn(); // selectable
@@ -1263,7 +1296,6 @@ void show_menus(AppState* app) noexcept {
     if (arrow("start", ImGuiDir_Right)) {
 
         // find tests to execute
-        // right now just gets any tests that are enabled
         std::vector<Test> tests_to_run;
         for (const auto& [id, nested_test] : app->tests) {
             switch (nested_test.index()) {
@@ -1271,7 +1303,7 @@ void show_menus(AppState* app) noexcept {
                 assert(std::holds_alternative<Test>(nested_test));
                 const auto& test = std::get<Test>(nested_test);
 
-                if (!(test.flags & TEST_DISABLED)) {
+                if (!(test.flags & TEST_DISABLED) && !nested_test_parent_disabled(app, &nested_test)) {
                     tests_to_run.push_back(test);
                 }
             } break;
