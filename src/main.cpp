@@ -10,15 +10,19 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
+#include <algorithm>
 
+#if OPENSSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
+#endif
+
 #include "../external/cpp-httplib/httplib.h"
 #include "../external/json-include/json.hpp"
 
 #include "BS_thread_pool.hpp"
 
-#include "sstream"
 #include "future"
+#include "sstream"
 #include "unordered_map"
 #include "variant"
 
@@ -26,6 +30,7 @@ using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
 using json = nlohmann::json;
+using std::to_string;
 
 template <class... Ts>
 struct overloaded : Ts... {
@@ -41,8 +46,7 @@ static constexpr ImGuiTableFlags TABLE_FLAGS =
 static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
     ImGuiSelectableFlags_SpanAllColumns |
     ImGuiSelectableFlags_AllowOverlap |
-    ImGuiSelectableFlags_AllowDoubleClick; // |
-// ImGuiSelectableFlags_NoPadWithHalfSpacing;
+    ImGuiSelectableFlags_AllowDoubleClick;
 
 bool arrow(const char* label, ImGuiDir dir) {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
@@ -237,7 +241,7 @@ struct Test {
     TextEditor editor;
 
     const std::string label() const noexcept {
-        return this->endpoint + "##" + std::to_string(this->id);
+        return this->endpoint + "##" + to_string(this->id);
     }
 };
 
@@ -257,7 +261,7 @@ struct Group {
     bool enabled = true;
 
     const std::string label() const noexcept {
-        return this->name + "##" + std::to_string(this->id);
+        return this->name + "##" + to_string(this->id);
     }
 };
 
@@ -295,7 +299,7 @@ struct EditorTab {
 
 struct AppState {
     BS::thread_pool thr_pool;
-    httplib::Client cli;
+    // httplib::Client cli;
     uint64_t id_counter = 0;
     std::unordered_map<size_t, NestedTest> tests = {
         {
@@ -578,7 +582,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImGui::Checkbox("##enabled", &leaf.enabled);
 
         ImGui::TableNextColumn(); // selectable
-        const bool double_clicked = tree_selectable(app, test, ("##" + std::to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
+        const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
         const bool changed = context_menu_tree_view(app, &test);
 
         if (!changed && double_clicked) {
@@ -610,7 +614,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         ImGui::Checkbox("##enabled", &group.enabled);
 
         ImGui::TableNextColumn(); // selectable
-        const bool clicked = tree_selectable(app, test, ("##" + std::to_string(group.id)).c_str());
+        const bool clicked = tree_selectable(app, test, ("##" + to_string(group.id)).c_str());
         if (clicked) {
             group.open = !group.open;
         }
@@ -751,7 +755,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
         case MPBD_FILES:
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
             auto& files = std::get<std::vector<std::string>>(elem->data.data);
-            std::string text = files.empty() ? "Select Files" : "Selected " + std::to_string(files.size()) + " Files (Hover to see names)";
+            std::string text = files.empty() ? "Select Files" : "Selected " + to_string(files.size()) + " Files (Hover to see names)";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
                 elem->data.open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
             }
@@ -984,7 +988,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Cookies")) {
+        if (ImGui::BeginTabItem("Set Cookies")) {
             ImGui::PushFont(app->mono_font);
             partial_dict(app, &test.response.cookies, "##cookies");
             ImGui::PopFont();
@@ -1130,36 +1134,132 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
     return params;
 }
 
-httplib::Headers test_headers(Test* test) noexcept {
-}
-
-httplib::Response make_request(AppState* app, Test* test) noexcept {
-    switch (test->type) {
-        case HTTP_GET:
-            app->cli.Get(test->endpoint);
-            break;
-        case HTTP_POST:
-            break;
-        case HTTP_PUT:
-            break;
-        case HTTP_PATCH:
-            break;
-        case HTTP_DELETE:
-            break;
+std::pair<std::string, std::string> split_endpoint(std::string endpoint) {
+    size_t semicolon = endpoint.find(":");
+    if (semicolon == std::string::npos) {
+        semicolon = 0;
+    } else {
+        semicolon += 3;
     }
+    size_t slash = endpoint.find("/", semicolon);
+    if (slash == std::string::npos) {
+        return {endpoint, "/"};
+    }
+
+    std::string host = endpoint.substr(0, slash);
+    std::string dest = endpoint.substr(slash);
+    return {host, dest};
 }
 
-TestResult run_test(AppState* app, Test* test) noexcept {
+httplib::Headers test_headers(Test* test) noexcept {
+    httplib::Headers result;
+
+    for (const auto& header : test->request.headers.elements) {
+        if (!header.enabled) {
+            continue;
+        }
+        result.emplace(header.key, header.data.data);
+    }
+
+    std::string cookie_string;
+    for (const auto& cookie : test->request.cookies.elements) {
+        if (!cookie.enabled) {
+            continue;
+        }
+        cookie_string += cookie.key + "=" + cookie.data.data + ";";
+    }
+    if (!cookie_string.empty()) {
+        cookie_string.pop_back(); // remove last semicolon
+        result.emplace("Cookie", cookie_string);
+    }
+
+    return result;
+}
+
+httplib::Params test_params(Test* test) noexcept {
+    httplib::Params result;
+
+    for (const auto& param : test->request.parameters.elements) {
+        if (!param.enabled) {
+            continue;
+        }
+        result.emplace(param.key, param.data.data);
+    };
+
+    return result;
+}
+
+httplib::Result make_request(AppState* app, Test* test) noexcept {
+    const auto params = test_params(test);
+    const auto headers = test_headers(test);
+    const httplib::Progress progress = nullptr;
+    httplib::Result result;
+    Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type], test->label().c_str());
+    auto [host, dest] = split_endpoint(test->endpoint);
+    Log(LogLevel::Debug, "host: %s, dest: %s", host.c_str(), dest.c_str());
+    httplib::Client cli(host);
+    switch (test->type) {
+    case HTTP_GET:
+        // TODO: warn user that get requests will ignore body
+        // or implement it for non file body elements
+        result = cli.Get(dest, params, headers, progress);
+        break;
+    case HTTP_POST:
+        break;
+    case HTTP_PUT:
+        break;
+    case HTTP_PATCH:
+        break;
+    case HTTP_DELETE:
+        break;
+    }
+    Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type], test->label().c_str());
+    return result;
+}
+
+TestResult run_test(AppState* app, Test test) noexcept {
+    // copy test to not crash if test somehow gets deleted while executing
+    // maybe forbid test deletion while executing?
+    const auto result = make_request(app, &test);
+    Log(LogLevel::Debug, "Got response for %s: %s", test.endpoint.c_str(), to_string(result.error()).c_str());
+    if (result.error() == httplib::Error::Success) {
+        Log(LogLevel::Debug, "%d %s", result->status, result->body.c_str());
+    }
+
+    return {}; // temp
 }
 
 void run_tests(AppState* app, std::vector<Test>* tests) noexcept {
-
+    for (const auto& test : *tests) {
+        auto result = app->thr_pool.submit_task([app, &test]() { run_test(app, test); });
+        result.wait();
+    }
 }
 
 void show_menus(AppState* app) noexcept {
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (arrow("start", ImGuiDir_Right)) {
-        Log(LogLevel::Info, "Started testing");
+
+        // find tests to execute
+        // right now just gets any tests that are enabled
+        std::vector<Test> tests_to_run;
+        for (const auto& [id, nested_test] : app->tests) {
+            switch (nested_test.index()) {
+            case TEST_TYPE: {
+                assert(std::holds_alternative<Test>(nested_test));
+                const auto& test = std::get<Test>(nested_test);
+
+                if (test.enabled) {
+                    tests_to_run.push_back(test);
+                }
+            } break;
+            case GROUP_TYPE:
+                break;
+            }
+        }
+
+        Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
+        run_tests(app, &tests_to_run);
     }
     ImGui::PopStyleColor(1);
 }
@@ -1177,10 +1277,10 @@ void load_fonts(AppState* app) noexcept {
 
 int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
-    httplib::Client cli("");
+    // httplib::Client cli("");
     auto app = AppState{
         .thr_pool = BS::thread_pool(),
-        .cli = std::move(cli),
+        // .cli = std::move(cli),
     };
 
     runner_params.appWindowParams.windowTitle = "weetee";
