@@ -290,7 +290,6 @@ bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
     case GROUP_VARIANT:
         const auto& group_a = std::get<Group>(*a);
         const auto& group_b = std::get<Group>(*b);
-        // TODO: check request and response
         return group_a.name == group_b.name;
         break;
     }
@@ -417,6 +416,17 @@ void delete_test(AppState* app, NestedTest* test) noexcept {
     app->opened_editor_tabs.erase(id);
 }
 
+void editor_open_tab(AppState* app, size_t id) {
+    if (app->opened_editor_tabs.contains(id)) {
+        app->opened_editor_tabs[id].just_opened = true;
+    } else {
+        app->opened_editor_tabs[id] = {
+            .just_opened = true,
+            .original = &app->tests[id],
+            .edit = app->tests[id]};
+    }
+}
+
 bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     bool change = false;
     size_t nested_test_id = std::visit(IDVisit(), *nested_test);
@@ -521,10 +531,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         }
 
         if (ImGui::MenuItem("Edit", nullptr, false, selected_count == 1)) {
-            app->opened_editor_tabs[nested_test_id] = {
-                .just_opened = true,
-                .original = nested_test,
-                .edit = *nested_test};
+            editor_open_tab(app, nested_test_id);
         }
 
         if (ImGui::MenuItem("Delete", nullptr, false, !selected_root)) {
@@ -655,10 +662,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         const bool changed = context_menu_tree_view(app, &test);
 
         if (!changed && double_clicked) {
-            app->opened_editor_tabs[leaf.id] = {
-                .just_opened = true,
-                .original = &app->tests[leaf.id],
-                .edit = leaf};
+            editor_open_tab(app, leaf.id);
         }
     } break;
     case GROUP_VARIANT: {
@@ -1096,7 +1100,6 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
 enum ModalResult {
     MODAL_NONE,
-    MODAL_OK,
     MODAL_CONTINUE,
     MODAL_SAVE,
     MODAL_CANCEL,
@@ -1108,7 +1111,7 @@ ModalResult unsaved_changes(AppState* app) noexcept {
     }
 
     ModalResult result = MODAL_NONE;
-    if (ImGui::BeginPopupModal("Unsaved Changes", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextColored(HTTPTypeColor[HTTP_DELETE], "WARNING");
         ImGui::Text("You are about to lose unsaved changes");
 
@@ -1148,7 +1151,10 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     };
 
     EditorTabResult result = TAB_NONE;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *tab.original).c_str(), &tab.open, changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None)) {
+    if (ImGui::BeginTabItem(
+            std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
+            (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
+                (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
         ImGui::InputText("Endpoint", &test.endpoint);
         ImGui::Combo(
             "Type", (int*)&test.type,
@@ -1185,11 +1191,15 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Group>(tab.edit));
     auto& group = std::get<Group>(tab.edit);
 
+    auto changed = [&tab]() {
+        return !nested_test_eq(&tab.edit, tab.original);
+    };
+
     EditorTabResult result = TAB_NONE;
-    bool open = true;
     if (ImGui::BeginTabItem(
-            std::visit(LabelVisit(), *tab.original).c_str(), &open,
-            tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None)) {
+            std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
+            (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
+                (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
         ImGui::InputText("Name", &group.name);
 
         if (ImGui::Button("Save")) {
@@ -1198,9 +1208,20 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
         ImGui::EndTabItem();
     }
-    // TODO: add a modal that warns of unsaved changes
-    if (!open) {
-        result = TAB_CLOSED;
+    if (!tab.open && changed()) {
+        switch (unsaved_changes(app)) {
+        case MODAL_CONTINUE:
+            result = TAB_CLOSED;
+            break;
+        case MODAL_SAVE:
+            result = TAB_SAVE_CLOSED;
+            break;
+        case MODAL_CANCEL:
+            tab.open = true;
+            break;
+        default:
+            break;
+        }
     }
     return result;
 }
