@@ -1330,6 +1330,8 @@ void show_gui(AppState* app) noexcept {
     ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }
 
+// program leaks those fonts
+// can't do much ig and not a big deal
 void load_fonts(AppState* app) noexcept {
     // TODO: fix log window icons
     app->regular_font = HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
@@ -1369,7 +1371,6 @@ int main(int argc, char* argv[]) {
     runner_params.fpsIdling.enableIdling = false;
 
     ImmApp::AddOnsParams addOnsParams;
-    addOnsParams.withMarkdown = true;
     ImmApp::Run(runner_params, addOnsParams);
     return 0;
 }
