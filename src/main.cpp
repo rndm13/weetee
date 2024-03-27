@@ -155,8 +155,8 @@ using HeadersElement = Headers::ElementType;
 struct Test;
 struct Group;
 enum NestedTestType : int {
-    TEST_TYPE,
-    GROUP_TYPE,
+    TEST_VARIANT,
+    GROUP_VARIANT,
 };
 using NestedTest = std::variant<Test, Group>;
 
@@ -200,6 +200,7 @@ static const char* ResponseBodyTypeLabels[] = {
 using ResponseBody = std::variant<std::string, MultiPartBody>;
 
 struct Response {
+    int status;
     ResponseBodyType body_type = RESPONSE_JSON;
     ResponseBody body = "{}";
 
@@ -274,6 +275,30 @@ struct Group {
     }
 };
 
+bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
+    if (a->index() != b->index()) {
+        return false;
+    }
+
+    switch (a->index()) {
+    case TEST_VARIANT: {
+        const auto& test_a = std::get<Test>(*a);
+        const auto& test_b = std::get<Test>(*b);
+        // TODO: check request and response
+        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type;
+    } break;
+    case GROUP_VARIANT:
+        const auto& group_a = std::get<Group>(*a);
+        const auto& group_b = std::get<Group>(*b);
+        // TODO: check request and response
+        return group_a.name == group_b.name;
+        break;
+    }
+
+    // unreachable
+    return false;
+}
+
 struct IDVisit {
     size_t operator()(const auto& idable) const noexcept {
         return idable.id;
@@ -301,6 +326,7 @@ struct LabelVisit {
 
 // keys are ids and values are for separate for editing (must be saved to apply changes)
 struct EditorTab {
+    bool open = true;
     bool just_opened;
     NestedTest* original;
     NestedTest edit;
@@ -432,13 +458,13 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             auto* selected = &app->tests[test_idx];
 
             switch (selected->index()) {
-            case TEST_TYPE: {
+            case TEST_VARIANT: {
                 assert(std::holds_alternative<Test>(*selected));
                 auto& selected_test = std::get<Test>(*selected);
                 test = true;
                 check_parent(selected_test.parent_id);
             } break;
-            case GROUP_TYPE: {
+            case GROUP_VARIANT: {
                 assert(std::holds_alternative<Group>(*selected));
                 auto& selected_group = std::get<Group>(*selected);
                 group = true;
@@ -591,7 +617,7 @@ void display_tree_test(AppState* app, NestedTest& test,
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
-    case TEST_TYPE: {
+    case TEST_VARIANT: {
         auto& leaf = std::get<Test>(test);
         const auto io = ImGui::GetIO();
 
@@ -635,7 +661,7 @@ void display_tree_test(AppState* app, NestedTest& test,
                 .edit = leaf};
         }
     } break;
-    case GROUP_TYPE: {
+    case GROUP_VARIANT: {
         auto& group = std::get<Group>(test);
 
         ImGui::TableNextColumn(); // test
@@ -992,6 +1018,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Response")) {
             ImGui::Text("Select any of the tabs to edit test's expected response");
+            ImGui::InputInt("Status", &test.response.status);
             ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();
         }
@@ -1067,19 +1094,61 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
     }
 }
 
+enum ModalResult {
+    MODAL_NONE,
+    MODAL_OK,
+    MODAL_CONTINUE,
+    MODAL_SAVE,
+    MODAL_CANCEL,
+};
+
+ModalResult unsaved_changes(AppState* app) noexcept {
+    if (!ImGui::IsPopupOpen("Unsaved Changes")) {
+        ImGui::OpenPopup("Unsaved Changes");
+    }
+
+    ModalResult result = MODAL_NONE;
+    if (ImGui::BeginPopupModal("Unsaved Changes", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextColored(HTTPTypeColor[HTTP_DELETE], "WARNING");
+        ImGui::Text("You are about to lose unsaved changes");
+
+        if (ImGui::Button("Continue")) {
+            ImGui::CloseCurrentPopup();
+            result = MODAL_CONTINUE;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save")) {
+            ImGui::CloseCurrentPopup();
+            result = MODAL_SAVE;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            ImGui::CloseCurrentPopup();
+            result = MODAL_CANCEL;
+        }
+        ImGui::EndPopup();
+    }
+
+    return result;
+}
+
 enum EditorTabResult {
     TAB_NONE,
     TAB_CLOSED,
     TAB_SAVED,
+    TAB_SAVE_CLOSED,
 };
 
 EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Test>(tab.edit));
     auto& test = std::get<Test>(tab.edit);
 
+    auto changed = [&tab]() {
+        return !nested_test_eq(&tab.edit, tab.original);
+    };
+
     EditorTabResult result = TAB_NONE;
-    bool open = true;
-    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *tab.original).c_str(), &open, ImGuiTabItemFlags_None)) {
+    if (ImGui::BeginTabItem(std::visit(LabelVisit(), *tab.original).c_str(), &tab.open, changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None)) {
         ImGui::InputText("Endpoint", &test.endpoint);
         ImGui::Combo(
             "Type", (int*)&test.type,
@@ -1094,9 +1163,20 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
         ImGui::EndTabItem();
     }
-    // TODO: add a modal that warns of unsaved changes
-    if (!open) {
-        result = TAB_CLOSED;
+    if (!tab.open && changed()) {
+        switch (unsaved_changes(app)) {
+        case MODAL_CONTINUE:
+            result = TAB_CLOSED;
+            break;
+        case MODAL_SAVE:
+            result = TAB_SAVE_CLOSED;
+            break;
+        case MODAL_CANCEL:
+            tab.open = true;
+            break;
+        default:
+            break;
+        }
     }
     return result;
 }
@@ -1133,22 +1213,24 @@ void tabbed_editor(AppState* app) noexcept {
             const NestedTest* original = tab.original;
             EditorTabResult result;
             switch (tab.edit.index()) {
-            case TEST_TYPE: {
+            case TEST_VARIANT: {
                 result = editor_tab_test(app, tab);
             } break;
-            case GROUP_TYPE: {
+            case GROUP_VARIANT: {
                 result = editor_tab_group(app, tab);
             } break;
             }
 
             tab.just_opened = false;
 
+            // hopefully can't close 2 tabs in a single frame
             switch (result) {
+            case TAB_SAVE_CLOSED:
+                closed_id = id;
             case TAB_SAVED:
                 *tab.original = tab.edit;
                 tab.just_opened = true;
                 break;
-            // hopefully can't close 2 tabs in a single frame
             case TAB_CLOSED:
                 closed_id = id;
                 break;
@@ -1305,7 +1387,7 @@ void show_menus(AppState* app) noexcept {
         std::vector<Test> tests_to_run;
         for (const auto& [id, nested_test] : app->tests) {
             switch (nested_test.index()) {
-            case TEST_TYPE: {
+            case TEST_VARIANT: {
                 assert(std::holds_alternative<Test>(nested_test));
                 const auto& test = std::get<Test>(nested_test);
 
@@ -1313,7 +1395,8 @@ void show_menus(AppState* app) noexcept {
                     tests_to_run.push_back(test);
                 }
             } break;
-            case GROUP_TYPE:
+            case GROUP_VARIANT:
+                // ignore groups
                 break;
             }
         }
