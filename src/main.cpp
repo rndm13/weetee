@@ -40,6 +40,46 @@ struct overloaded : Ts... {
     using Ts::operator()...;
 };
 
+struct IDVisit {
+    size_t operator()(const auto& idable) const noexcept {
+        return idable.id;
+    }
+};
+
+struct ParentIDVisit {
+    size_t operator()(const auto& parent_idable) const noexcept {
+        return parent_idable.parent_id;
+    }
+};
+
+struct ParentIDSetVisit {
+    const size_t new_id;
+    size_t operator()(auto& parent_idable) const noexcept {
+        return parent_idable.parent_id = this->new_id;
+    }
+};
+
+struct LabelVisit {
+    const std::string operator()(const auto& labelable) const noexcept {
+        return labelable.label();
+    }
+};
+
+template <class T>
+bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
+    if (a.size() != b.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i] != b[i]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static constexpr ImGuiTableFlags TABLE_FLAGS =
     ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV |
     ImGuiTableFlags_Hideable | ImGuiTableFlags_BordersOuter |
@@ -84,13 +124,17 @@ struct PartialDict {
     using DataType = Data;
     using ElementType = PartialDictElement<Data>;
     std::vector<PartialDictElement<Data>> elements;
+
+    bool operator==(const PartialDict& other) const noexcept {
+        return this->elements == other.elements;
+    }
 };
 
 enum MultiPartBodyDataType {
     MPBD_FILES,
     MPBD_TEXT,
 
-    // // Additional
+    // // Maybe Additional
     // MPBD_NUMBER,
     // MPBD_EMAIL,
     // MPBD_URL,
@@ -99,6 +143,7 @@ static const char* MPBDTypeLabels[] = {
     [MPBD_FILES] = (const char*)"Files",
     [MPBD_TEXT] = (const char*)"Text",
 };
+
 using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
 struct MultiPartBodyElementData {
     MultiPartBodyDataType type;
@@ -108,6 +153,25 @@ struct MultiPartBodyElementData {
 
     static constexpr size_t field_count = 2;
     static const char* field_labels[field_count];
+
+    bool operator==(const MultiPartBodyElementData& other) const noexcept {
+        if (this->type != other.type) {
+            return false;
+        }
+        switch (this->type) {
+        case MPBD_TEXT: {
+            auto this_data = std::get<std::string>(this->data);
+            auto other_data = std::get<std::string>(other.data);
+
+            return this_data == other_data;
+        } break;
+        case MPBD_FILES: {
+            auto this_data = std::get<std::vector<std::string>>(this->data);
+            auto other_data = std::get<std::vector<std::string>>(other.data);
+
+        } break;
+        }
+    }
 };
 const char* MultiPartBodyElementData::field_labels[field_count] = {
     (const char*)"Type",
@@ -121,6 +185,10 @@ struct CookiesElementData {
 
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count];
+
+    bool operator==(const CookiesElementData& other) const noexcept {
+        return this->data == other.data;
+    }
 };
 const char* CookiesElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -133,6 +201,10 @@ struct ParametersElementData {
 
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count];
+
+    bool operator==(const ParametersElementData& other) const noexcept {
+        return this->data == other.data;
+    }
 };
 const char* ParametersElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -145,6 +217,10 @@ struct HeadersElementData {
 
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count];
+
+    bool operator==(const HeadersElementData& other) const noexcept {
+        return this->data == other.data;
+    }
 };
 const char* HeadersElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -181,6 +257,8 @@ struct Request {
     Cookies cookies;
     Parameters parameters;
     Headers headers;
+
+    TextEditor editor;
 };
 
 enum ResponseBodyType : int {
@@ -206,6 +284,8 @@ struct Response {
 
     Cookies cookies;
     Headers headers;
+
+    TextEditor editor;
 };
 
 enum HTTPType : uint64_t {
@@ -246,8 +326,6 @@ struct Test {
     Request request;
     Response response;
 
-    TextEditor editor;
-
     const std::string label() const noexcept {
         return this->endpoint + "##" + to_string(this->id);
     }
@@ -275,6 +353,29 @@ struct Group {
     }
 };
 
+bool request_body_eq(const Request* a, const Request* b) noexcept {
+    if (a->body.index() != b->body.index() && a->body_type != b->body_type) {
+        return false;
+    }
+
+    switch (a->body_type) {
+    case REQUEST_RAW:
+    case REQUEST_JSON: {
+        auto a_data = std::get<std::string>(a->body);
+        auto b_data = std::get<std::string>(b->body);
+
+        return a_data == b_data;
+    } break;
+    case REQUEST_MULTIPART: {
+        auto a_data = std::get<MultiPartBody>(a->body);
+        auto b_data = std::get<MultiPartBody>(b->body);
+
+    } break;
+    }
+
+    return false;
+}
+
 bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
     if (a->index() != b->index()) {
         return false;
@@ -285,7 +386,7 @@ bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
         const auto& test_a = std::get<Test>(*a);
         const auto& test_b = std::get<Test>(*b);
         // TODO: check request and response
-        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type;
+        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_body_eq(&test_a.request, &test_b.request);
     } break;
     case GROUP_VARIANT:
         const auto& group_a = std::get<Group>(*a);
@@ -297,31 +398,6 @@ bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
     // unreachable
     return false;
 }
-
-struct IDVisit {
-    size_t operator()(const auto& idable) const noexcept {
-        return idable.id;
-    }
-};
-
-struct ParentIDVisit {
-    size_t operator()(const auto& parent_idable) const noexcept {
-        return parent_idable.parent_id;
-    }
-};
-
-struct ParentIDSetVisit {
-    const size_t new_id;
-    size_t operator()(auto& parent_idable) const noexcept {
-        return parent_idable.parent_id = this->new_id;
-    }
-};
-
-struct LabelVisit {
-    const std::string operator()(const auto& labelable) const noexcept {
-        return labelable.label();
-    }
-};
 
 // keys are ids and values are for separate for editing (must be saved to apply changes)
 struct EditorTab {
@@ -930,22 +1006,22 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                 // TODO: convert between current body types
                 switch (test.request.body_type) {
                 case REQUEST_JSON:
-                    test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
                     if (!std::holds_alternative<std::string>(test.request.body)) {
                         test.request.body = "{}";
-                        test.editor.SetText("{}");
+                        test.request.editor.SetText("{}");
                         // TODO: allow for palette change within view settings
-                        test.editor.SetPalette(TextEditor::GetDarkPalette());
+                        test.request.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
                     break;
 
                 case REQUEST_RAW:
-                    test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
                     if (!std::holds_alternative<std::string>(test.request.body)) {
                         test.request.body = "";
-                        test.editor.SetText("");
+                        test.request.editor.SetText("");
                         // TODO: allow for palette change within view settings
-                        test.editor.SetPalette(TextEditor::GetDarkPalette());
+                        test.request.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
                     break;
 
@@ -960,24 +1036,25 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                 ImGui::SameLine();
                 if (ImGui::Button("Format")) {
                     try {
-                        test.editor.SetText(json::parse(test.editor.GetText()).dump(4));
+                        test.request.editor.SetText(
+                            json::parse(test.request.editor.GetText()).dump(4));
                     } catch (json::parse_error& error) {
                         Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
                     }
                 }
 
                 ImGui::PushFont(app->mono_font);
-                test.editor.Render("##body", false, ImVec2(0, 300));
+                test.request.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
 
-                test.request.body = test.editor.GetText();
+                test.request.body = test.request.editor.GetText();
                 break;
 
             case REQUEST_RAW:
                 ImGui::PushFont(app->mono_font);
-                test.editor.Render("##body", false, ImVec2(0, 300));
+                test.request.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
-                test.request.body = test.editor.GetText();
+                test.request.body = test.request.editor.GetText();
                 break;
 
             case REQUEST_MULTIPART:
@@ -1037,12 +1114,12 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                 case RESPONSE_JSON:
                 case RESPONSE_HTML:
                 case RESPONSE_RAW:
-                    test.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    test.response.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
                     if (!std::holds_alternative<std::string>(test.response.body)) {
                         test.response.body = "";
-                        test.editor.SetText("");
+                        test.response.editor.SetText("");
                         // TODO: allow for palette change within view settings
-                        test.editor.SetPalette(TextEditor::GetDarkPalette());
+                        test.response.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
                     break;
 
@@ -1057,17 +1134,18 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                 ImGui::SameLine();
                 if (ImGui::Button("Format")) {
                     try {
-                        test.editor.SetText(json::parse(test.editor.GetText()).dump(4));
+                        test.response.editor.SetText(json::parse(test.response.editor.GetText()).dump(4));
                     } catch (json::parse_error& error) {
                         Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
                     }
                 }
+
             case RESPONSE_HTML:
             case RESPONSE_RAW:
                 ImGui::PushFont(app->mono_font);
-                test.editor.Render("##body", false, ImVec2(0, 300));
+                test.response.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
-                test.response.body = test.editor.GetText();
+                test.response.body = test.response.editor.GetText();
                 break;
 
             case RESPONSE_MULTIPART:
