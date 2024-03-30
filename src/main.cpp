@@ -159,23 +159,7 @@ struct MultiPartBodyElementData {
     static const char* field_labels[field_count];
 
     bool operator==(const MultiPartBodyElementData& other) const noexcept {
-        if (this->type != other.type) {
-            return false;
-        }
-        switch (this->type) {
-        case MPBD_TEXT: {
-            auto this_data = std::get<std::string>(this->data);
-            auto other_data = std::get<std::string>(other.data);
-
-            return this_data == other_data;
-        } break;
-        case MPBD_FILES: {
-            auto this_data = std::get<std::vector<std::string>>(this->data);
-            auto other_data = std::get<std::vector<std::string>>(other.data);
-
-            return this_data == other_data;
-        } break;
-        }
+        return this->type != other.type && this->data != other.data;
     }
 };
 const char* MultiPartBodyElementData::field_labels[field_count] = {
@@ -1208,6 +1192,7 @@ enum EditorTabResult {
     TAB_CLOSED,
     TAB_SAVED,
     TAB_SAVE_CLOSED,
+    TAB_DISCARD
 };
 
 EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
@@ -1223,20 +1208,29 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
             (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
                 (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
-        ImGui::InputText("Endpoint", &test.endpoint);
-        ImGui::Combo(
-            "Type", (int*)&test.type,
-            HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
-
-        editor_test_requests(app, tab, test);
-        editor_test_response(app, tab, test);
 
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
         }
+        ImGui::SameLine();
+        if (ImGui::Button("Discard")) {
+            result = TAB_DISCARD;
+        }
+
+        if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
+            ImGui::InputText("Endpoint", &test.endpoint);
+            ImGui::Combo(
+                "Type", (int*)&test.type,
+                HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+
+            editor_test_requests(app, tab, test);
+            editor_test_response(app, tab, test);
+            ImGui::EndChild();
+        }
 
         ImGui::EndTabItem();
     }
+
     if (!tab.open && changed()) {
         switch (unsaved_changes(app)) {
         case MODAL_CONTINUE:
@@ -1268,10 +1262,16 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
             (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
                 (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
-        ImGui::InputText("Name", &group.name);
-
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Discard")) {
+            result = TAB_DISCARD;
+        }
+
+        if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
+            ImGui::InputText("Name", &group.name);
         }
 
         ImGui::EndTabItem();
@@ -1322,6 +1322,9 @@ void tabbed_editor(AppState* app) noexcept {
                 break;
             case TAB_CLOSED:
                 closed_id = id;
+                break;
+            case TAB_DISCARD:
+                tab.edit = *tab.original;
                 break;
             case TAB_NONE:
                 break;
