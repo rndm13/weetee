@@ -219,6 +219,100 @@ const char* HeadersElementData::field_labels[field_count] = {
 using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
 
+const char* RequestHeadersLabels[] = {
+    (const char*)"A-IM",
+    (const char*)"Accept",
+    (const char*)"Accept-Charset",
+    (const char*)"Accept-Datetime",
+    (const char*)"Accept-Encoding",
+    (const char*)"Accept-Language",
+    (const char*)"Access-Control-Request-Method",
+    (const char*)"Access-Control-Request-Headers",
+    (const char*)"Authorization",
+    (const char*)"Cache-Control",
+    (const char*)"Connection",
+    (const char*)"Content-Encoding",
+    (const char*)"Content-Length",
+    (const char*)"Content-MD5",
+    (const char*)"Content-Type",
+    (const char*)"Cookie",
+    (const char*)"Date",
+    (const char*)"Expect",
+    (const char*)"Forwarded",
+    (const char*)"From",
+    (const char*)"Host",
+    (const char*)"HTTP2-Settings",
+    (const char*)"If-Match",
+    (const char*)"If-Modified-Since",
+    (const char*)"If-None-Match",
+    (const char*)"If-Range",
+    (const char*)"If-Unmodified-Since",
+    (const char*)"Max-Forwards",
+    (const char*)"Origin",
+    (const char*)"Pragma",
+    (const char*)"Prefer",
+    (const char*)"Proxy-Authorization",
+    (const char*)"Range",
+    (const char*)"Referer",
+    (const char*)"TE",
+    (const char*)"Trailer",
+    (const char*)"Transfer-Encoding",
+    (const char*)"User-Agent",
+    (const char*)"Upgrade",
+    (const char*)"Via",
+    (const char*)"Warning",
+};
+static const char* ResponseHeadersLabels[] = {
+    (const char*)"Accept-CH",
+    (const char*)"Access-Control-Allow-Origin",
+    (const char*)"Access-Control-Allow-Credentials",
+    (const char*)"Access-Control-Expose-Headers",
+    (const char*)"Access-Control-Max-Age",
+    (const char*)"Access-Control-Allow-Methods",
+    (const char*)"Access-Control-Allow-Headers",
+    (const char*)"Accept-Patch",
+    (const char*)"Accept-Ranges",
+    (const char*)"Age",
+    (const char*)"Allow",
+    (const char*)"Alt-Svc",
+    (const char*)"Cache-Control",
+    (const char*)"Connection",
+    (const char*)"Content-Disposition",
+    (const char*)"Content-Encoding",
+    (const char*)"Content-Language",
+    (const char*)"Content-Length",
+    (const char*)"Content-Location",
+    (const char*)"Content-MD5",
+    (const char*)"Content-Range",
+    (const char*)"Content-Type",
+    (const char*)"Date",
+    (const char*)"Delta-Base",
+    (const char*)"ETag",
+    (const char*)"Expires",
+    (const char*)"IM",
+    (const char*)"Last-Modified",
+    (const char*)"Link",
+    (const char*)"Location",
+    (const char*)"P3P",
+    (const char*)"Pragma",
+    (const char*)"Preference-Applied",
+    (const char*)"Proxy-Authenticate",
+    (const char*)"Public-Key-Pins",
+    (const char*)"Retry-After",
+    (const char*)"Server",
+    (const char*)"Set-Cookie",
+    (const char*)"Strict-Transport-Security",
+    (const char*)"Trailer",
+    (const char*)"Transfer-Encoding",
+    (const char*)"Tk",
+    (const char*)"Upgrade",
+    (const char*)"Vary",
+    (const char*)"Via",
+    (const char*)"Warning",
+    (const char*)"WWW-Authenticate",
+    (const char*)"X-Frame-Options",
+};
+
 struct Test;
 struct Group;
 enum NestedTestType : int {
@@ -424,17 +518,17 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
     }
 
     switch (a->index()) {
-        case TEST_VARIANT: {
-                               const auto& test_a = std::get<Test>(*a);
-                               const auto& test_b = std::get<Test>(*b);
-                               // TODO: check request and response
-                               return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_eq(&test_a.request, &test_b.request) && response_eq(&test_a.response, &test_b.response);
-                           } break;
-        case GROUP_VARIANT:
-                           const auto& group_a = std::get<Group>(*a);
-                           const auto& group_b = std::get<Group>(*b);
-                           return group_a.name == group_b.name;
-                           break;
+    case TEST_VARIANT: {
+        const auto& test_a = std::get<Test>(*a);
+        const auto& test_b = std::get<Test>(*b);
+        // TODO: check request and response
+        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_eq(&test_a.request, &test_b.request) && response_eq(&test_a.response, &test_b.response);
+    } break;
+    case GROUP_VARIANT:
+        const auto& group_a = std::get<Group>(*a);
+        const auto& group_b = std::get<Group>(*b);
+        return group_a.name == group_b.name;
+        break;
     }
 
     // unreachable
@@ -586,19 +680,19 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             auto* selected = &app->tests[test_idx];
 
             switch (selected->index()) {
-                case TEST_VARIANT: {
-                                       assert(std::holds_alternative<Test>(*selected));
-                                       auto& selected_test = std::get<Test>(*selected);
-                                       test = true;
-                                       check_parent(selected_test.parent_id);
-                                   } break;
-                case GROUP_VARIANT: {
-                                        assert(std::holds_alternative<Group>(*selected));
-                                        auto& selected_group = std::get<Group>(*selected);
-                                        group = true;
-                                        selected_root |= selected_group.id == 0;
-                                        check_parent(selected_group.parent_id);
-                                    } break;
+            case TEST_VARIANT: {
+                assert(std::holds_alternative<Test>(*selected));
+                auto& selected_test = std::get<Test>(*selected);
+                test = true;
+                check_parent(selected_test.parent_id);
+            } break;
+            case GROUP_VARIANT: {
+                assert(std::holds_alternative<Group>(*selected));
+                auto& selected_group = std::get<Group>(*selected);
+                group = true;
+                selected_root |= selected_group.id == 0;
+                check_parent(selected_group.parent_id);
+            } break;
             }
         }
 
@@ -612,11 +706,11 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
                     auto id = ++app->id_counter;
                     app->tests[id] = (Test{
-                            .parent_id = selected_group.id,
-                            .id = id,
-                            .type = HTTP_GET,
-                            .endpoint = "https://example.com",
-                            });
+                        .parent_id = selected_group.id,
+                        .id = id,
+                        .type = HTTP_GET,
+                        .endpoint = "https://example.com",
+                    });
                     selected_group.children_idx.push_back(id);
                 }
 
@@ -625,10 +719,10 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                     selected_group.flags |= GROUP_OPEN;
                     auto id = ++app->id_counter;
                     app->tests[id] = (Group{
-                            .parent_id = selected_group.id,
-                            .id = id,
-                            .name = "New group",
-                            });
+                        .parent_id = selected_group.id,
+                        .id = id,
+                        .name = "New group",
+                    });
                     selected_group.children_idx.push_back(id);
                 }
             }
@@ -680,9 +774,9 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             auto id = ++app->id_counter;
             auto new_group = Group{
                 .parent_id = parent_group.id,
-                    .id = id,
-                    .flags = GROUP_OPEN,
-                    .name = "New group",
+                .id = id,
+                .flags = GROUP_OPEN,
+                .name = "New group",
             };
             // add selected to new parent
             for (auto test_idx : app->selected_tests) {
@@ -734,7 +828,7 @@ bool http_type_button(HTTPType type) noexcept {
 }
 
 void display_tree_test(AppState* app, NestedTest& test,
-        float indentation = 0) noexcept {
+                       float indentation = 0) noexcept {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     const bool ctrl = ImGui::GetIO().KeyCtrl;
 
@@ -742,100 +836,100 @@ void display_tree_test(AppState* app, NestedTest& test,
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
-        case TEST_VARIANT: {
-                               auto& leaf = std::get<Test>(test);
-                               const auto io = ImGui::GetIO();
+    case TEST_VARIANT: {
+        auto& leaf = std::get<Test>(test);
+        const auto io = ImGui::GetIO();
 
-                               ImGui::TableNextColumn(); // test
-                               ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-                               http_type_button(leaf.type);
-                               ImGui::SameLine();
-                               ImGui::Text("%s", leaf.endpoint.c_str());
+        ImGui::TableNextColumn(); // test
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+        http_type_button(leaf.type);
+        ImGui::SameLine();
+        ImGui::Text("%s", leaf.endpoint.c_str());
 
-                               ImGui::TableNextColumn(); // spinner for running tests
-                               ImSpinner::SpinnerIncDots("running", 5, 1);
+        ImGui::TableNextColumn(); // spinner for running tests
+        ImSpinner::SpinnerIncDots("running", 5, 1);
 
-                               ImGui::TableNextColumn(); // enabled / disabled
+        ImGui::TableNextColumn(); // enabled / disabled
 
-                               bool parent_disabled = nested_test_parent_disabled(app, &test);
-                               if (parent_disabled) {
-                                   ImGui::BeginDisabled();
-                               }
+        bool parent_disabled = nested_test_parent_disabled(app, &test);
+        if (parent_disabled) {
+            ImGui::BeginDisabled();
+        }
 
-                               bool enabled = !(leaf.flags & TEST_DISABLED);
-                               if (ImGui::Checkbox("##enabled", &enabled)) {
-                                   if (!enabled) {
-                                       leaf.flags |= TEST_DISABLED;
-                                   } else {
-                                       leaf.flags &= ~TEST_DISABLED;
-                                   }
-                               }
+        bool enabled = !(leaf.flags & TEST_DISABLED);
+        if (ImGui::Checkbox("##enabled", &enabled)) {
+            if (!enabled) {
+                leaf.flags |= TEST_DISABLED;
+            } else {
+                leaf.flags &= ~TEST_DISABLED;
+            }
+        }
 
-                               if (parent_disabled) {
-                                   ImGui::EndDisabled();
-                               }
+        if (parent_disabled) {
+            ImGui::EndDisabled();
+        }
 
-                               ImGui::TableNextColumn(); // selectable
-                               const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
-                               const bool changed = context_menu_tree_view(app, &test);
+        ImGui::TableNextColumn(); // selectable
+        const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
+        const bool changed = context_menu_tree_view(app, &test);
 
-                               if (!changed && double_clicked) {
-                                   editor_open_tab(app, leaf.id);
-                               }
-                           } break;
-        case GROUP_VARIANT: {
-                                auto& group = std::get<Group>(test);
+        if (!changed && double_clicked) {
+            editor_open_tab(app, leaf.id);
+        }
+    } break;
+    case GROUP_VARIANT: {
+        auto& group = std::get<Group>(test);
 
-                                ImGui::TableNextColumn(); // test
-                                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-                                if (group.flags & GROUP_OPEN) {
-                                    arrow("down", ImGuiDir_Down);
-                                } else {
-                                    arrow("right", ImGuiDir_Right);
-                                }
-                                ImGui::SameLine();
-                                remove_arrow_offset();
-                                ImGui::Text("%s", group.name.c_str());
+        ImGui::TableNextColumn(); // test
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+        if (group.flags & GROUP_OPEN) {
+            arrow("down", ImGuiDir_Down);
+        } else {
+            arrow("right", ImGuiDir_Right);
+        }
+        ImGui::SameLine();
+        remove_arrow_offset();
+        ImGui::Text("%s", group.name.c_str());
 
-                                ImGui::TableNextColumn(); // spinner for running tests
-                                ImSpinner::SpinnerIncDots("running", 5, 1);
+        ImGui::TableNextColumn(); // spinner for running tests
+        ImSpinner::SpinnerIncDots("running", 5, 1);
 
-                                ImGui::TableNextColumn(); // enabled / disabled
+        ImGui::TableNextColumn(); // enabled / disabled
 
-                                bool parent_disabled = nested_test_parent_disabled(app, &test);
-                                if (parent_disabled) {
-                                    ImGui::BeginDisabled();
-                                }
+        bool parent_disabled = nested_test_parent_disabled(app, &test);
+        if (parent_disabled) {
+            ImGui::BeginDisabled();
+        }
 
-                                bool enabled = !(group.flags & GROUP_DISABLED);
-                                if (ImGui::Checkbox("##enabled", &enabled)) {
-                                    if (!enabled) {
-                                        group.flags |= GROUP_DISABLED;
-                                    } else {
-                                        group.flags &= ~GROUP_DISABLED;
-                                    }
-                                }
+        bool enabled = !(group.flags & GROUP_DISABLED);
+        if (ImGui::Checkbox("##enabled", &enabled)) {
+            if (!enabled) {
+                group.flags |= GROUP_DISABLED;
+            } else {
+                group.flags &= ~GROUP_DISABLED;
+            }
+        }
 
-                                if (parent_disabled) {
-                                    ImGui::EndDisabled();
-                                }
+        if (parent_disabled) {
+            ImGui::EndDisabled();
+        }
 
-                                ImGui::TableNextColumn(); // selectable
-                                const bool clicked = tree_selectable(app, test, ("##" + to_string(group.id)).c_str());
-                                if (clicked) {
-                                    group.flags ^= GROUP_OPEN; // toggle
-                                }
-                                const bool changed = context_menu_tree_view(app, &test);
+        ImGui::TableNextColumn(); // selectable
+        const bool clicked = tree_selectable(app, test, ("##" + to_string(group.id)).c_str());
+        if (clicked) {
+            group.flags ^= GROUP_OPEN; // toggle
+        }
+        const bool changed = context_menu_tree_view(app, &test);
 
-                                if (group.flags & GROUP_OPEN) {
-                                    if (!changed) {
-                                        for (size_t child_id : group.children_idx) {
-                                            display_tree_test(app, app->tests[child_id],
-                                                    indentation + 22);
-                                        }
-                                    }
-                                }
-                            } break;
+        if (group.flags & GROUP_OPEN) {
+            if (!changed) {
+                for (size_t child_id : group.children_idx) {
+                    display_tree_test(app, app->tests[child_id],
+                                      indentation + 22);
+                }
+            }
+        }
+    } break;
     }
 
     ImGui::PopID();
@@ -855,7 +949,8 @@ void test_tree_view(AppState* app) noexcept {
 }
 
 template <typename Data>
-bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem) noexcept {
+bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem,
+                      const char** hints = nullptr, const size_t hint_count = 0) noexcept {
     bool changed = false;
     auto select_only_this = [pd, elem]() {
         for (auto& e : pd->elements) {
@@ -901,8 +996,13 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         }
     }
     if (ImGui::TableNextColumn()) { // name
-        ImGui::SetNextItemWidth(-1);
-        changed = changed | ImGui::InputText("##name", &elem->key);
+        if (hint_count > 0) {
+            assert(hints);
+            changed = changed | ImGui::InputTextCombo("", &elem->key, 256, hints, hint_count, 8);
+        } else {
+            ImGui::SetNextItemWidth(-1);
+            changed = changed | ImGui::InputText("##name", &elem->key);
+        }
     }
 
     changed = changed | partial_dict_data_row(app, pd, elem);
@@ -939,55 +1039,56 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
         ImGui::SetNextItemWidth(-1);
         if (ImGui::Combo("##type", (int*)&elem->data.type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
             switch (elem->data.type) {
-                case MPBD_TEXT:
-                    elem->data.data = "";
-                    if (elem->data.open_file.has_value()) {
-                        elem->data.open_file->kill();
-                        elem->data.open_file.reset();
-                    }
-                    break;
-                case MPBD_FILES:
-                    elem->data.data = std::vector<std::string>{};
-                    break;
+            case MPBD_TEXT:
+                elem->data.data = "";
+                if (elem->data.open_file.has_value()) {
+                    elem->data.open_file->kill();
+                    elem->data.open_file.reset();
+                }
+                break;
+            case MPBD_FILES:
+                elem->data.data = std::vector<std::string>{};
+                break;
             }
         }
     }
     if (ImGui::TableNextColumn()) { // body
         switch (elem->data.type) {
-            case MPBD_TEXT:
-                ImGui::SetNextItemWidth(-1);
-                assert(std::holds_alternative<std::string>(elem->data.data));
-                changed = changed | ImGui::InputText("##text", &std::get<std::string>(elem->data.data));
-                break;
-            case MPBD_FILES:
-                assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
-                auto& files = std::get<std::vector<std::string>>(elem->data.data);
-                std::string text = files.empty() ? "Select Files" : "Selected " + to_string(files.size()) + " Files (Hover to see names)";
-                if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
-                    elem->data.open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
-                }
+        case MPBD_TEXT:
+            ImGui::SetNextItemWidth(-1);
+            assert(std::holds_alternative<std::string>(elem->data.data));
+            changed = changed | ImGui::InputText("##text", &std::get<std::string>(elem->data.data));
+            break;
+        case MPBD_FILES:
+            assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
+            auto& files = std::get<std::vector<std::string>>(elem->data.data);
+            std::string text = files.empty() ? "Select Files" : "Selected " + to_string(files.size()) + " Files (Hover to see names)";
+            if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
+                elem->data.open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
+            }
 
-                if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                    // NOTE: could be slow to do this every frame
-                    std::stringstream ss;
-                    for (auto& file : files) {
-                        ss << file << '\n';
-                    }
-                    ImGui::SetTooltip("%s", ss.str().c_str());
+            if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                // NOTE: could be slow to do this every frame
+                std::stringstream ss;
+                for (auto& file : files) {
+                    ss << file << '\n';
                 }
+                ImGui::SetTooltip("%s", ss.str().c_str());
+            }
 
-                if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
-                    elem->data.data = elem->data.open_file->result();
-                    elem->data.open_file = std::nullopt;
-                }
-                break;
+            if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
+                elem->data.data = elem->data.open_file->result();
+                elem->data.open_file = std::nullopt;
+            }
+            break;
         }
     }
     return changed;
 }
 
 template <typename Data>
-void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label) noexcept {
+void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
+                  const char** hints = nullptr, const size_t hint_count = 0) noexcept {
     using DataType = PartialDict<Data>::DataType;
     using ElementType = PartialDict<Data>::ElementType;
     if (ImGui::BeginTable(label, 2 + DataType::field_count, TABLE_FLAGS, ImVec2(0, 300))) {
@@ -998,14 +1099,16 @@ void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label) noexc
         }
         ImGui::TableHeadersRow();
         bool deletion = false;
+
         for (size_t i = 0; i < pd->elements.size(); i++) {
             auto* elem = &pd->elements[i];
             ImGui::TableNextRow();
             ImGui::PushID(i);
-            partial_dict_row(app, pd, elem);
+            partial_dict_row(app, pd, elem, hints, hint_count);
             deletion |= elem->to_delete;
             ImGui::PopID();
         }
+
         if (deletion) {
             for (int i = pd->elements.size() - 1; i >= 0; i--) {
                 if (pd->elements[i].to_delete) {
@@ -1013,15 +1116,17 @@ void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label) noexc
                 }
             }
         }
+
         ImGui::TableNextRow();
         ImGui::TableNextColumn(); // enabled, skip
         if (ImGui::TableNextColumn()) {
             ImGui::Text("Change this to add new elements");
         }
+
         ImGui::TableNextRow();
         ImGui::PushID(pd->elements.size());
         static ElementType elem = {};
-        if (partial_dict_row(app, pd, &elem)) {
+        if (partial_dict_row(app, pd, &elem, hints, hint_count)) {
             pd->elements.push_back(elem);
             elem = {};
         }
@@ -1042,67 +1147,67 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
-                        "Body Type", (int*)&test.request.body_type,
-                        RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
+                    "Body Type", (int*)&test.request.body_type,
+                    RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
 
                 // TODO: convert between current body types
                 switch (test.request.body_type) {
-                    case REQUEST_JSON:
-                        test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
-                        if (!std::holds_alternative<std::string>(test.request.body)) {
-                            test.request.body = "{}";
-                            test.request.editor.SetText("{}");
-                            // TODO: allow for palette change within view settings
-                            test.request.editor.SetPalette(TextEditor::GetDarkPalette());
-                        }
-                        break;
+                case REQUEST_JSON:
+                    test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    if (!std::holds_alternative<std::string>(test.request.body)) {
+                        test.request.body = "{}";
+                        test.request.editor.SetText("{}");
+                        // TODO: allow for palette change within view settings
+                        test.request.editor.SetPalette(TextEditor::GetDarkPalette());
+                    }
+                    break;
 
-                    case REQUEST_RAW:
-                        test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
-                        if (!std::holds_alternative<std::string>(test.request.body)) {
-                            test.request.body = "";
-                            test.request.editor.SetText("");
-                            // TODO: allow for palette change within view settings
-                            test.request.editor.SetPalette(TextEditor::GetDarkPalette());
-                        }
-                        break;
+                case REQUEST_RAW:
+                    test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    if (!std::holds_alternative<std::string>(test.request.body)) {
+                        test.request.body = "";
+                        test.request.editor.SetText("");
+                        // TODO: allow for palette change within view settings
+                        test.request.editor.SetPalette(TextEditor::GetDarkPalette());
+                    }
+                    break;
 
-                    case REQUEST_MULTIPART:
-                        test.request.body = MultiPartBody{};
-                        break;
+                case REQUEST_MULTIPART:
+                    test.request.body = MultiPartBody{};
+                    break;
                 }
             }
 
             switch (test.request.body_type) {
-                case REQUEST_JSON:
-                    ImGui::SameLine();
-                    if (ImGui::Button("Format")) {
-                        try {
-                            test.request.editor.SetText(
-                                    json::parse(test.request.editor.GetText()).dump(4));
-                        } catch (json::parse_error& error) {
-                            Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
-                        }
+            case REQUEST_JSON:
+                ImGui::SameLine();
+                if (ImGui::Button("Format")) {
+                    try {
+                        test.request.editor.SetText(
+                            json::parse(test.request.editor.GetText()).dump(4));
+                    } catch (json::parse_error& error) {
+                        Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
                     }
+                }
 
-                    ImGui::PushFont(app->mono_font);
-                    test.request.editor.Render("##body", false, ImVec2(0, 300));
-                    ImGui::PopFont();
+                ImGui::PushFont(app->mono_font);
+                test.request.editor.Render("##body", false, ImVec2(0, 300));
+                ImGui::PopFont();
 
-                    test.request.body = test.request.editor.GetText();
-                    break;
+                test.request.body = test.request.editor.GetText();
+                break;
 
-                case REQUEST_RAW:
-                    ImGui::PushFont(app->mono_font);
-                    test.request.editor.Render("##body", false, ImVec2(0, 300));
-                    ImGui::PopFont();
-                    test.request.body = test.request.editor.GetText();
-                    break;
+            case REQUEST_RAW:
+                ImGui::PushFont(app->mono_font);
+                test.request.editor.Render("##body", false, ImVec2(0, 300));
+                ImGui::PopFont();
+                test.request.body = test.request.editor.GetText();
+                break;
 
-                case REQUEST_MULTIPART:
-                    auto& mpb = std::get<MultiPartBody>(test.request.body);
-                    partial_dict(app, &mpb, "##body");
-                    break;
+            case REQUEST_MULTIPART:
+                auto& mpb = std::get<MultiPartBody>(test.request.body);
+                partial_dict(app, &mpb, "##body");
+                break;
             }
             ImGui::EndTabItem();
         }
@@ -1125,7 +1230,7 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.request.headers, "##headers");
+            partial_dict(app, &test.request.headers, "##headers", RequestHeadersLabels, IM_ARRAYSIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1140,7 +1245,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         ImGui::PushID("response");
 
         if (ImGui::BeginTabItem("Response")) {
-            ImGui::InputTextCombo("Status", &test.response.status, 100, HTTPStatusLabels, IM_ARRAYSIZE(HTTPStatusLabels), 0);
+            ImGui::InputTextCombo("Status", &test.response.status, 100, HTTPStatusLabels, IM_ARRAYSIZE(HTTPStatusLabels), 8);
             ImGui::Text("Select any of the tabs to edit test's expected response");
             ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();
@@ -1148,52 +1253,52 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
-                        "Body Type", (int*)&test.response.body_type,
-                        ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
+                    "Body Type", (int*)&test.response.body_type,
+                    ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
 
                 // TODO: convert between current body types
                 switch (test.response.body_type) {
-                    case RESPONSE_JSON:
-                    case RESPONSE_HTML:
-                    case RESPONSE_RAW:
-                        test.response.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
-                        if (!std::holds_alternative<std::string>(test.response.body)) {
-                            test.response.body = "";
-                            test.response.editor.SetText("");
-                            // TODO: allow for palette change within view settings
-                            test.response.editor.SetPalette(TextEditor::GetDarkPalette());
-                        }
-                        break;
+                case RESPONSE_JSON:
+                case RESPONSE_HTML:
+                case RESPONSE_RAW:
+                    test.response.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
+                    if (!std::holds_alternative<std::string>(test.response.body)) {
+                        test.response.body = "";
+                        test.response.editor.SetText("");
+                        // TODO: allow for palette change within view settings
+                        test.response.editor.SetPalette(TextEditor::GetDarkPalette());
+                    }
+                    break;
 
-                    case RESPONSE_MULTIPART:
-                        test.response.body = MultiPartBody{};
-                        break;
+                case RESPONSE_MULTIPART:
+                    test.response.body = MultiPartBody{};
+                    break;
                 }
             }
 
             switch (test.response.body_type) {
-                case RESPONSE_JSON:
-                    ImGui::SameLine();
-                    if (ImGui::Button("Format")) {
-                        try {
-                            test.response.editor.SetText(json::parse(test.response.editor.GetText()).dump(4));
-                        } catch (json::parse_error& error) {
-                            Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
-                        }
+            case RESPONSE_JSON:
+                ImGui::SameLine();
+                if (ImGui::Button("Format")) {
+                    try {
+                        test.response.editor.SetText(json::parse(test.response.editor.GetText()).dump(4));
+                    } catch (json::parse_error& error) {
+                        Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
                     }
+                }
 
-                case RESPONSE_HTML:
-                case RESPONSE_RAW:
-                    ImGui::PushFont(app->mono_font);
-                    test.response.editor.Render("##body", false, ImVec2(0, 300));
-                    ImGui::PopFont();
-                    test.response.body = test.response.editor.GetText();
-                    break;
+            case RESPONSE_HTML:
+            case RESPONSE_RAW:
+                ImGui::PushFont(app->mono_font);
+                test.response.editor.Render("##body", false, ImVec2(0, 300));
+                ImGui::PopFont();
+                test.response.body = test.response.editor.GetText();
+                break;
 
-                case RESPONSE_MULTIPART:
-                    auto& mpb = std::get<MultiPartBody>(test.response.body);
-                    partial_dict(app, &mpb, "##body");
-                    break;
+            case RESPONSE_MULTIPART:
+                auto& mpb = std::get<MultiPartBody>(test.response.body);
+                partial_dict(app, &mpb, "##body");
+                break;
             }
             ImGui::EndTabItem();
         }
@@ -1208,7 +1313,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.response.headers, "##headers");
+            partial_dict(app, &test.response.headers, "##headers", ResponseHeadersLabels, IM_ARRAYSIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1273,8 +1378,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
-                std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
-                (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
+            std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
+            (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
                 (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::Button("Save")) {
@@ -1288,8 +1393,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Endpoint", &test.endpoint);
             ImGui::Combo(
-                    "Type", (int*)&test.type,
-                    HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+                "Type", (int*)&test.type,
+                HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
 
             editor_test_requests(app, tab, test);
             editor_test_response(app, tab, test);
@@ -1301,17 +1406,17 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
     if (!tab.open && changed()) {
         switch (unsaved_changes(app)) {
-            case MODAL_CONTINUE:
-                result = TAB_CLOSED;
-                break;
-            case MODAL_SAVE:
-                result = TAB_SAVE_CLOSED;
-                break;
-            case MODAL_CANCEL:
-                tab.open = true;
-                break;
-            default:
-                break;
+        case MODAL_CONTINUE:
+            result = TAB_CLOSED;
+            break;
+        case MODAL_SAVE:
+            result = TAB_SAVE_CLOSED;
+            break;
+        case MODAL_CANCEL:
+            tab.open = true;
+            break;
+        default:
+            break;
         }
     }
     return result;
@@ -1327,8 +1432,8 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
-                std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
-                (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
+            std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
+            (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
                 (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
@@ -1346,17 +1451,17 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     }
     if (!tab.open && changed()) {
         switch (unsaved_changes(app)) {
-            case MODAL_CONTINUE:
-                result = TAB_CLOSED;
-                break;
-            case MODAL_SAVE:
-                result = TAB_SAVE_CLOSED;
-                break;
-            case MODAL_CANCEL:
-                tab.open = true;
-                break;
-            default:
-                break;
+        case MODAL_CONTINUE:
+            result = TAB_CLOSED;
+            break;
+        case MODAL_SAVE:
+            result = TAB_SAVE_CLOSED;
+            break;
+        case MODAL_CANCEL:
+            tab.open = true;
+            break;
+        default:
+            break;
         }
     }
     return result;
@@ -1370,32 +1475,32 @@ void tabbed_editor(AppState* app) noexcept {
             const NestedTest* original = tab.original;
             EditorTabResult result;
             switch (tab.edit.index()) {
-                case TEST_VARIANT: {
-                                       result = editor_tab_test(app, tab);
-                                   } break;
-                case GROUP_VARIANT: {
-                                        result = editor_tab_group(app, tab);
-                                    } break;
+            case TEST_VARIANT: {
+                result = editor_tab_test(app, tab);
+            } break;
+            case GROUP_VARIANT: {
+                result = editor_tab_group(app, tab);
+            } break;
             }
 
             tab.just_opened = false;
 
             // hopefully can't close 2 tabs in a single frame
             switch (result) {
-                case TAB_SAVE_CLOSED:
-                    closed_id = id;
-                case TAB_SAVED:
-                    *tab.original = tab.edit;
-                    tab.just_opened = true;
-                    break;
-                case TAB_CLOSED:
-                    closed_id = id;
-                    break;
-                case TAB_DISCARD:
-                    tab.edit = *tab.original;
-                    break;
-                case TAB_NONE:
-                    break;
+            case TAB_SAVE_CLOSED:
+                closed_id = id;
+            case TAB_SAVED:
+                *tab.original = tab.edit;
+                tab.just_opened = true;
+                break;
+            case TAB_CLOSED:
+                closed_id = id;
+                break;
+            case TAB_DISCARD:
+                tab.edit = *tab.original;
+                break;
+            case TAB_NONE:
+                break;
             }
         }
 
@@ -1409,21 +1514,21 @@ void tabbed_editor(AppState* app) noexcept {
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
     auto log_split = HelloImGui::DockingSplit(
-            "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
+        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
     auto tests_split = HelloImGui::DockingSplit(
-            "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
+        "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
     return {log_split, tests_split};
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
     auto tab_editor_window = HelloImGui::DockableWindow(
-            "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
+        "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
 
     auto tests_window = HelloImGui::DockableWindow(
-            "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
+        "Tests", "SideBarDockSpace", [app]() { test_tree_view(app); });
 
     auto logs_window = HelloImGui::DockableWindow(
-            "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+        "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, logs_window};
 }
@@ -1502,19 +1607,19 @@ httplib::Result make_request(AppState* app, Test* test) noexcept {
     Log(LogLevel::Debug, "host: %s, dest: %s", host.c_str(), dest.c_str());
     httplib::Client cli(host);
     switch (test->type) {
-        case HTTP_GET:
-            // TODO: warn user that get requests will ignore body
-            // or implement it for non file body elements
-            result = cli.Get(dest, params, headers, progress);
-            break;
-        case HTTP_POST:
-            break;
-        case HTTP_PUT:
-            break;
-        case HTTP_PATCH:
-            break;
-        case HTTP_DELETE:
-            break;
+    case HTTP_GET:
+        // TODO: warn user that get requests will ignore body
+        // or implement it for non file body elements
+        result = cli.Get(dest, params, headers, progress);
+        break;
+    case HTTP_POST:
+        break;
+    case HTTP_PUT:
+        break;
+    case HTTP_PATCH:
+        break;
+    case HTTP_DELETE:
+        break;
     }
     Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type], test->label().c_str());
     return result;

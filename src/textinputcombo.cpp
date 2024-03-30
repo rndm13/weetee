@@ -59,7 +59,7 @@ int propose(ImGuiInputTextCallbackData* data) {
 
 bool InputTextCombo(const char* id, std::string* str, size_t maxInputSize, const char* items[], size_t item_len, short showMaxItems) {
     if (str->size() > maxInputSize) { // too large for editing
-        ImGui::Text("%s", str->c_str());
+        ImGui::Text(str->c_str());
         return false;
     }
 
@@ -118,7 +118,7 @@ bool InputTextCombo(const char* id, char* buffer, size_t maxInputSize, const cha
     ImGui::PopID();
 
     ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::Text("%s", id);
+    ImGui::Text(id);
 
     return ret;
 }
