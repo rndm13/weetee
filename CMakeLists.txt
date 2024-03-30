@@ -63,3 +63,10 @@ target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}
 target_link_libraries(
     weetee PRIVATE
     BS_thread_pool)
+
+# Add textinputcombo
+# ==================
+
+add_library(textinputcombo src/textinputcombo.hpp src/textinputcombo.cpp)
+target_link_libraries(textinputcombo hello_imgui)
+target_link_libraries(weetee PRIVATE textinputcombo)
