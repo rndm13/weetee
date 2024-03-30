@@ -118,6 +118,10 @@ struct PartialDictElement {
 
     bool selected = false;
     bool to_delete = false;
+
+    bool operator!=(const PartialDictElement<Data>& other) const noexcept {
+        return this->data != other.data;
+    }
 };
 template <typename Data>
 struct PartialDict {
@@ -169,6 +173,7 @@ struct MultiPartBodyElementData {
             auto this_data = std::get<std::vector<std::string>>(this->data);
             auto other_data = std::get<std::vector<std::string>>(other.data);
 
+            return this_data == other_data;
         } break;
         }
     }
@@ -186,8 +191,8 @@ struct CookiesElementData {
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count];
 
-    bool operator==(const CookiesElementData& other) const noexcept {
-        return this->data == other.data;
+    bool operator!=(const CookiesElementData& other) const noexcept {
+        return this->data != other.data;
     }
 };
 const char* CookiesElementData::field_labels[field_count] = {
@@ -202,8 +207,8 @@ struct ParametersElementData {
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count];
 
-    bool operator==(const ParametersElementData& other) const noexcept {
-        return this->data == other.data;
+    bool operator!=(const ParametersElementData& other) const noexcept {
+        return this->data != other.data;
     }
 };
 const char* ParametersElementData::field_labels[field_count] = {
@@ -218,8 +223,8 @@ struct HeadersElementData {
     static constexpr size_t field_count = 1;
     static const char* field_labels[field_count];
 
-    bool operator==(const HeadersElementData& other) const noexcept {
-        return this->data == other.data;
+    bool operator!=(const HeadersElementData& other) const noexcept {
+        return this->data != other.data;
     }
 };
 const char* HeadersElementData::field_labels[field_count] = {
@@ -353,27 +358,12 @@ struct Group {
     }
 };
 
-bool request_body_eq(const Request* a, const Request* b) noexcept {
-    if (a->body.index() != b->body.index() && a->body_type != b->body_type) {
-        return false;
-    }
+bool request_eq(const Request* a, const Request* b) noexcept {
+    return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers && a->parameters == b->parameters;
+}
 
-    switch (a->body_type) {
-    case REQUEST_RAW:
-    case REQUEST_JSON: {
-        auto a_data = std::get<std::string>(a->body);
-        auto b_data = std::get<std::string>(b->body);
-
-        return a_data == b_data;
-    } break;
-    case REQUEST_MULTIPART: {
-        auto a_data = std::get<MultiPartBody>(a->body);
-        auto b_data = std::get<MultiPartBody>(b->body);
-
-    } break;
-    }
-
-    return false;
+bool response_eq(const Response* a, const Response* b) noexcept {
+    return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
 }
 
 bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
@@ -386,7 +376,7 @@ bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
         const auto& test_a = std::get<Test>(*a);
         const auto& test_b = std::get<Test>(*b);
         // TODO: check request and response
-        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_body_eq(&test_a.request, &test_b.request);
+        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_eq(&test_a.request, &test_b.request) && response_eq(&test_a.response, &test_b.response);
     } break;
     case GROUP_VARIANT:
         const auto& group_a = std::get<Group>(*a);
