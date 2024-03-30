@@ -66,7 +66,7 @@ struct LabelVisit {
 };
 
 template <class T>
-bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
+constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
     if (a.size() != b.size()) {
         return false;
     }
@@ -91,7 +91,7 @@ static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
     ImGuiSelectableFlags_AllowOverlap |
     ImGuiSelectableFlags_AllowDoubleClick;
 
-bool arrow(const char* label, ImGuiDir dir) {
+bool arrow(const char* label, ImGuiDir dir) noexcept {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
@@ -102,7 +102,7 @@ bool arrow(const char* label, ImGuiDir dir) {
     return result;
 }
 
-void remove_arrow_offset() {
+void remove_arrow_offset() noexcept {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
 }
 
@@ -358,15 +358,15 @@ struct Group {
     }
 };
 
-bool request_eq(const Request* a, const Request* b) noexcept {
+constexpr bool request_eq(const Request* a, const Request* b) noexcept {
     return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers && a->parameters == b->parameters;
 }
 
-bool response_eq(const Response* a, const Response* b) noexcept {
+constexpr bool response_eq(const Response* a, const Response* b) noexcept {
     return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
 }
 
-bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
+constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
     if (a->index() != b->index()) {
         return false;
     }

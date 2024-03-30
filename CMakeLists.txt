@@ -27,7 +27,8 @@ endif()
 
 imgui_bundle_add_app(weetee src/main.cpp)
 target_link_libraries(weetee PRIVATE
-    "$<$<CONFIG:DEBUG>:-fsanitize=address>")
+    "$<$<CONFIG:DEBUG>:-fsanitize=address>"
+    "$<$<CONFIG:DEBUG>:-fsanitize=undefined>")
 
 # Add https and json
 # ==================
