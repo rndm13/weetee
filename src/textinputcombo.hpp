@@ -1,15 +1,13 @@
-// Got this code from: https://github.com/ocornut/imgui/issues/2057#issue-356321758
-// Slightly modified it
-//
 #pragma once
 
-#include "imgui.h"
+#include "string"
 
-namespace ImGui {
-// extern sf::Keyboard::Key; //This key is set by SFML. I had trouble using the correct ImGui Keys, since I only got Count as Key. See the TODOs in propose()
+struct ComboFilterState {
+    int num_hints;         // Hint count, passed like this to be available in text input callback
+    int activeIdx;         // Index of currently 'active' item by use of up/down keys
+    bool selectionChanged; // Flag to help focus the correct item when selecting active item
+    bool textChanged;      // Flag to help with starting popup
+    bool historyMove;      // Flag to help with moving history via arrows
+};
 
-bool identical(const char* buf, const char* item);
-int propose(ImGuiInputTextCallbackData* data);
-bool InputTextCombo(const char* id, std::string* str, size_t maxInputSize, const char* items[], size_t item_len, short showMaxItems);
-bool InputTextCombo(const char* id, char* buffer, size_t maxInputSize, const char* items[], size_t item_len, short showMaxItems);
-} // namespace ImGui
+bool ComboFilter(const char* id, std::string* str, const char** hints, ComboFilterState* s);

@@ -1,125 +1,168 @@
-// Got this code from: https://github.com/ocornut/imgui/issues/2057#issue-356321758
-// Slightly modified it
-//
 #include "textinputcombo.hpp"
+#include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui_stdlib.h"
 
-namespace ImGui {
-bool identical(const char* buf, const char* item) {
-    for (int i = 0; buf[i] && item[i]; ++i) {
-        // set the current pos if matching or return the pos if not
-        if (buf[i] != item[i]) {
-            return false;
+// imgui combo filter v1.0, by @r-lyeh (public domain)
+// contains *modified* code by @harold-b (public domain?)
+
+bool ComboFilter__DrawPopup(
+    ComboFilterState* state,
+    int START, const char** ENTRIES) {
+    bool clicked = 0;
+
+    // Grab the position for the popup
+    ImVec2 pos = ImGui::GetItemRectMin();
+    pos.y += ImGui::GetItemRectSize().y;
+    ImVec2 size = ImVec2(ImGui::GetItemRectSize().x - 60, ImGui::GetTextLineHeightWithSpacing() * 4);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_HorizontalScrollbar |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoDocking |
+        0; // ImGuiWindowFlags_ShowBorders;
+
+    // ImGui::SetNextWindowFocus();
+    ImGui::SetNextWindowPos(pos);
+    ImGui::SetNextWindowSize(size);
+    ImGui::Begin("##combo_filter", nullptr, flags);
+    ImGui::PushAllowKeyboardFocus(false);
+    for (int i = 0; i < state->num_hints; i++) {
+        // Track if we're drawing the active index so we
+        // can scroll to it if it has changed
+        bool isIndexActive = state->activeIdx == i;
+
+        if (isIndexActive) {
+            // Draw the currently 'active' item differently
+            // ( used appropriate colors for your own style )
+            ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1, 1, 0, 1));
         }
-    }
-    // Complete match
-    // and the item size is greater --> include
-    return true;
-};
 
-int propose(ImGuiInputTextCallbackData* data) {
-    // We don't want to "preselect" anything
-    if (strlen(data->Buf) == 0) {
-        return 0;
-    }
+        ImGui::PushID(i);
+        if (ImGui::Selectable(ENTRIES[i], isIndexActive)) {
+            // And item was clicked, notify the input
+            // callback so that it can modify the input buffer
+            state->activeIdx = i;
+            clicked = 1;
+        }
 
-    // Get our items back
-    const char** items = static_cast<std::pair<const char**, size_t>*>(data->UserData)->first;
-    size_t length = static_cast<std::pair<const char**, size_t>*>(data->UserData)->second;
+        if (ImGui::IsItemFocused() && ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            // Allow ENTER key to select current highlighted item (w/ keyboard navigation)
+            state->activeIdx = i;
+            clicked = 1;
+        }
+        ImGui::PopID();
 
-    // We need to give the user a chance to remove wrong input
-    if (ImGui::IsKeyDown(ImGuiKey_Backspace)) {
-        // We delete the last char automatically, since it is what the user wants to delete, but only if there is something (selected/marked/hovered)
-        if (data->BufTextLen > 0 && data->CursorPos > 0) {
-            if (data->SelectionEnd != data->SelectionStart) {
-                data->DeleteChars(data->CursorPos - 1, 1);
+        if (isIndexActive) {
+            if (state->selectionChanged) {
+                // Make sure we bring the currently 'active' item into view.
+                ImGui::SetScrollHereY();
+                // SetScrollHereX();
+                state->selectionChanged = false;
             }
+
+            ImGui::PopStyleColor(1);
         }
-        return 0;
-    }
-    if (ImGui::IsKeyDown(ImGuiKey_Delete)) {
-        return 0;
     }
 
-    for (int i = 0; i < length; i++) {
-        if (identical(data->Buf, items[i])) {
-            const int cursor = data->CursorPos;
-            // Insert the first match
-            data->DeleteChars(0, data->BufTextLen);
-            data->InsertChars(0, items[i]);
-            // Reset the cursor position
-            data->CursorPos = cursor;
-            // Select the text, so the user can simply go on writing
-            data->SelectionStart = cursor;
-            data->SelectionEnd = data->BufTextLen;
-            break;
-        }
+    ImGui::PopAllowKeyboardFocus();
+    ImGui::End();
+    ImGui::PopStyleVar(1);
+
+    return clicked;
+}
+
+// just sets the text changed flag
+int ComboFilter__TextCallback(ImGuiInputTextCallbackData* data) {
+    ComboFilterState* state = (ComboFilterState*)data->UserData;
+    state->textChanged |= data->EventFlag & ImGuiInputTextFlags_CallbackEdit;
+    state->historyMove |= data->EventKey == ImGuiKey_UpArrow || data->EventKey == ImGuiKey_DownArrow;
+    state->historyMove &= !(data->EventFlag & ImGuiInputTextFlags_CallbackEdit); // reset after edit
+
+    state->selectionChanged = data->EventKey == ImGuiKey_UpArrow || data->EventKey == ImGuiKey_DownArrow;
+
+    if (data->EventKey == ImGuiKey_UpArrow && state->activeIdx > 0) {
+        state->activeIdx -= 1;
     }
+    if (data->EventKey == ImGuiKey_DownArrow && state->activeIdx < state->num_hints - 1) {
+        state->activeIdx += 1;
+    }
+
     return 0;
 }
 
-bool InputTextCombo(const char* id, std::string* str, size_t maxInputSize, const char* items[], size_t item_len, short showMaxItems) {
-    if (str->size() > maxInputSize) { // too large for editing
-        ImGui::Text(str->c_str());
-        return false;
-    }
+bool ComboFilter(
+    const char* id, std::string* str,
+    const char** hints, ComboFilterState* s) {
+    struct fuzzy {
+        static int score(const char* str1, const char* str2) {
+            int score = 0, consecutive = 0, maxerrors = 0;
+            while (*str1 && *str2) {
+                int is_leading = (*str1 & 64) && !(str1[1] & 64);
+                if ((*str1 & ~32) == (*str2 & ~32)) {
+                    int had_separator = (str1[-1] <= 32);
+                    int x = had_separator || is_leading ? 10 : consecutive * 5;
+                    consecutive = 1;
+                    score += x;
+                    ++str2;
+                } else {
+                    int x = -1, y = is_leading * -3;
+                    consecutive = 0;
+                    score += x;
+                    maxerrors += y;
+                }
+                ++str1;
+            }
+            return score + (maxerrors < -9 ? -9 : maxerrors);
+        }
+        static int search(const char* str, int num, const char* words[]) {
+            int scoremax = 0;
+            int best = -1;
+            for (int i = 0; i < num; ++i) {
+                int score = fuzzy::score(words[i], str);
+                int record = (score >= scoremax);
+                int draw = (score == scoremax);
+                if (record) {
+                    scoremax = score;
+                    if (!draw)
+                        best = i;
+                    else
+                        best = best >= 0 && strlen(words[best]) < strlen(words[i]) ? best : i;
+                }
+            }
+            return best;
+        }
+    };
 
-    std::string buffer(*str);
-    buffer.resize(maxInputSize);
-    bool changed = ImGui::InputTextCombo(id, &buffer[0], maxInputSize, items, item_len, showMaxItems);
-    // using string as char array
-    if (changed) {
-        auto i = buffer.find_first_of('\0');
-        *str = buffer.substr(0u, i);
-    }
-    return changed;
-}
+    bool done = ImGui::InputText(
+        id, str,
+        ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackEdit | ImGuiInputTextFlags_CallbackHistory,
+        ComboFilter__TextCallback, s);
+    const auto input_text_id = ImGui::GetItemID();
 
-// Creates a ComboBox with free text input and completion proposals
-// Pass your items via items
-// showMaxItems determines how many items are shown, when the dropdown is open; if 0 is passed the complete list will be shown; you will want normaly a value of 8
-bool InputTextCombo(const char* id, char* buffer, size_t maxInputSize, const char* items[], size_t item_len, short showMaxItems) {
-    // Check if both strings matches
-    if (showMaxItems == 0) {
-        showMaxItems = item_len;
-    }
+    s->textChanged &= ImGui::IsItemFocused();
+    bool hot = s->textChanged && s->activeIdx >= 0 && *str != hints[s->activeIdx];
+    if (hot) {
+        int new_idx = fuzzy::search(str->c_str(), s->num_hints, hints);
+        int idx = !s->historyMove && new_idx >= 0 ? new_idx : s->activeIdx;
 
-    ImGui::PushID(id);
-    std::pair<const char**, size_t> pass(items, item_len); // We need to pass the array length as well
-
-    bool ret = ImGui::InputText("##in", buffer, maxInputSize, ImGuiInputTextFlags_::ImGuiInputTextFlags_CallbackAlways, propose, static_cast<void*>(&pass));
-
-    ImGui::OpenPopupOnItemClick("combobox"); // Enable right-click
-    ImVec2 pos = ImGui::GetItemRectMin();
-    ImVec2 size = ImGui::GetItemRectSize();
-
-    ImGui::SameLine(0, 0);
-    if (ImGui::ArrowButton("##openCombo", ImGuiDir_Down)) {
-        ImGui::OpenPopup("combobox");
-    }
-    ImGui::OpenPopupOnItemClick("combobox"); // Enable right-click
-
-    pos.y += size.y;
-    size.x += ImGui::GetItemRectSize().x;
-    size.y += 5 + (size.y * showMaxItems);
-    ImGui::SetNextWindowPos(pos);
-    ImGui::SetNextWindowSize(size);
-    if (ImGui::BeginPopup("combobox", ImGuiWindowFlags_::ImGuiWindowFlags_NoMove)) {
-        ImGui::Text("Select one item or type");
-        ImGui::Separator();
-        for (int i = 0; i < item_len; i++) {
-            if (ImGui::Selectable(items[i])) {
-                strcpy(buffer, items[i]);
-                ret = true;
+        s->selectionChanged = s->selectionChanged || s->activeIdx != idx;
+        s->activeIdx = idx;
+        if (done || ComboFilter__DrawPopup(s, idx, hints)) {
+            int i = s->activeIdx;
+            if (i >= 0) {
+                *str = hints[i];
+                done = true;
             }
         }
 
-        ImGui::EndPopup();
+        ImGui::SetFocusID(input_text_id, ImGui::GetCurrentWindow());
     }
-    ImGui::PopID();
-
-    ImGui::SameLine(0, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::Text(id);
-
-    return ret;
+    return done;
 }
-} // namespace ImGui

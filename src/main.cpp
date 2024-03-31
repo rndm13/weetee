@@ -998,7 +998,8 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
     if (ImGui::TableNextColumn()) { // name
         if (hint_count > 0) {
             assert(hints);
-            changed = changed | ImGui::InputTextCombo("", &elem->key, 256, hints, hint_count, 8);
+            static ComboFilterState s{.num_hints = hint_count};
+            changed = changed | ComboFilter("##name", &elem->key, hints, &s);
         } else {
             ImGui::SetNextItemWidth(-1);
             changed = changed | ImGui::InputText("##name", &elem->key);
@@ -1245,7 +1246,8 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         ImGui::PushID("response");
 
         if (ImGui::BeginTabItem("Response")) {
-            ImGui::InputTextCombo("Status", &test.response.status, 100, HTTPStatusLabels, IM_ARRAYSIZE(HTTPStatusLabels), 8);
+            static ComboFilterState s{.num_hints = IM_ARRAYSIZE(HTTPStatusLabels)};
+            ComboFilter("Status", &test.response.status, HTTPStatusLabels, &s);
             ImGui::Text("Select any of the tabs to edit test's expected response");
             ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();
