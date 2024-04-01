@@ -121,6 +121,8 @@ struct PartialDictElement {
     bool selected = false;
     bool to_delete = false;
 
+    std::optional<ComboFilterState> cfs; // if hints are given
+
     bool operator!=(const PartialDictElement<Data>& other) const noexcept {
         return this->data != other.data;
     }
@@ -998,8 +1000,10 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
     if (ImGui::TableNextColumn()) { // name
         if (hint_count > 0) {
             assert(hints);
-            static ComboFilterState s{.num_hints = hint_count};
-            changed = changed | ComboFilter("##name", &elem->key, hints, &s);
+            if (!elem->cfs) {
+                elem->cfs = ComboFilterState{};
+            }
+            changed = changed | ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
         } else {
             ImGui::SetNextItemWidth(-1);
             changed = changed | ImGui::InputText("##name", &elem->key);
@@ -1246,8 +1250,8 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         ImGui::PushID("response");
 
         if (ImGui::BeginTabItem("Response")) {
-            static ComboFilterState s{.num_hints = IM_ARRAYSIZE(HTTPStatusLabels)};
-            ComboFilter("Status", &test.response.status, HTTPStatusLabels, &s);
+            static ComboFilterState s{};
+            ComboFilter("Status", &test.response.status, HTTPStatusLabels, IM_ARRAYSIZE(HTTPStatusLabels), &s);
             ImGui::Text("Select any of the tabs to edit test's expected response");
             ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();

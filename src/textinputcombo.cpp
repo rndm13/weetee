@@ -3,12 +3,14 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
+#include "algorithm"
+
 // imgui combo filter v1.0, by @r-lyeh (public domain)
 // contains *modified* code by @harold-b (public domain?)
 
 bool ComboFilter__DrawPopup(
     ComboFilterState* state,
-    int START, const char** ENTRIES) {
+    int START, const char** ENTRIES, const size_t ENTRY_COUNT) {
     bool clicked = 0;
 
     // Grab the position for the popup
@@ -33,7 +35,7 @@ bool ComboFilter__DrawPopup(
     ImGui::SetNextWindowSize(size);
     ImGui::Begin("##combo_filter", nullptr, flags);
     ImGui::PushAllowKeyboardFocus(false);
-    for (int i = 0; i < state->num_hints; i++) {
+    for (int i = 0; i < ENTRY_COUNT; i++) {
         // Track if we're drawing the active index so we
         // can scroll to it if it has changed
         bool isIndexActive = state->activeIdx == i;
@@ -87,10 +89,10 @@ int ComboFilter__TextCallback(ImGuiInputTextCallbackData* data) {
 
     state->selectionChanged = data->EventKey == ImGuiKey_UpArrow || data->EventKey == ImGuiKey_DownArrow;
 
-    if (data->EventKey == ImGuiKey_UpArrow && state->activeIdx > 0) {
+    if (data->EventKey == ImGuiKey_UpArrow) {
         state->activeIdx -= 1;
     }
-    if (data->EventKey == ImGuiKey_DownArrow && state->activeIdx < state->num_hints - 1) {
+    if (data->EventKey == ImGuiKey_DownArrow) {
         state->activeIdx += 1;
     }
 
@@ -99,7 +101,7 @@ int ComboFilter__TextCallback(ImGuiInputTextCallbackData* data) {
 
 bool ComboFilter(
     const char* id, std::string* str,
-    const char** hints, ComboFilterState* s) {
+    const char** hints, const size_t hint_count, ComboFilterState* s) {
     struct fuzzy {
         static int score(const char* str1, const char* str2) {
             int score = 0, consecutive = 0, maxerrors = 0;
@@ -146,15 +148,17 @@ bool ComboFilter(
         ComboFilter__TextCallback, s);
     const auto input_text_id = ImGui::GetItemID();
 
-    s->textChanged &= ImGui::IsItemFocused();
+    s->textChanged &= ImGui::IsItemFocused(); // reset when item isn't focused
+    s->activeIdx = std::clamp(s->activeIdx, 0, static_cast<int>(hint_count - 1));
+
     bool hot = s->textChanged && s->activeIdx >= 0 && *str != hints[s->activeIdx];
     if (hot) {
-        int new_idx = fuzzy::search(str->c_str(), s->num_hints, hints);
+        int new_idx = fuzzy::search(str->c_str(), hint_count, hints);
         int idx = !s->historyMove && new_idx >= 0 ? new_idx : s->activeIdx;
 
         s->selectionChanged = s->selectionChanged || s->activeIdx != idx;
         s->activeIdx = idx;
-        if (done || ComboFilter__DrawPopup(s, idx, hints)) {
+        if (done || ComboFilter__DrawPopup(s, idx, hints, hint_count)) {
             int i = s->activeIdx;
             if (i >= 0) {
                 *str = hints[i];
