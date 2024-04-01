@@ -133,6 +133,8 @@ struct PartialDict {
     using ElementType = PartialDictElement<Data>;
     std::vector<PartialDictElement<Data>> elements;
 
+    PartialDictElement<Data> add_element;
+
     bool operator==(const PartialDict& other) const noexcept {
         return this->elements == other.elements;
     }
@@ -1130,10 +1132,9 @@ void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
 
         ImGui::TableNextRow();
         ImGui::PushID(pd->elements.size());
-        static ElementType elem = {};
-        if (partial_dict_row(app, pd, &elem, hints, hint_count)) {
-            pd->elements.push_back(elem);
-            elem = {};
+        if (partial_dict_row(app, pd, &pd->add_element, hints, hint_count)) {
+            pd->elements.push_back(pd->add_element);
+            pd->add_element = {};
         }
         ImGui::PopID();
         ImGui::EndTable();
