@@ -509,7 +509,7 @@ constexpr bool request_eq(const Request* a, const Request* b) noexcept {
 }
 
 constexpr bool response_eq(const Response* a, const Response* b) noexcept {
-    return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
+    return a->status == b->status && a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
 }
 
 constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
