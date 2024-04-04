@@ -1,10 +1,10 @@
 #include "hello_imgui/hello_imgui_font.h"
 #include "hello_imgui/hello_imgui_logger.h"
-
 #include "hello_imgui/hello_imgui_theme.h"
 #include "hello_imgui/imgui_theme.h"
 #include "hello_imgui/internal/hello_imgui_ini_settings.h"
 #include "hello_imgui/runner_params.h"
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
@@ -24,8 +24,12 @@
 
 #include "BS_thread_pool.hpp"
 
+#include "algorithm"
+#include "fstream"
 #include "future"
+#include "iterator"
 #include "sstream"
+#include "type_traits"
 #include "unordered_map"
 #include "variant"
 
@@ -115,12 +119,16 @@ constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
 template <typename Data>
 struct PartialDictElement {
     bool enabled = true;
-    std::string key;
-    Data data;
 
+    // do not save
     bool selected = false;
     bool to_delete = false;
 
+    // save
+    std::string key;
+    Data data;
+
+    // do not save
     std::optional<ComboFilterState> cfs; // if hints are given
 
     bool operator!=(const PartialDictElement<Data>& other) const noexcept {
@@ -133,6 +141,7 @@ struct PartialDict {
     using ElementType = PartialDictElement<Data>;
     std::vector<PartialDictElement<Data>> elements;
 
+    // do not save
     PartialDictElement<Data> add_element;
 
     bool operator==(const PartialDict& other) const noexcept {
@@ -140,18 +149,85 @@ struct PartialDict {
     }
 };
 
-enum MultiPartBodyDataType {
+enum MultiPartBodyDataType : uint8_t {
     MPBD_FILES,
     MPBD_TEXT,
-
-    // // Maybe Additional
-    // MPBD_NUMBER,
-    // MPBD_EMAIL,
-    // MPBD_URL,
 };
+
 static const char* MPBDTypeLabels[] = {
     [MPBD_FILES] = (const char*)"Files",
     [MPBD_TEXT] = (const char*)"Text",
+};
+
+struct SaveState {
+    size_t original_size = {};
+    std::vector<std::byte> original_buffer = {};
+
+    template <class T = void>
+    void save(const std::byte* ptr, size_t size = sizeof(T)) noexcept {
+        std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
+    }
+
+    template <class T>
+        requires(std::is_trivially_copyable<T>::value)
+    void save(T trivial) noexcept {
+        this->save<T>((std::byte*)(&trivial));
+    }
+
+    void save(const std::string& str) noexcept {
+        this->save((std::byte*)(str.begin().base()), str.length());
+        this->save('\0');
+    }
+
+    template <class K, class V>
+    void save(const std::unordered_map<K, V>& map) noexcept {
+        this->save(map.size());
+        for (const auto& [k, v] : map) {
+            this->save(k);
+            this->save(v);
+        }
+    }
+
+    template <class... T>
+    void save(const std::variant<T...>& variant) noexcept {
+        assert(variant.index() != std::variant_npos);
+        this->save(variant.index());
+        std::visit([this](const auto& s) { this->save(s); }, variant);
+    }
+
+    template <class Element>
+    void save(const std::vector<Element>& vec) noexcept {
+        this->save(vec.size());
+        for (const auto& elem : vec) {
+            this->save(elem);
+        }
+    }
+
+    template <class Data>
+    void save(const PartialDict<Data>& pd) noexcept {
+        using Element = PartialDictElement<Data>;
+        this->save(pd.elements.size());
+        for (const Element& element : pd.elements) {
+            this->save(element.enabled);
+            this->save(element.key);
+            this->save(element.data);
+        }
+    }
+
+    template <class T>
+        requires(!std::is_trivially_copyable<T>::value)
+    void save(const T& any) noexcept {
+        any.save(this);
+    }
+
+    void finish() noexcept {
+        this->original_size = this->original_buffer.size();
+    }
+
+    void write(std::ostream& os) const noexcept {
+        os.write((char*)&this->original_size, sizeof(std::size_t));
+        os.write((char*)&this->original_buffer, this->original_size);
+    }
 };
 
 using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
@@ -159,6 +235,7 @@ struct MultiPartBodyElementData {
     MultiPartBodyDataType type;
     MultiPartBodyData data;
 
+    // do not save
     std::optional<pfd::open_file> open_file;
 
     static constexpr size_t field_count = 2;
@@ -166,6 +243,11 @@ struct MultiPartBodyElementData {
 
     bool operator==(const MultiPartBodyElementData& other) const noexcept {
         return this->type != other.type && this->data != other.data;
+    }
+
+    void save(SaveState* save) const {
+        save->save(this->type);
+        save->save(this->data);
     }
 };
 const char* MultiPartBodyElementData::field_labels[field_count] = {
@@ -184,6 +266,10 @@ struct CookiesElementData {
     bool operator!=(const CookiesElementData& other) const noexcept {
         return this->data != other.data;
     }
+
+    void save(SaveState* save) const {
+        save->save(data);
+    }
 };
 const char* CookiesElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -200,6 +286,10 @@ struct ParametersElementData {
     bool operator!=(const ParametersElementData& other) const noexcept {
         return this->data != other.data;
     }
+
+    void save(SaveState* save) const {
+        save->save(data);
+    }
 };
 const char* ParametersElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -215,6 +305,10 @@ struct HeadersElementData {
 
     bool operator!=(const HeadersElementData& other) const noexcept {
         return this->data != other.data;
+    }
+
+    void save(SaveState* save) const {
+        save->save(data);
     }
 };
 const char* HeadersElementData::field_labels[field_count] = {
@@ -319,13 +413,13 @@ static const char* ResponseHeadersLabels[] = {
 
 struct Test;
 struct Group;
-enum NestedTestType : int {
+enum NestedTestType : uint8_t {
     TEST_VARIANT,
     GROUP_VARIANT,
 };
 using NestedTest = std::variant<Test, Group>;
 
-enum RequestBodyType : int {
+enum RequestBodyType : uint8_t {
     REQUEST_JSON,
     REQUEST_RAW,
     REQUEST_MULTIPART,
@@ -348,9 +442,17 @@ struct Request {
     Headers headers;
 
     TextEditor editor;
+
+    void save(SaveState* save) const noexcept {
+        save->save(this->body_type);
+        save->save(this->body);
+        save->save(this->cookies);
+        save->save(this->parameters);
+        save->save(this->headers);
+    }
 };
 
-enum ResponseBodyType : int {
+enum ResponseBodyType : uint8_t {
     RESPONSE_JSON,
     RESPONSE_HTML,
     RESPONSE_RAW,
@@ -374,10 +476,19 @@ struct Response {
     Cookies cookies;
     Headers headers;
 
+    // do not save
     TextEditor editor;
+
+    void save(SaveState* save) const noexcept {
+        save->save(this->status);
+        save->save(this->body_type);
+        save->save(this->body);
+        save->save(this->cookies);
+        save->save(this->headers);
+    }
 };
 
-enum HTTPType : uint64_t {
+enum HTTPType : uint8_t {
     HTTP_GET,
     HTTP_POST,
     HTTP_PUT,
@@ -466,14 +577,14 @@ static const char* HTTPStatusLabels[] = {
     (const char*)"511 Network Authentication Required",
 };
 
-enum TestFlags : uint64_t {
+enum TestFlags : uint8_t {
     TEST_DISABLED = 1 << 0,
 };
 
 struct Test {
     size_t parent_id;
     size_t id;
-    uint64_t flags;
+    uint8_t flags;
 
     HTTPType type;
     std::string endpoint;
@@ -484,13 +595,23 @@ struct Test {
     const std::string label() const noexcept {
         return this->endpoint + "##" + to_string(this->id);
     }
+
+    void save(SaveState* save) const noexcept {
+        save->save(this->id);
+        save->save(this->parent_id);
+        save->save(this->type);
+        save->save(this->flags);
+        save->save(this->endpoint);
+        save->save(this->request);
+        save->save(this->response);
+    }
 };
 
 struct TestResult {
     httplib::Response response;
 };
 
-enum GroupFlags : uint64_t {
+enum GroupFlags : uint8_t {
     GROUP_DISABLED = 1 << 0,
     GROUP_OPEN = 1 << 1,
 };
@@ -498,13 +619,20 @@ enum GroupFlags : uint64_t {
 struct Group {
     size_t parent_id;
     size_t id;
-    uint64_t flags;
+    uint8_t flags;
 
     std::string name;
     std::vector<size_t> children_idx;
 
     const std::string label() const noexcept {
         return this->name + "##" + to_string(this->id);
+    }
+
+    void save(SaveState* save) const noexcept {
+        save->save(this->id);
+        save->save(this->parent_id);
+        save->save(this->flags);
+        save->save(this->name);
     }
 };
 
@@ -540,6 +668,7 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 }
 
 // keys are ids and values are for separate for editing (must be saved to apply changes)
+// do not save
 struct EditorTab {
     bool open = true;
     bool just_opened;
@@ -548,9 +677,21 @@ struct EditorTab {
 };
 
 struct AppState {
-    BS::thread_pool thr_pool;
-    // httplib::Client cli;
+    // save
     size_t id_counter = 0;
+
+    // don't save
+    ImFont* regular_font;
+    ImFont* mono_font;
+
+    BS::thread_pool thr_pool;
+
+    std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
+    std::unordered_set<size_t> selected_tests = {};
+
+    HelloImGui::RunnerParams* runner_params;
+
+    // save
     std::unordered_map<size_t, NestedTest> tests = {
         {
             0,
@@ -562,12 +703,10 @@ struct AppState {
         },
     };
 
-    std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
-    std::unordered_set<size_t> selected_tests = {};
-
-    ImFont* regular_font;
-    ImFont* mono_font;
-    HelloImGui::RunnerParams* runner_params;
+    void save(SaveState* save) const noexcept {
+        save->save(this->id_counter);
+        save->save(this->tests);
+    }
 };
 
 bool nested_test_parent_disabled(AppState* app, const NestedTest* nt) noexcept {
@@ -1005,6 +1144,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
             if (!elem->cfs) {
                 elem->cfs = ComboFilterState{};
             }
+            ImGui::SetNextItemWidth(-1);
             changed = changed | ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
         } else {
             ImGui::SetNextItemWidth(-1);
@@ -1330,7 +1470,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
     }
 }
 
-enum ModalResult {
+enum ModalResult : uint8_t {
     MODAL_NONE,
     MODAL_CONTINUE,
     MODAL_SAVE,
@@ -1367,7 +1507,7 @@ ModalResult unsaved_changes(AppState* app) noexcept {
     return result;
 }
 
-enum EditorTabResult {
+enum EditorTabResult : uint8_t {
     TAB_NONE,
     TAB_CLOSED,
     TAB_SAVED,
@@ -1476,6 +1616,15 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
 void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
+
+    if (ImGui::Button("Save")) {
+        SaveState save;
+        save.save(*app);
+        save.finish();
+        std::ofstream out("output.save");
+        save.write(out);
+    }
+
     if (ImGui::BeginTabBar("editor")) {
         size_t closed_id = -1;
         for (auto& [id, tab] : app->opened_editor_tabs) {
