@@ -31,6 +31,7 @@
 #include "sstream"
 #include "type_traits"
 #include "unordered_map"
+#include "utility"
 #include "variant"
 
 #include "textinputcombo.hpp"
@@ -139,6 +140,7 @@ template <typename Data>
 struct PartialDict {
     using DataType = Data;
     using ElementType = PartialDictElement<Data>;
+    using SizeType = std::vector<PartialDictElement<Data>>::size_type;
     std::vector<PartialDictElement<Data>> elements;
 
     // do not save
@@ -159,13 +161,38 @@ static const char* MPBDTypeLabels[] = {
     [MPBD_TEXT] = (const char*)"Text",
 };
 
+// got from here https://stackoverflow.com/a/60567091
+template <class Variant, std::size_t I = 0>
+Variant variant_from_index(std::size_t index) {
+    if constexpr (I >= std::variant_size_v<Variant>) {
+        throw std::runtime_error{"Variant index " + std::to_string(I + index) + " out of bounds"};
+    } else {
+        return index == 0
+                   ? Variant{std::in_place_index<I>}
+                   : variant_from_index<Variant, I + 1>(index - 1);
+    }
+}
+
 struct SaveState {
     size_t original_size = {};
+    size_t load_idx = {};
     std::vector<std::byte> original_buffer = {};
 
+    // helpers
     template <class T = void>
     void save(const std::byte* ptr, size_t size = sizeof(T)) noexcept {
         std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
+    }
+
+    std::byte* cur_load(std::size_t offset = 0) const noexcept {
+        assert(this->load_idx + offset <= original_buffer.size());
+        return (std::byte*)original_buffer.begin().base() + this->load_idx + offset;
+    }
+
+    template <class T = void>
+    void load(std::byte* ptr, size_t size = sizeof(T)) noexcept {
+        std::copy(this->cur_load(), this->cur_load(size), ptr);
+        this->load_idx += size;
     }
 
     template <class T>
@@ -174,9 +201,26 @@ struct SaveState {
         this->save<T>((std::byte*)(&trivial));
     }
 
+    template <class T>
+        requires(std::is_trivially_copyable<T>::value)
+    void load(T& trivial) noexcept {
+        this->load((std::byte*)&trivial, sizeof(T));
+    }
+
     void save(const std::string& str) noexcept {
-        this->save((std::byte*)(str.begin().base()), str.length());
+        this->save((std::byte*)str.begin().base(), str.length());
         this->save('\0');
+    }
+
+    void load(std::string& str) noexcept {
+        size_t length = 0;
+        while (*this->cur_load(length) != std::byte(0)) {
+            length++;
+        }
+        length++; // include null terminator
+
+        str.resize(length);
+        this->load((std::byte*)str.begin().base(), length);
     }
 
     template <class K, class V>
@@ -188,6 +232,20 @@ struct SaveState {
         }
     }
 
+    template <class K, class V>
+    void load(std::unordered_map<K, V>& map) noexcept {
+        typename std::unordered_map<K, V>::size_type size;
+        this->load(size);
+
+        for (size_t i = 0; i < size; i++) {
+            K k;
+            V v;
+            this->load(k);
+            this->load(v);
+            map[k] = v;
+        }
+    }
+
     template <class... T>
     void save(const std::variant<T...>& variant) noexcept {
         assert(variant.index() != std::variant_npos);
@@ -195,11 +253,35 @@ struct SaveState {
         std::visit([this](const auto& s) { this->save(s); }, variant);
     }
 
+    template <class... T>
+    void load(std::variant<T...>& variant) noexcept {
+        size_t index;
+        this->load(index);
+        assert(index != std::variant_npos);
+        variant = variant_from_index<std::variant<T...>>(index);
+        std::visit([this](auto& s) { this->load(s); }, variant);
+    }
+
     template <class Element>
     void save(const std::vector<Element>& vec) noexcept {
         this->save(vec.size());
+
         for (const auto& elem : vec) {
             this->save(elem);
+        }
+    }
+
+    template <class Element>
+    void load(std::vector<Element>& vec) noexcept {
+        typename std::vector<Element>::size_type size;
+        this->load(size);
+        if (size != 0) {
+            vec.reserve(size);
+        }
+        vec.resize(size);
+
+        for (auto& elem : vec) {
+            this->load(elem);
         }
     }
 
@@ -207,10 +289,28 @@ struct SaveState {
     void save(const PartialDict<Data>& pd) noexcept {
         using Element = PartialDictElement<Data>;
         this->save(pd.elements.size());
+
         for (const Element& element : pd.elements) {
             this->save(element.enabled);
             this->save(element.key);
             this->save(element.data);
+        }
+    }
+
+    template <class Data>
+    void load(PartialDict<Data>& pd) noexcept {
+        using Element = PartialDictElement<Data>;
+        typename PartialDict<Data>::SizeType size;
+        this->load(size);
+
+        if (size != 0) {
+            pd.elements.reserve(size);
+        }
+        pd.elements.resize(size);
+        for (Element& element : pd.elements) {
+            this->load(element.enabled);
+            this->load(element.key);
+            this->load(element.data);
         }
     }
 
@@ -220,13 +320,33 @@ struct SaveState {
         any.save(this);
     }
 
-    void finish() noexcept {
+    template <class T>
+        requires(!std::is_trivially_copyable<T>::value)
+    void load(T& any) noexcept {
+        any.load(this);
+    }
+
+    void finish_save() noexcept {
         this->original_size = this->original_buffer.size();
+    }
+
+    void reset_load() noexcept {
+        this->load_idx = 0;
     }
 
     void write(std::ostream& os) const noexcept {
         os.write((char*)&this->original_size, sizeof(std::size_t));
-        os.write((char*)&this->original_buffer, this->original_size);
+        os.write((char*)this->original_buffer.begin().base(), this->original_buffer.size());
+        os.flush();
+    }
+
+    void read(std::istream& is) noexcept {
+        is.read((char*)&this->original_size, sizeof(std::size_t));
+        if (this->original_size != 0) {
+            this->original_buffer.reserve(this->original_size);
+        }
+        this->original_buffer.resize(this->original_size);
+        is.read((char*)this->original_buffer.begin().base(), this->original_size);
     }
 };
 
@@ -245,9 +365,14 @@ struct MultiPartBodyElementData {
         return this->type != other.type && this->data != other.data;
     }
 
-    void save(SaveState* save) const {
+    void save(SaveState* save) const noexcept {
         save->save(this->type);
         save->save(this->data);
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->type);
+        save->load(this->data);
     }
 };
 const char* MultiPartBodyElementData::field_labels[field_count] = {
@@ -267,8 +392,12 @@ struct CookiesElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const {
+    void save(SaveState* save) const noexcept {
         save->save(data);
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(data);
     }
 };
 const char* CookiesElementData::field_labels[field_count] = {
@@ -290,6 +419,10 @@ struct ParametersElementData {
     void save(SaveState* save) const {
         save->save(data);
     }
+
+    void load(SaveState* save) noexcept {
+        save->load(data);
+    }
 };
 const char* ParametersElementData::field_labels[field_count] = {
     (const char*)"Data",
@@ -309,6 +442,10 @@ struct HeadersElementData {
 
     void save(SaveState* save) const {
         save->save(data);
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(data);
     }
 };
 const char* HeadersElementData::field_labels[field_count] = {
@@ -450,6 +587,14 @@ struct Request {
         save->save(this->parameters);
         save->save(this->headers);
     }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->body_type);
+        save->load(this->body);
+        save->load(this->cookies);
+        save->load(this->parameters);
+        save->load(this->headers);
+    }
 };
 
 enum ResponseBodyType : uint8_t {
@@ -485,6 +630,14 @@ struct Response {
         save->save(this->body);
         save->save(this->cookies);
         save->save(this->headers);
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->status);
+        save->load(this->body_type);
+        save->load(this->body);
+        save->load(this->cookies);
+        save->load(this->headers);
     }
 };
 
@@ -605,6 +758,16 @@ struct Test {
         save->save(this->request);
         save->save(this->response);
     }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->id);
+        save->load(this->parent_id);
+        save->load(this->type);
+        save->load(this->flags);
+        save->load(this->endpoint);
+        save->load(this->request);
+        save->load(this->response);
+    }
 };
 
 struct TestResult {
@@ -633,6 +796,15 @@ struct Group {
         save->save(this->parent_id);
         save->save(this->flags);
         save->save(this->name);
+        save->save(this->children_idx);
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->id);
+        save->load(this->parent_id);
+        save->load(this->flags);
+        save->load(this->name);
+        save->load(this->children_idx);
     }
 };
 
@@ -703,9 +875,21 @@ struct AppState {
         },
     };
 
+    // probably can do with some bs macros
     void save(SaveState* save) const noexcept {
+        Log(LogLevel::Debug, "Saving app %zu", this->tests.size());
         save->save(this->id_counter);
         save->save(this->tests);
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->id_counter);
+        save->load(this->tests);
+
+        Log(LogLevel::Debug, "Loading app %zu", this->tests.size());
+        for (const auto& [key, test] : this->tests) {
+            Log(LogLevel::Debug, "%zu = %zu %s %zu", key, std::visit(IDVisit(), test), std::visit(LabelVisit(), test).c_str(), std::visit(ParentIDVisit(), test));
+        }
     }
 };
 
@@ -1522,7 +1706,6 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     auto changed = [&tab]() {
         return !nested_test_eq(&tab.edit, tab.original);
     };
-
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
             std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
@@ -1618,11 +1801,23 @@ void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::Button("Save")) {
+        std::ofstream out("output.wt");
+
         SaveState save;
+
         save.save(*app);
-        save.finish();
-        std::ofstream out("output.save");
+        save.finish_save();
+
         save.write(out);
+    }
+
+    if (ImGui::Button("Load")) {
+        std::ifstream in("output.wt");
+
+        SaveState save;
+        save.read(in);
+
+        save.load(*app);
     }
 
     if (ImGui::BeginTabBar("editor")) {
@@ -1803,7 +1998,6 @@ void run_tests(AppState* app, std::vector<Test>* tests) noexcept {
 void show_menus(AppState* app) noexcept {
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (arrow("start", ImGuiDir_Right)) {
-
         // find tests to execute
         std::vector<Test> tests_to_run;
         for (const auto& [id, nested_test] : app->tests) {
