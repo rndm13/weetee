@@ -1773,6 +1773,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             break;
         }
     }
+
     return result;
 }
 
@@ -1800,6 +1801,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
+            ImGui::EndChild();
         }
 
         ImGui::EndTabItem();
