@@ -151,7 +151,7 @@ struct PartialDict {
     }
 };
 
-enum MultiPartBodyDataType : uint8_t {
+enum MultiPartBodyDataType : size_t {
     MPBD_FILES,
     MPBD_TEXT,
 };
@@ -217,15 +217,17 @@ struct SaveState {
         while (*this->cur_load(length) != std::byte(0)) {
             length++;
         }
-        length++; // include null terminator
-
         str.resize(length);
         this->load((std::byte*)str.begin().base(), length);
+
+        this->load_idx++; // skip over null terminator
     }
 
     template <class K, class V>
     void save(const std::unordered_map<K, V>& map) noexcept {
-        this->save(map.size());
+        size_t size = map.size();
+        this->save(size);
+
         for (const auto& [k, v] : map) {
             this->save(k);
             this->save(v);
@@ -234,9 +236,10 @@ struct SaveState {
 
     template <class K, class V>
     void load(std::unordered_map<K, V>& map) noexcept {
-        typename std::unordered_map<K, V>::size_type size;
+        size_t size;
         this->load(size);
 
+        map.clear();
         for (size_t i = 0; i < size; i++) {
             K k;
             V v;
@@ -249,7 +252,9 @@ struct SaveState {
     template <class... T>
     void save(const std::variant<T...>& variant) noexcept {
         assert(variant.index() != std::variant_npos);
-        this->save(variant.index());
+        size_t index = variant.index();
+        this->save(index);
+
         std::visit([this](const auto& s) { this->save(s); }, variant);
     }
 
@@ -258,13 +263,15 @@ struct SaveState {
         size_t index;
         this->load(index);
         assert(index != std::variant_npos);
+
         variant = variant_from_index<std::variant<T...>>(index);
         std::visit([this](auto& s) { this->load(s); }, variant);
     }
 
     template <class Element>
     void save(const std::vector<Element>& vec) noexcept {
-        this->save(vec.size());
+        size_t size = vec.size();
+        this->save(size);
 
         for (const auto& elem : vec) {
             this->save(elem);
@@ -273,8 +280,10 @@ struct SaveState {
 
     template <class Element>
     void load(std::vector<Element>& vec) noexcept {
-        typename std::vector<Element>::size_type size;
+        size_t size;
         this->load(size);
+
+        vec.clear();
         if (size != 0) {
             vec.reserve(size);
         }
@@ -287,31 +296,26 @@ struct SaveState {
 
     template <class Data>
     void save(const PartialDict<Data>& pd) noexcept {
-        using Element = PartialDictElement<Data>;
-        this->save(pd.elements.size());
+        this->save(pd.elements);
+    }
 
-        for (const Element& element : pd.elements) {
-            this->save(element.enabled);
-            this->save(element.key);
-            this->save(element.data);
-        }
+    template <class Data>
+    void save(const PartialDictElement<Data>& element) noexcept {
+        this->save(element.enabled);
+        this->save(element.key);
+        this->save(element.data);
     }
 
     template <class Data>
     void load(PartialDict<Data>& pd) noexcept {
-        using Element = PartialDictElement<Data>;
-        typename PartialDict<Data>::SizeType size;
-        this->load(size);
+        this->load(pd.elements);
+    }
 
-        if (size != 0) {
-            pd.elements.reserve(size);
-        }
-        pd.elements.resize(size);
-        for (Element& element : pd.elements) {
-            this->load(element.enabled);
-            this->load(element.key);
-            this->load(element.data);
-        }
+    template <class Data>
+    void load(PartialDictElement<Data>& element) noexcept {
+        this->load(element.enabled);
+        this->load(element.key);
+        this->load(element.data);
     }
 
     template <class T>
@@ -342,10 +346,12 @@ struct SaveState {
 
     void read(std::istream& is) noexcept {
         is.read((char*)&this->original_size, sizeof(std::size_t));
+
         if (this->original_size != 0) {
             this->original_buffer.reserve(this->original_size);
         }
         this->original_buffer.resize(this->original_size);
+
         is.read((char*)this->original_buffer.begin().base(), this->original_size);
     }
 };
@@ -416,7 +422,7 @@ struct ParametersElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const {
+    void save(SaveState* save) const noexcept {
         save->save(data);
     }
 
@@ -440,7 +446,7 @@ struct HeadersElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const {
+    void save(SaveState* save) const noexcept {
         save->save(data);
     }
 
@@ -550,13 +556,13 @@ static const char* ResponseHeadersLabels[] = {
 
 struct Test;
 struct Group;
-enum NestedTestType : uint8_t {
+enum NestedTestType : size_t {
     TEST_VARIANT,
     GROUP_VARIANT,
 };
 using NestedTest = std::variant<Test, Group>;
 
-enum RequestBodyType : uint8_t {
+enum RequestBodyType : size_t {
     REQUEST_JSON,
     REQUEST_RAW,
     REQUEST_MULTIPART,
@@ -597,7 +603,7 @@ struct Request {
     }
 };
 
-enum ResponseBodyType : uint8_t {
+enum ResponseBodyType : size_t {
     RESPONSE_JSON,
     RESPONSE_HTML,
     RESPONSE_RAW,
@@ -641,7 +647,7 @@ struct Response {
     }
 };
 
-enum HTTPType : uint8_t {
+enum HTTPType : size_t {
     HTTP_GET,
     HTTP_POST,
     HTTP_PUT,
@@ -730,14 +736,14 @@ static const char* HTTPStatusLabels[] = {
     (const char*)"511 Network Authentication Required",
 };
 
-enum TestFlags : uint8_t {
+enum TestFlags : size_t {
     TEST_DISABLED = 1 << 0,
 };
 
 struct Test {
     size_t parent_id;
     size_t id;
-    uint8_t flags;
+    size_t flags;
 
     HTTPType type;
     std::string endpoint;
@@ -774,7 +780,7 @@ struct TestResult {
     httplib::Response response;
 };
 
-enum GroupFlags : uint8_t {
+enum GroupFlags : size_t {
     GROUP_DISABLED = 1 << 0,
     GROUP_OPEN = 1 << 1,
 };
@@ -782,7 +788,7 @@ enum GroupFlags : uint8_t {
 struct Group {
     size_t parent_id;
     size_t id;
-    uint8_t flags;
+    size_t flags;
 
     std::string name;
     std::vector<size_t> children_idx;
@@ -809,11 +815,19 @@ struct Group {
 };
 
 constexpr bool request_eq(const Request* a, const Request* b) noexcept {
-    return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers && a->parameters == b->parameters;
+    return a->body_type == b->body_type
+        && a->body == b->body 
+        && a->cookies == b->cookies 
+        && a->headers == b->headers 
+        && a->parameters == b->parameters;
 }
 
 constexpr bool response_eq(const Response* a, const Response* b) noexcept {
-    return a->status == b->status && a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
+    return a->status == b->status 
+        && a->body_type == b->body_type 
+        && a->body == b->body 
+        && a->cookies == b->cookies 
+        && a->headers == b->headers;
 }
 
 constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
@@ -858,6 +872,7 @@ struct AppState {
 
     BS::thread_pool thr_pool;
 
+    // clear on save
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
     std::unordered_set<size_t> selected_tests = {};
 
@@ -875,16 +890,25 @@ struct AppState {
         },
     };
 
-    // probably can do with some bs macros
     void save(SaveState* save) const noexcept {
         Log(LogLevel::Debug, "Saving app %zu", this->tests.size());
+
         save->save(this->id_counter);
         save->save(this->tests);
+        save->finish_save();
+
+        Log(LogLevel::Debug, "save_size: %zu", save->original_size);
+
     }
 
     void load(SaveState* save) noexcept {
+        Log(LogLevel::Debug, "load_size: %zu", save->original_size);
+
         save->load(this->id_counter);
         save->load(this->tests);
+
+        this->opened_editor_tabs.clear();
+        this->selected_tests.clear();
 
         Log(LogLevel::Debug, "Loading app %zu", this->tests.size());
         for (const auto& [key, test] : this->tests) {
@@ -1654,7 +1678,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
     }
 }
 
-enum ModalResult : uint8_t {
+enum ModalResult : size_t {
     MODAL_NONE,
     MODAL_CONTINUE,
     MODAL_SAVE,
@@ -1691,7 +1715,7 @@ ModalResult unsaved_changes(AppState* app) noexcept {
     return result;
 }
 
-enum EditorTabResult : uint8_t {
+enum EditorTabResult : size_t {
     TAB_NONE,
     TAB_CLOSED,
     TAB_SAVED,
@@ -1768,6 +1792,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
         if (ImGui::Button("Save")) {
             result = TAB_SAVED;
         }
+
         ImGui::SameLine();
         if (ImGui::Button("Discard")) {
             result = TAB_DISCARD;
@@ -1801,23 +1826,22 @@ void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::Button("Save")) {
-        std::ofstream out("output.wt");
-
-        SaveState save;
+        SaveState save = {};
 
         save.save(*app);
-        save.finish_save();
 
+        std::ofstream out("output.wt");
         save.write(out);
     }
 
     if (ImGui::Button("Load")) {
-        std::ifstream in("output.wt");
+        SaveState save = {};
 
-        SaveState save;
+        std::ifstream in("output.wt");
         save.read(in);
 
         save.load(*app);
+        save.reset_load();
     }
 
     if (ImGui::BeginTabBar("editor")) {
