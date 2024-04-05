@@ -151,7 +151,7 @@ struct PartialDict {
     }
 };
 
-enum MultiPartBodyDataType : size_t {
+enum MultiPartBodyDataType : uint8_t {
     MPBD_FILES,
     MPBD_TEXT,
 };
@@ -556,13 +556,13 @@ static const char* ResponseHeadersLabels[] = {
 
 struct Test;
 struct Group;
-enum NestedTestType : size_t {
+enum NestedTestType : uint8_t {
     TEST_VARIANT,
     GROUP_VARIANT,
 };
 using NestedTest = std::variant<Test, Group>;
 
-enum RequestBodyType : size_t {
+enum RequestBodyType : uint8_t {
     REQUEST_JSON,
     REQUEST_RAW,
     REQUEST_MULTIPART,
@@ -603,7 +603,7 @@ struct Request {
     }
 };
 
-enum ResponseBodyType : size_t {
+enum ResponseBodyType : uint8_t {
     RESPONSE_JSON,
     RESPONSE_HTML,
     RESPONSE_RAW,
@@ -647,7 +647,7 @@ struct Response {
     }
 };
 
-enum HTTPType : size_t {
+enum HTTPType : uint8_t {
     HTTP_GET,
     HTTP_POST,
     HTTP_PUT,
@@ -736,14 +736,14 @@ static const char* HTTPStatusLabels[] = {
     (const char*)"511 Network Authentication Required",
 };
 
-enum TestFlags : size_t {
+enum TestFlags : uint8_t {
     TEST_DISABLED = 1 << 0,
 };
 
 struct Test {
     size_t parent_id;
     size_t id;
-    size_t flags;
+    uint8_t flags;
 
     HTTPType type;
     std::string endpoint;
@@ -780,7 +780,7 @@ struct TestResult {
     httplib::Response response;
 };
 
-enum GroupFlags : size_t {
+enum GroupFlags : uint8_t {
     GROUP_DISABLED = 1 << 0,
     GROUP_OPEN = 1 << 1,
 };
@@ -788,7 +788,7 @@ enum GroupFlags : size_t {
 struct Group {
     size_t parent_id;
     size_t id;
-    size_t flags;
+    uint8_t flags;
 
     std::string name;
     std::vector<size_t> children_idx;
@@ -1678,7 +1678,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
     }
 }
 
-enum ModalResult : size_t {
+enum ModalResult : uint8_t {
     MODAL_NONE,
     MODAL_CONTINUE,
     MODAL_SAVE,
@@ -1715,7 +1715,7 @@ ModalResult unsaved_changes(AppState* app) noexcept {
     return result;
 }
 
-enum EditorTabResult : size_t {
+enum EditorTabResult : uint8_t {
     TAB_NONE,
     TAB_CLOSED,
     TAB_SAVED,
