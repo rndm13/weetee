@@ -14,6 +14,7 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
+#include <thread>
 
 #if OPENSSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -866,16 +867,17 @@ struct AppState {
     size_t id_counter = 0;
 
     // don't save
+    size_t undo_idx = {};
     ImFont* regular_font;
     ImFont* mono_font;
     HelloImGui::RunnerParams* runner_params;
 
-    // do not save
+    std::vector<SaveState> undo_history{};
     std::optional<pfd::open_file> open_file;
     std::optional<pfd::save_file> save_file;
     std::optional<std::string> filename;
 
-    // clear on save
+    // update on load
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
     std::unordered_set<size_t> selected_tests = {};
 
@@ -908,6 +910,60 @@ struct AppState {
         this->opened_editor_tabs.clear();
         this->selected_tests.clear();
     }
+
+    // should be called after every edit
+    void push_undo_history() noexcept {
+        if (this->undo_idx < this->undo_history.size() - 1) {
+            // remove redos
+            this->undo_history.resize(this->undo_idx);
+        }
+
+        this->undo_history.emplace_back();
+        SaveState* new_save = &this->undo_history.back();
+        new_save->save(*this);
+        new_save->finish_save();
+
+        this->undo_idx++;
+
+        // Log(LogLevel::Debug, "Pushed history: %zu", this->undo_idx);
+    }
+
+    void reset_undo_history() noexcept {
+        // add initial undo
+        this->undo_history.clear();
+        this->push_undo_history();
+        this->undo_idx = 0;
+    }
+
+    void undo() noexcept {
+        assert(this->undo_idx > 0);
+
+        this->undo_idx--;
+        this->undo_history[this->undo_idx].load(*this);
+        this->undo_history[this->undo_idx].reset_load();
+
+        // Log(LogLevel::Debug, "Undo: %zu", this->undo_idx);
+    }
+
+    void redo() noexcept {
+        assert(this->undo_idx < this->undo_history.size() - 1);
+
+        this->undo_idx++;
+        this->undo_history[this->undo_idx].load(*this);
+        this->undo_history[this->undo_idx].reset_load();
+
+        // Log(LogLevel::Debug, "Redo: %zu", this->undo_idx);
+    }
+
+    AppState(HelloImGui::RunnerParams* runner_params) : runner_params(runner_params) {
+        reset_undo_history();
+    }
+
+    // no copy/move
+    AppState(const AppState&) = delete;
+    AppState(AppState&&) = delete;
+    AppState& operator=(const AppState&) = delete;
+    AppState& operator=(AppState&&) = delete;
 };
 
 bool nested_test_parent_disabled(AppState* app, const NestedTest* nt) noexcept {
@@ -937,6 +993,7 @@ void move_children_up(AppState* app, Group* group) noexcept {
         std::visit(ParentIDSetVisit(parent_group.id), child);
         parent_group.children_idx.push_back(child_id);
     }
+
     group->children_idx.clear();
 }
 
@@ -1144,6 +1201,8 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
     if (change) {
         app->selected_tests.clear();
+
+        app->push_undo_history();
     }
 
     return change;
@@ -1213,6 +1272,8 @@ void display_tree_test(AppState* app, NestedTest& test,
             } else {
                 leaf.flags &= ~TEST_DISABLED;
             }
+
+            app->push_undo_history();
         }
 
         if (parent_disabled) {
@@ -1258,6 +1319,8 @@ void display_tree_test(AppState* app, NestedTest& test,
             } else {
                 group.flags &= ~GROUP_DISABLED;
             }
+
+            app->push_undo_history();
         }
 
         if (parent_disabled) {
@@ -1271,12 +1334,10 @@ void display_tree_test(AppState* app, NestedTest& test,
         }
         const bool changed = context_menu_tree_view(app, &test);
 
-        if (group.flags & GROUP_OPEN) {
-            if (!changed) {
-                for (size_t child_id : group.children_idx) {
-                    display_tree_test(app, app->tests[child_id],
-                                      indentation + 22);
-                }
+        if (group.flags & GROUP_OPEN && !changed) {
+            for (size_t child_id : group.children_idx) {
+                display_tree_test(app, app->tests[child_id],
+                                  indentation + 22);
             }
         }
     } break;
@@ -1849,6 +1910,8 @@ void tabbed_editor(AppState* app) noexcept {
             case TAB_SAVED:
                 *tab.original = tab.edit;
                 tab.just_opened = true;
+
+                app->push_undo_history();
                 break;
             case TAB_CLOSED:
                 closed_id = id;
@@ -2030,6 +2093,7 @@ void open_file(AppState* app) noexcept {
     save.read(in);
     Log(LogLevel::Info, "Loading from '%s': %zuB", app->filename->c_str(), save.original_size);
     save.load(*app);
+    app->reset_undo_history();
 }
 
 void app_save_as(AppState* app) noexcept {
@@ -2066,6 +2130,15 @@ void show_menus(AppState* app) noexcept {
         ImGui::EndMenu();
     }
 
+    if (ImGui::BeginMenu("Edit")) {
+        if (ImGui::MenuItem("Undo", "Ctrl + Z", nullptr, app->undo_idx > 0)) {
+            app->undo();
+        } else if (ImGui::MenuItem("Redo", "Ctrl + Shift + Z", nullptr, app->undo_idx < app->undo_history.size() - 1)) {
+            app->redo();
+        }
+        ImGui::EndMenu();
+    }
+
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (arrow("start", ImGuiDir_Right)) {
         // find tests to execute
@@ -2097,7 +2170,7 @@ void show_gui(AppState* app) noexcept {
     ImGui::ShowDemoWindow();
     ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 
-    // file saving
+    // saving
     if (app->open_file.has_value() && app->open_file->ready()) {
         auto result = app->open_file->result();
 
@@ -2119,10 +2192,16 @@ void show_gui(AppState* app) noexcept {
 
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
         app_save_as(app);
-    } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+    } else if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
         app_save(app);
-    } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
+    } else if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_O)) {
         app_open(app);
+    }
+
+    if (app->undo_idx > 0 && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+        app->undo();
+    } else if (app->undo_idx < app->undo_history.size() - 1 && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+        app->redo();
     }
 }
 
@@ -2145,10 +2224,7 @@ void post_init(AppState* app) noexcept {
 
 int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
-    auto app = AppState{
-        .runner_params = &runner_params,
-        .thr_pool = BS::thread_pool(),
-    };
+    auto app = AppState(&runner_params);
 
     runner_params.appWindowParams.windowTitle = "weetee";
 
