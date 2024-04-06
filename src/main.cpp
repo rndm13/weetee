@@ -151,16 +151,6 @@ struct PartialDict {
     }
 };
 
-enum MultiPartBodyDataType : uint8_t {
-    MPBD_FILES,
-    MPBD_TEXT,
-};
-
-static const char* MPBDTypeLabels[] = {
-    [MPBD_FILES] = (const char*)"Files",
-    [MPBD_TEXT] = (const char*)"Text",
-};
-
 // got from here https://stackoverflow.com/a/60567091
 template <class Variant, std::size_t I = 0>
 Variant variant_from_index(std::size_t index) {
@@ -186,7 +176,7 @@ struct SaveState {
 
     std::byte* cur_load(std::size_t offset = 0) const noexcept {
         assert(this->load_idx + offset <= original_buffer.size());
-        return (std::byte*)original_buffer.begin().base() + this->load_idx + offset;
+        return (std::byte*)original_buffer.data() + this->load_idx + offset;
     }
 
     template <class T = void>
@@ -208,7 +198,7 @@ struct SaveState {
     }
 
     void save(const std::string& str) noexcept {
-        this->save((std::byte*)str.begin().base(), str.length());
+        this->save((std::byte*)str.data(), str.length());
         this->save('\0');
     }
 
@@ -218,7 +208,7 @@ struct SaveState {
             length++;
         }
         str.resize(length);
-        this->load((std::byte*)str.begin().base(), length);
+        this->load((std::byte*)str.data(), length);
 
         this->load_idx++; // skip over null terminator
     }
@@ -318,12 +308,14 @@ struct SaveState {
         this->load(element.data);
     }
 
+    // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
     void save(const T& any) noexcept {
         any.save(this);
     }
 
+    // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
     void load(T& any) noexcept {
@@ -340,7 +332,7 @@ struct SaveState {
 
     void write(std::ostream& os) const noexcept {
         os.write((char*)&this->original_size, sizeof(std::size_t));
-        os.write((char*)this->original_buffer.begin().base(), this->original_buffer.size());
+        os.write((char*)this->original_buffer.data(), this->original_buffer.size());
         os.flush();
     }
 
@@ -352,8 +344,18 @@ struct SaveState {
         }
         this->original_buffer.resize(this->original_size);
 
-        is.read((char*)this->original_buffer.begin().base(), this->original_size);
+        is.read((char*)this->original_buffer.data(), this->original_size);
     }
+};
+
+enum MultiPartBodyDataType : uint8_t {
+    MPBD_FILES,
+    MPBD_TEXT,
+};
+
+static const char* MPBDTypeLabels[] = {
+    [MPBD_FILES] = (const char*)"Files",
+    [MPBD_TEXT] = (const char*)"Text",
 };
 
 using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
@@ -815,19 +817,11 @@ struct Group {
 };
 
 constexpr bool request_eq(const Request* a, const Request* b) noexcept {
-    return a->body_type == b->body_type
-        && a->body == b->body 
-        && a->cookies == b->cookies 
-        && a->headers == b->headers 
-        && a->parameters == b->parameters;
+    return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers && a->parameters == b->parameters;
 }
 
 constexpr bool response_eq(const Response* a, const Response* b) noexcept {
-    return a->status == b->status 
-        && a->body_type == b->body_type 
-        && a->body == b->body 
-        && a->cookies == b->cookies 
-        && a->headers == b->headers;
+    return a->status == b->status && a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
 }
 
 constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
@@ -863,20 +857,25 @@ struct EditorTab {
 };
 
 struct AppState {
+    // don't save
+    uint8_t flags = {};
+
     // save
     size_t id_counter = 0;
 
     // don't save
     ImFont* regular_font;
     ImFont* mono_font;
+    HelloImGui::RunnerParams* runner_params;
 
-    BS::thread_pool thr_pool;
+    // do not save
+    std::optional<pfd::open_file> open_file;
+    std::optional<pfd::save_file> save_file;
+    std::optional<std::string> filename;
 
     // clear on save
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
     std::unordered_set<size_t> selected_tests = {};
-
-    HelloImGui::RunnerParams* runner_params;
 
     // save
     std::unordered_map<size_t, NestedTest> tests = {
@@ -890,6 +889,8 @@ struct AppState {
         },
     };
 
+    BS::thread_pool thr_pool;
+
     void save(SaveState* save) const noexcept {
         Log(LogLevel::Debug, "Saving app %zu", this->tests.size());
 
@@ -898,7 +899,6 @@ struct AppState {
         save->finish_save();
 
         Log(LogLevel::Debug, "save_size: %zu", save->original_size);
-
     }
 
     void load(SaveState* save) noexcept {
@@ -1827,25 +1827,6 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
-    if (ImGui::Button("Save")) {
-        SaveState save = {};
-
-        save.save(*app);
-
-        std::ofstream out("output.wt");
-        save.write(out);
-    }
-
-    if (ImGui::Button("Load")) {
-        SaveState save = {};
-
-        std::ifstream in("output.wt");
-        save.read(in);
-
-        save.load(*app);
-        save.reset_load();
-    }
-
     if (ImGui::BeginTabBar("editor")) {
         size_t closed_id = -1;
         for (auto& [id, tab] : app->opened_editor_tabs) {
@@ -2021,7 +2002,81 @@ void run_tests(AppState* app, std::vector<Test>* tests) noexcept {
     }
 }
 
+void save_file(AppState* app) noexcept {
+    assert(app->filename.has_value());
+
+    std::ofstream out(app->filename.value());
+    // if (out.failbit == std::ios::goodbit) {
+        SaveState save{};
+        save.save(*app);
+        save.finish_save();
+        save.write(out);
+        return;
+    // }
+
+    Log(LogLevel::Error, "Failed to save to file \"%s\"", app->filename->c_str());
+}
+
+void open_file(AppState* app) noexcept {
+    assert(app->filename.has_value());
+
+    std::ifstream in(app->filename.value());
+    // if (in.failbit == std::ios::goodbit) {
+        SaveState save{};
+        save.read(in);
+        save.load(*app);
+        return;
+    // }
+
+    Log(LogLevel::Error, "Failed to open file \"%s\"", app->filename->c_str());
+}
+
 void show_menus(AppState* app) noexcept {
+    if (app->open_file.has_value() && app->open_file->ready()) {
+        auto result = app->open_file->result();
+        Log(LogLevel::Debug, "Open file: %zu", result.size());
+        if (result.size() > 0) {
+            app->filename = result[0];
+            Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
+            app->open_file = std::nullopt;
+            open_file(app);
+        }
+    }
+
+    if (app->save_file.has_value() && app->save_file->ready()) {
+        app->filename = app->save_file->result();
+        app->save_file = std::nullopt;
+        save_file(app);
+    }
+
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Save As", "Ctrl + Shift + S")) {
+            app->save_file = pfd::save_file(
+                "Save To", ".",
+                {"All Files", "*"},
+                pfd::opt::none);
+        }
+
+        if (ImGui::MenuItem("Save", "Ctrl + S")) {
+            if (!app->filename.has_value()) {
+                app->save_file = pfd::save_file(
+                    "Save To", ".",
+                    {"All Files", "*"},
+                    pfd::opt::none);
+            } else {
+                save_file(app);
+            }
+        }
+
+        if (ImGui::MenuItem("Open", "Ctrl + O")) {
+            app->open_file = pfd::open_file(
+                "Open File", ".",
+                {"All Files", "*"},
+                pfd::opt::none);
+        }
+        ImGui::EndMenu();
+    }
+
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (arrow("start", ImGuiDir_Right)) {
         // find tests to execute
@@ -2074,8 +2129,8 @@ void post_init(AppState* app) noexcept {
 int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
     auto app = AppState{
-        .thr_pool = BS::thread_pool(),
         .runner_params = &runner_params,
+        .thr_pool = BS::thread_pool(),
     };
 
     runner_params.appWindowParams.windowTitle = "weetee";
