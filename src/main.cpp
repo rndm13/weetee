@@ -2032,66 +2032,36 @@ void open_file(AppState* app) noexcept {
     save.load(*app);
 }
 
-void show_menus(AppState* app) noexcept {
-    if (app->open_file.has_value() && app->open_file->ready()) {
-        auto result = app->open_file->result();
+void app_save_as(AppState* app) noexcept {
+    app->save_file = pfd::save_file(
+        "Save To", ".",
+        {"All Files", "*"},
+        pfd::opt::none);
+}
 
-        if (result.size() > 0) {
-            app->filename = result[0];
-            Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
-            open_file(app);
-        }
-
-        app->open_file = std::nullopt;
-    }
-
-    if (app->save_file.has_value() && app->save_file->ready()) {
-        app->filename = app->save_file->result();
+void app_save(AppState* app) noexcept {
+    if (!app->filename.has_value()) {
+        app_save_as(app);
+    } else {
         save_file(app);
-
-        app->save_file = std::nullopt;
     }
+}
 
-    auto app_save_as = [app]() {
-        app->save_file = pfd::save_file(
-            "Save To", ".",
-            {"All Files", "*"},
-            pfd::opt::none);
-    };
-    auto app_save = [app]() {
-        if (!app->filename.has_value()) {
-            app->save_file = pfd::save_file(
-                "Save To", ".",
-                {"All Files", "*"},
-                pfd::opt::none);
-        } else {
-            save_file(app);
-        }
-    };
-    auto app_open = [app]() {
-        app->open_file = pfd::open_file(
-            "Open File", ".",
-            {"All Files", "*"},
-            pfd::opt::none);
-    };
+void app_open(AppState* app) noexcept {
+    app->open_file = pfd::open_file(
+        "Open File", ".",
+        {"All Files", "*"},
+        pfd::opt::none);
+}
 
-    {
-        auto io = ImGui::GetIO();
-        if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
-            app_save_as();
-        } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
-            app_save();
-        } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
-            app_open();
-        }
-    }
+void show_menus(AppState* app) noexcept {
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Save As", "Ctrl + Shift + S")) {
-            app_save_as();
+            app_save_as(app);
         } else if (ImGui::MenuItem("Save", "Ctrl + S")) {
-            app_save();
+            app_save(app);
         } else if (ImGui::MenuItem("Open", "Ctrl + O")) {
-            app_open();
+            app_open(app);
         }
         ImGui::EndMenu();
     }
@@ -2126,6 +2096,34 @@ void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
     ImGui::ShowDemoWindow();
     ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
+
+    // file saving
+    if (app->open_file.has_value() && app->open_file->ready()) {
+        auto result = app->open_file->result();
+
+        if (result.size() > 0) {
+            app->filename = result[0];
+            Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
+            open_file(app);
+        }
+
+        app->open_file = std::nullopt;
+    }
+
+    if (app->save_file.has_value() && app->save_file->ready()) {
+        app->filename = app->save_file->result();
+        save_file(app);
+
+        app->save_file = std::nullopt;
+    }
+
+    if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
+        app_save_as(app);
+    } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+        app_save(app);
+    } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
+        app_open(app);
+    }
 }
 
 // program leaks those fonts
