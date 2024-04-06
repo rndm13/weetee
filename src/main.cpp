@@ -14,6 +14,8 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
+#include <stdexcept>
+#include <sys/wait.h>
 
 #if OPENSSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -347,6 +349,72 @@ struct SaveState {
 
         is.read((char*)this->original_buffer.data(), this->original_size);
     }
+};
+
+struct UndoHistory {
+    size_t undo_idx = {};
+    std::vector<SaveState> undo_history;
+
+    // should be called after every edit
+    template <class T>
+    void push_undo_history(const T* obj) noexcept {
+        if (this->undo_idx < this->undo_history.size() - 1) {
+            // remove redos
+            this->undo_history.resize(this->undo_idx);
+        }
+
+        this->undo_history.emplace_back();
+        SaveState* new_save = &this->undo_history.back();
+        new_save->save(*obj);
+        new_save->finish_save();
+
+        this->undo_idx++;
+    }
+
+    template <class T>
+    void reset_undo_history(const T* obj) noexcept {
+        // add initial undo
+        this->undo_history.clear();
+        this->push_undo_history(obj);
+        this->undo_idx = 0;
+    }
+
+    constexpr bool can_undo() const noexcept {
+        return this->undo_idx > 0;
+    }
+
+    template <class T>
+    void undo(T* obj) noexcept {
+        assert(this->can_undo());
+
+        this->undo_idx--;
+        this->undo_history[this->undo_idx].load(*obj);
+        this->undo_history[this->undo_idx].reset_load();
+    }
+
+    constexpr bool can_redo() const noexcept {
+        return this->undo_idx < this->undo_history.size() - 1;
+    }
+
+    template <class T>
+    void redo(T* obj) noexcept {
+        assert(this->can_redo());
+
+        this->undo_idx++;
+        this->undo_history[this->undo_idx].load(*obj);
+        this->undo_history[this->undo_idx].reset_load();
+    }
+
+    UndoHistory() {}
+    template <class T>
+    UndoHistory(const T* obj) noexcept {
+        reset_undo_history(obj);
+    }
+
+    UndoHistory(const UndoHistory&) = default;
+    UndoHistory(UndoHistory&&) = default;
+    UndoHistory& operator=(const UndoHistory&) = default;
+    UndoHistory& operator=(UndoHistory&&) = default;
 };
 
 enum MultiPartBodyDataType : uint8_t {
@@ -852,11 +920,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 // do not save
 struct EditorTab {
     bool open = true;
-    bool just_opened;
+    bool just_opened = true;
     size_t original_idx;
-    // maybe replace with idx?
-    // NestedTest* original;
-    NestedTest edit;
+    std::string name;
 };
 
 struct AppState {
@@ -867,12 +933,12 @@ struct AppState {
     size_t id_counter = 0;
 
     // don't save
-    size_t undo_idx = {};
     ImFont* regular_font;
     ImFont* mono_font;
     HelloImGui::RunnerParams* runner_params;
 
-    std::vector<SaveState> undo_history{};
+    UndoHistory undo_history;
+
     std::optional<pfd::open_file> open_file;
     std::optional<pfd::save_file> save_file;
     std::optional<std::string> filename;
@@ -897,7 +963,8 @@ struct AppState {
 
     void save(SaveState* save) const noexcept {
         // this save is obviously going to be pretty big so reserve instantly for speed
-        save->original_buffer.reserve(512);
+        // save->original_buffer.reserve(512);
+
         save->save(this->id_counter);
         save->save(this->tests);
     }
@@ -920,57 +987,45 @@ struct AppState {
                 ++it;
             }
         }
-
-        // this->opened_editor_tabs.clear();
-        // this->selected_tests.clear();
     }
 
-    // should be called after every edit
-    void push_undo_history() noexcept {
-        if (this->undo_idx < this->undo_history.size() - 1) {
-            // remove redos
-            this->undo_history.resize(this->undo_idx);
+    void editor_open_tab(size_t id) noexcept {
+        if (this->opened_editor_tabs.contains(id)) {
+            this->opened_editor_tabs[id].just_opened = true;
+        } else {
+            this->opened_editor_tabs[id] = EditorTab{
+                .original_idx = id,
+                .name = std::visit(LabelVisit(), this->tests[id]),
+            };
         }
-
-        this->undo_history.emplace_back();
-        SaveState* new_save = &this->undo_history.back();
-        new_save->save(*this);
-        new_save->finish_save();
-
-        this->undo_idx++;
-
-        // Log(LogLevel::Debug, "Pushed history: %zu", this->undo_idx);
     }
 
-    void reset_undo_history() noexcept {
-        // add initial undo
-        this->undo_history.clear();
-        this->push_undo_history();
-        this->undo_idx = 0;
+    void focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) noexcept {
+        for (auto& [id, test] : this->tests) {
+            try {
+                if (!nested_test_eq(&test, &old_tests->at(id))) {
+                    this->editor_open_tab(id);
+                }
+            } catch (std::out_of_range&) {
+                this->editor_open_tab(id);
+            }
+        }
     }
 
     void undo() noexcept {
-        assert(this->undo_idx > 0);
-
-        this->undo_idx--;
-        this->undo_history[this->undo_idx].load(*this);
-        this->undo_history[this->undo_idx].reset_load();
-
-        // Log(LogLevel::Debug, "Undo: %zu", this->undo_idx);
+        auto old_tests = this->tests;
+        this->undo_history.undo(this);
+        this->focus_diff_tests(&old_tests);
     }
 
     void redo() noexcept {
-        assert(this->undo_idx < this->undo_history.size() - 1);
-
-        this->undo_idx++;
-        this->undo_history[this->undo_idx].load(*this);
-        this->undo_history[this->undo_idx].reset_load();
-
-        // Log(LogLevel::Debug, "Redo: %zu", this->undo_idx);
+        auto old_tests = this->tests;
+        this->undo_history.redo(this);
+        this->focus_diff_tests(&old_tests);
     }
 
-    AppState(HelloImGui::RunnerParams* runner_params) : runner_params(runner_params) {
-        reset_undo_history();
+    AppState(HelloImGui::RunnerParams* runner_params) noexcept : runner_params(runner_params) {
+        this->undo_history.reset_undo_history(this);
     }
 
     // no copy/move
@@ -1043,20 +1098,8 @@ void delete_test(AppState* app, NestedTest* test) noexcept {
     app->opened_editor_tabs.erase(id);
 }
 
-void editor_open_tab(AppState* app, size_t id) {
-    if (app->opened_editor_tabs.contains(id)) {
-        app->opened_editor_tabs[id].just_opened = true;
-    } else {
-        app->opened_editor_tabs[id] = {
-            .just_opened = true,
-            .original_idx = id,
-            // .original = &app->tests[id],
-            .edit = app->tests[id]};
-    }
-}
-
 bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
-    bool change = false;
+    bool changed = false;
     size_t nested_test_id = std::visit(IDVisit(), *nested_test);
 
     if (ImGui::BeginPopupContextItem()) {
@@ -1123,7 +1166,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             auto& selected_group = std::get<Group>(*nested_test);
             if (selected_count == 1) {
                 if (ImGui::MenuItem("Add a new test")) {
-                    change = true;
+                    changed = true;
                     selected_group.flags |= GROUP_OPEN;
 
                     auto id = ++app->id_counter;
@@ -1134,10 +1177,11 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                         .endpoint = "https://example.com",
                     });
                     selected_group.children_idx.push_back(id);
+                    app->editor_open_tab(id);
                 }
 
                 if (ImGui::MenuItem("Add a new group")) {
-                    change = true;
+                    changed = true;
                     selected_group.flags |= GROUP_OPEN;
                     auto id = ++app->id_counter;
                     app->tests[id] = (Group{
@@ -1150,7 +1194,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             }
 
             if (ImGui::MenuItem("Ungroup", nullptr, false, !selected_root)) {
-                change = true;
+                changed = true;
                 for (auto selected_idx : app->selected_tests) {
                     auto& selected = app->tests[selected_idx];
 
@@ -1165,18 +1209,18 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         }
 
         if (ImGui::MenuItem("Edit", nullptr, false, selected_count == 1)) {
-            editor_open_tab(app, nested_test_id);
+            app->editor_open_tab(nested_test_id);
         }
 
         if (ImGui::MenuItem("Delete", nullptr, false, !selected_root)) {
-            change = true;
+            changed = true;
             for (auto test_idx : app->selected_tests) {
                 delete_test(app, &app->tests[test_idx]);
             }
         }
 
         if (same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !selected_root)) {
-            change = true;
+            changed = true;
 
             auto* parent_test = &app->tests[parent_id];
             assert(std::holds_alternative<Group>(*parent_test));
@@ -1214,13 +1258,13 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         ImGui::EndPopup();
     }
 
-    if (change) {
+    if (changed) {
         app->selected_tests.clear();
 
-        app->push_undo_history();
+        app->undo_history.push_undo_history(app);
     }
 
-    return change;
+    return changed;
 }
 
 bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
@@ -1288,7 +1332,7 @@ void display_tree_test(AppState* app, NestedTest& test,
                 leaf.flags &= ~TEST_DISABLED;
             }
 
-            app->push_undo_history();
+            app->undo_history.push_undo_history(app);
         }
 
         if (parent_disabled) {
@@ -1300,7 +1344,7 @@ void display_tree_test(AppState* app, NestedTest& test,
         const bool changed = context_menu_tree_view(app, &test);
 
         if (!changed && double_clicked) {
-            editor_open_tab(app, leaf.id);
+            app->editor_open_tab(leaf.id);
         }
     } break;
     case GROUP_VARIANT: {
@@ -1335,7 +1379,7 @@ void display_tree_test(AppState* app, NestedTest& test,
                 group.flags &= ~GROUP_DISABLED;
             }
 
-            app->push_undo_history();
+            app->undo_history.push_undo_history(app);
         }
 
         if (parent_disabled) {
@@ -1508,6 +1552,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
 
             if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
                 elem->data.data = elem->data.open_file->result();
+                changed |= elem->data.open_file->result().size() > 0;
                 elem->data.open_file = std::nullopt;
             }
             break;
@@ -1517,10 +1562,13 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
 }
 
 template <typename Data>
-void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
+bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
                   const char** hints = nullptr, const size_t hint_count = 0) noexcept {
     using DataType = PartialDict<Data>::DataType;
     using ElementType = PartialDict<Data>::ElementType;
+
+    bool changed = false;
+
     if (ImGui::BeginTable(label, 2 + DataType::field_count, TABLE_FLAGS, ImVec2(0, 300))) {
         ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("Name");
@@ -1534,12 +1582,14 @@ void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
             auto* elem = &pd->elements[i];
             ImGui::TableNextRow();
             ImGui::PushID(i);
-            partial_dict_row(app, pd, elem, hints, hint_count);
+            changed = partial_dict_row(app, pd, elem, hints, hint_count);
             deletion |= elem->to_delete;
             ImGui::PopID();
         }
 
         if (deletion) {
+            changed = true;
+
             for (int i = pd->elements.size() - 1; i >= 0; i--) {
                 if (pd->elements[i].to_delete) {
                     pd->elements.erase(pd->elements.begin() + i);
@@ -1556,15 +1606,21 @@ void partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
         ImGui::TableNextRow();
         ImGui::PushID(pd->elements.size());
         if (partial_dict_row(app, pd, &pd->add_element, hints, hint_count)) {
+            changed = true;
+
             pd->elements.push_back(pd->add_element);
             pd->add_element = {};
         }
         ImGui::PopID();
         ImGui::EndTable();
     }
+
+    return changed;
 }
 
-void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
+bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
+    bool changed = false;
+
     if (ImGui::BeginTabBar("Request")) {
         ImGui::PushID("request");
 
@@ -1578,24 +1634,16 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
             if (ImGui::Combo(
                     "Body Type", (int*)&test.request.body_type,
                     RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
+                changed = true;
 
                 // TODO: convert between current body types
                 switch (test.request.body_type) {
                 case REQUEST_JSON:
+                case REQUEST_RAW:
                     test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
                     if (!std::holds_alternative<std::string>(test.request.body)) {
                         test.request.body = "{}";
                         test.request.editor.SetText("{}");
-                        // TODO: allow for palette change within view settings
-                        test.request.editor.SetPalette(TextEditor::GetDarkPalette());
-                    }
-                    break;
-
-                case REQUEST_RAW:
-                    test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
-                    if (!std::holds_alternative<std::string>(test.request.body)) {
-                        test.request.body = "";
-                        test.request.editor.SetText("");
                         // TODO: allow for palette change within view settings
                         test.request.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
@@ -1618,24 +1666,17 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                         Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
                     }
                 }
-
-                ImGui::PushFont(app->mono_font);
-                test.request.editor.Render("##body", false, ImVec2(0, 300));
-                ImGui::PopFont();
-
-                test.request.body = test.request.editor.GetText();
-                break;
-
             case REQUEST_RAW:
                 ImGui::PushFont(app->mono_font);
-                test.request.editor.Render("##body", false, ImVec2(0, 300));
+                changed = changed | test.request.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
+                // NOTE: possibly slow
                 test.request.body = test.request.editor.GetText();
                 break;
 
             case REQUEST_MULTIPART:
                 auto& mpb = std::get<MultiPartBody>(test.request.body);
-                partial_dict(app, &mpb, "##body");
+                changed = changed | partial_dict(app, &mpb, "##body");
                 break;
             }
             ImGui::EndTabItem();
@@ -1644,14 +1685,14 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Parameters")) {
             ImGui::Text("TODO: add undeletable params for url");
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.request.parameters, "##parameters");
+            changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.request.cookies, "##cookies");
+            changed = changed | partial_dict(app, &test.request.cookies, "##cookies");
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1659,7 +1700,7 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.request.headers, "##headers", RequestHeadersLabels, IM_ARRAYSIZE(RequestHeadersLabels));
+            changed = changed | partial_dict(app, &test.request.headers, "##headers", RequestHeadersLabels, IM_ARRAYSIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1667,9 +1708,13 @@ void editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         ImGui::EndTabBar();
         ImGui::PopID();
     }
+
+    return changed;
 }
 
-void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
+bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
+    bool changed = false;
+
     if (ImGui::BeginTabBar("Response")) {
         ImGui::PushID("response");
 
@@ -1685,6 +1730,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
             if (ImGui::Combo(
                     "Body Type", (int*)&test.response.body_type,
                     ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
+                changed = true;
 
                 // TODO: convert between current body types
                 switch (test.response.body_type) {
@@ -1720,14 +1766,15 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
             case RESPONSE_HTML:
             case RESPONSE_RAW:
                 ImGui::PushFont(app->mono_font);
-                test.response.editor.Render("##body", false, ImVec2(0, 300));
+                changed = changed | test.response.editor.Render("##body", false, ImVec2(0, 300));
                 ImGui::PopFont();
+                // NOTE: possibly slow
                 test.response.body = test.response.editor.GetText();
                 break;
 
             case RESPONSE_MULTIPART:
                 auto& mpb = std::get<MultiPartBody>(test.response.body);
-                partial_dict(app, &mpb, "##body");
+                changed = changed | partial_dict(app, &mpb, "##body");
                 break;
             }
             ImGui::EndTabItem();
@@ -1735,7 +1782,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Set Cookies")) {
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.response.cookies, "##cookies");
+            changed = changed | partial_dict(app, &test.response.cookies, "##cookies");
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1743,7 +1790,7 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
-            partial_dict(app, &test.response.headers, "##headers", ResponseHeadersLabels, IM_ARRAYSIZE(ResponseHeadersLabels));
+            changed = changed | partial_dict(app, &test.response.headers, "##headers", ResponseHeadersLabels, IM_ARRAYSIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1751,6 +1798,8 @@ void editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         ImGui::EndTabBar();
         ImGui::PopID();
     }
+
+    return changed;
 }
 
 enum ModalResult : uint8_t {
@@ -1793,109 +1842,71 @@ ModalResult unsaved_changes(AppState* app) noexcept {
 enum EditorTabResult : uint8_t {
     TAB_NONE,
     TAB_CLOSED,
-    TAB_SAVED,
-    TAB_SAVE_CLOSED,
-    TAB_DISCARD
+    TAB_CHANGED,
 };
 
 EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
-    assert(std::holds_alternative<Test>(tab.edit));
-    auto& test = std::get<Test>(tab.edit);
+    auto edit = &app->tests[tab.original_idx];
 
-    auto changed = [&tab, app]() {
-        return !nested_test_eq(&tab.edit, &app->tests[tab.original_idx]);
-    };
+    assert(std::holds_alternative<Test>(*edit));
+    auto& test = std::get<Test>(*edit);
+
+    bool changed = false;
+
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
-            std::visit(LabelVisit(), app->tests[tab.original_idx]).c_str(), &tab.open,
-            (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
-                (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
-
-        if (ImGui::Button("Save")) {
-            result = TAB_SAVED;
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Discard")) {
-            result = TAB_DISCARD;
-        }
+            tab.name.c_str(), &tab.open,
+            (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Endpoint", &test.endpoint);
-            ImGui::Combo(
-                "Type", (int*)&test.type,
-                HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+            changed = changed | ImGui::IsItemDeactivatedAfterEdit();
 
-            editor_test_requests(app, tab, test);
-            editor_test_response(app, tab, test);
+            changed = changed | ImGui::Combo(
+                                    "Type", (int*)&test.type,
+                                    HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+
+            changed = changed | editor_test_requests(app, tab, test);
+            changed = changed | editor_test_response(app, tab, test);
             ImGui::EndChild();
         }
 
         ImGui::EndTabItem();
     }
 
-    if (!tab.open && changed()) {
-        switch (unsaved_changes(app)) {
-        case MODAL_CONTINUE:
-            result = TAB_CLOSED;
-            break;
-        case MODAL_SAVE:
-            result = TAB_SAVE_CLOSED;
-            break;
-        case MODAL_CANCEL:
-            tab.open = true;
-            break;
-        default:
-            break;
-        }
+    if (changed && result == TAB_NONE) {
+        result = TAB_CHANGED;
     }
 
     return result;
 }
 
 EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
-    assert(std::holds_alternative<Group>(tab.edit));
-    auto& group = std::get<Group>(tab.edit);
+    auto edit = &app->tests[tab.original_idx];
 
-    auto changed = [&tab, app]() {
-        return !nested_test_eq(&tab.edit, &app->tests[tab.original_idx]);
-    };
+    assert(std::holds_alternative<Group>(*edit));
+    auto& group = std::get<Group>(*edit);
+
+    bool changed = false;
 
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
-            std::visit(LabelVisit(), app->tests[tab.original_idx]).c_str(), &tab.open,
-            (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
-                (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
-        if (ImGui::Button("Save")) {
-            result = TAB_SAVED;
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Discard")) {
-            result = TAB_DISCARD;
-        }
+            tab.name.c_str(), &tab.open,
+            (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
+            changed = changed | ImGui::IsItemDeactivatedAfterEdit();
             ImGui::EndChild();
         }
 
         ImGui::EndTabItem();
     }
-    if (!tab.open && changed()) {
-        switch (unsaved_changes(app)) {
-        case MODAL_CONTINUE:
-            result = TAB_CLOSED;
-            break;
-        case MODAL_SAVE:
-            result = TAB_SAVE_CLOSED;
-            break;
-        case MODAL_CANCEL:
-            tab.open = true;
-            break;
-        default:
-            break;
-        }
+
+    if (changed && result == TAB_NONE) {
+        result = TAB_CHANGED;
     }
+
     return result;
 }
 
@@ -1907,7 +1918,7 @@ void tabbed_editor(AppState* app) noexcept {
         for (auto& [id, tab] : app->opened_editor_tabs) {
             NestedTest* original = &app->tests[tab.original_idx];
             EditorTabResult result;
-            switch (tab.edit.index()) {
+            switch (app->tests[tab.original_idx].index()) {
             case TEST_VARIANT: {
                 result = editor_tab_test(app, tab);
             } break;
@@ -1920,20 +1931,13 @@ void tabbed_editor(AppState* app) noexcept {
 
             // hopefully can't close 2 tabs in a single frame
             switch (result) {
-            case TAB_SAVE_CLOSED:
-                closed_id = id;
-            case TAB_SAVED:
-                *original = tab.edit;
-                tab.just_opened = true;
-
-                app->push_undo_history();
-                break;
             case TAB_CLOSED:
                 closed_id = id;
                 break;
-            case TAB_DISCARD:
-                tab.edit = *original;
-                break;
+            case TAB_CHANGED:
+                tab.name = std::visit(LabelVisit(), *original);
+                tab.just_opened = true; // to force refocus after
+                app->undo_history.push_undo_history(app);
             case TAB_NONE:
                 break;
             }
@@ -2108,7 +2112,8 @@ void open_file(AppState* app) noexcept {
     save.read(in);
     Log(LogLevel::Info, "Loading from '%s': %zuB", app->filename->c_str(), save.original_size);
     save.load(*app);
-    app->reset_undo_history();
+
+    app->undo_history.reset_undo_history(app);
 }
 
 void app_save_as(AppState* app) noexcept {
@@ -2146,9 +2151,9 @@ void show_menus(AppState* app) noexcept {
     }
 
     if (ImGui::BeginMenu("Edit")) {
-        if (ImGui::MenuItem("Undo", "Ctrl + Z", nullptr, app->undo_idx > 0)) {
+        if (ImGui::MenuItem("Undo", "Ctrl + Z", nullptr, app->undo_history.can_undo())) {
             app->undo();
-        } else if (ImGui::MenuItem("Redo", "Ctrl + Shift + Z", nullptr, app->undo_idx < app->undo_history.size() - 1)) {
+        } else if (ImGui::MenuItem("Redo", "Ctrl + Shift + Z", nullptr, app->undo_history.can_redo())) {
             app->redo();
         }
         ImGui::EndMenu();
@@ -2213,9 +2218,9 @@ void show_gui(AppState* app) noexcept {
         app_open(app);
     }
 
-    if (app->undo_idx > 0 && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    if (app->undo_history.can_undo() && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->undo();
-    } else if (app->undo_idx < app->undo_history.size() - 1 && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    } else if (app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->redo();
     }
 }
