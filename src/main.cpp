@@ -14,7 +14,6 @@
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
-#include <thread>
 
 #if OPENSSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
@@ -854,8 +853,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 struct EditorTab {
     bool open = true;
     bool just_opened;
+    size_t original_idx;
     // maybe replace with idx?
-    NestedTest* original;
+    // NestedTest* original;
     NestedTest edit;
 };
 
@@ -906,9 +906,23 @@ struct AppState {
         save->load(this->id_counter);
         save->load(this->tests);
 
-        // probably selectively remove/update them instead
-        this->opened_editor_tabs.clear();
-        this->selected_tests.clear();
+        for (auto it = this->opened_editor_tabs.begin(); it != this->opened_editor_tabs.end();) {
+            if (!this->tests.contains(it->first)) {
+                it = this->opened_editor_tabs.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        for (auto it = this->selected_tests.begin(); it != this->selected_tests.end();) {
+            if (!this->tests.contains(*it)) {
+                it = this->selected_tests.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        // this->opened_editor_tabs.clear();
+        // this->selected_tests.clear();
     }
 
     // should be called after every edit
@@ -1035,7 +1049,8 @@ void editor_open_tab(AppState* app, size_t id) {
     } else {
         app->opened_editor_tabs[id] = {
             .just_opened = true,
-            .original = &app->tests[id],
+            .original_idx = id,
+            // .original = &app->tests[id],
             .edit = app->tests[id]};
     }
 }
@@ -1787,12 +1802,12 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Test>(tab.edit));
     auto& test = std::get<Test>(tab.edit);
 
-    auto changed = [&tab]() {
-        return !nested_test_eq(&tab.edit, tab.original);
+    auto changed = [&tab, app]() {
+        return !nested_test_eq(&tab.edit, &app->tests[tab.original_idx]);
     };
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
-            std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
+            std::visit(LabelVisit(), app->tests[tab.original_idx]).c_str(), &tab.open,
             (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
                 (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
@@ -1841,13 +1856,13 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Group>(tab.edit));
     auto& group = std::get<Group>(tab.edit);
 
-    auto changed = [&tab]() {
-        return !nested_test_eq(&tab.edit, tab.original);
+    auto changed = [&tab, app]() {
+        return !nested_test_eq(&tab.edit, &app->tests[tab.original_idx]);
     };
 
     EditorTabResult result = TAB_NONE;
     if (ImGui::BeginTabItem(
-            std::visit(LabelVisit(), *tab.original).c_str(), &tab.open,
+            std::visit(LabelVisit(), app->tests[tab.original_idx]).c_str(), &tab.open,
             (changed() ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None) |
                 (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
         if (ImGui::Button("Save")) {
@@ -1890,7 +1905,7 @@ void tabbed_editor(AppState* app) noexcept {
     if (ImGui::BeginTabBar("editor")) {
         size_t closed_id = -1;
         for (auto& [id, tab] : app->opened_editor_tabs) {
-            const NestedTest* original = tab.original;
+            NestedTest* original = &app->tests[tab.original_idx];
             EditorTabResult result;
             switch (tab.edit.index()) {
             case TEST_VARIANT: {
@@ -1908,7 +1923,7 @@ void tabbed_editor(AppState* app) noexcept {
             case TAB_SAVE_CLOSED:
                 closed_id = id;
             case TAB_SAVED:
-                *tab.original = tab.edit;
+                *original = tab.edit;
                 tab.just_opened = true;
 
                 app->push_undo_history();
@@ -1917,7 +1932,7 @@ void tabbed_editor(AppState* app) noexcept {
                 closed_id = id;
                 break;
             case TAB_DISCARD:
-                tab.edit = *tab.original;
+                tab.edit = *original;
                 break;
             case TAB_NONE:
                 break;
