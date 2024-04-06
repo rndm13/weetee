@@ -166,7 +166,7 @@ Variant variant_from_index(std::size_t index) {
 struct SaveState {
     size_t original_size = {};
     size_t load_idx = {};
-    std::vector<std::byte> original_buffer = {};
+    std::vector<std::byte> original_buffer;
 
     // helpers
     template <class T = void>
@@ -324,6 +324,7 @@ struct SaveState {
 
     void finish_save() noexcept {
         this->original_size = this->original_buffer.size();
+        // this->original_buffer.shrink_to_fit();
     }
 
     void reset_load() noexcept {
@@ -852,6 +853,7 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 struct EditorTab {
     bool open = true;
     bool just_opened;
+    // maybe replace with idx?
     NestedTest* original;
     NestedTest edit;
 };
@@ -892,28 +894,19 @@ struct AppState {
     BS::thread_pool thr_pool;
 
     void save(SaveState* save) const noexcept {
-        Log(LogLevel::Debug, "Saving app %zu", this->tests.size());
-
+        // this save is obviously going to be pretty big so reserve instantly for speed
+        save->original_buffer.reserve(512);
         save->save(this->id_counter);
         save->save(this->tests);
-        save->finish_save();
-
-        Log(LogLevel::Debug, "save_size: %zu", save->original_size);
     }
 
     void load(SaveState* save) noexcept {
-        Log(LogLevel::Debug, "load_size: %zu", save->original_size);
-
         save->load(this->id_counter);
         save->load(this->tests);
 
+        // probably selectively remove/update them instead
         this->opened_editor_tabs.clear();
         this->selected_tests.clear();
-
-        Log(LogLevel::Debug, "Loading app %zu", this->tests.size());
-        for (const auto& [key, test] : this->tests) {
-            Log(LogLevel::Debug, "%zu = %zu %s %zu", key, std::visit(IDVisit(), test), std::visit(LabelVisit(), test).c_str(), std::visit(ParentIDVisit(), test));
-        }
     }
 };
 
@@ -1008,6 +1001,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         bool selected_root = false;
         size_t parent_id = -1;
         size_t selected_count = app->selected_tests.size();
+
         // TODO: allow same_parent when a directory was selected with all it's children_idx
         // example:
         // root
@@ -1015,6 +1009,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         // *   \ test 1
         // * \ test 2
         // and check for selected parent in tests
+
         auto check_parent = [&parent_id, &same_parent, &selected_root](size_t id) {
             if (!same_parent || selected_root) {
                 return;
@@ -1034,14 +1029,18 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             case TEST_VARIANT: {
                 assert(std::holds_alternative<Test>(*selected));
                 auto& selected_test = std::get<Test>(*selected);
+
                 test = true;
+
                 check_parent(selected_test.parent_id);
             } break;
             case GROUP_VARIANT: {
                 assert(std::holds_alternative<Group>(*selected));
                 auto& selected_group = std::get<Group>(*selected);
+
                 group = true;
                 selected_root |= selected_group.id == 0;
+
                 check_parent(selected_group.parent_id);
             } break;
             }
@@ -2006,73 +2005,93 @@ void save_file(AppState* app) noexcept {
     assert(app->filename.has_value());
 
     std::ofstream out(app->filename.value());
-    // if (out.failbit == std::ios::goodbit) {
-        SaveState save{};
-        save.save(*app);
-        save.finish_save();
-        save.write(out);
+    if (!out) {
+        Log(LogLevel::Error, "Failed to save to file '%s'", app->filename->c_str());
         return;
-    // }
+    }
 
-    Log(LogLevel::Error, "Failed to save to file \"%s\"", app->filename->c_str());
+    SaveState save{};
+    save.save(*app);
+    save.finish_save();
+    Log(LogLevel::Info, "Saving to '%s': %zuB", app->filename->c_str(), save.original_size);
+    save.write(out);
 }
 
 void open_file(AppState* app) noexcept {
     assert(app->filename.has_value());
 
     std::ifstream in(app->filename.value());
-    // if (in.failbit == std::ios::goodbit) {
-        SaveState save{};
-        save.read(in);
-        save.load(*app);
+    if (!in) {
+        Log(LogLevel::Error, "Failed to open file \"%s\"", app->filename->c_str());
         return;
-    // }
+    }
 
-    Log(LogLevel::Error, "Failed to open file \"%s\"", app->filename->c_str());
+    SaveState save{};
+    save.read(in);
+    Log(LogLevel::Info, "Loading from '%s': %zuB", app->filename->c_str(), save.original_size);
+    save.load(*app);
 }
 
 void show_menus(AppState* app) noexcept {
     if (app->open_file.has_value() && app->open_file->ready()) {
         auto result = app->open_file->result();
-        Log(LogLevel::Debug, "Open file: %zu", result.size());
+
         if (result.size() > 0) {
             app->filename = result[0];
             Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
-            app->open_file = std::nullopt;
             open_file(app);
         }
+
+        app->open_file = std::nullopt;
     }
 
     if (app->save_file.has_value() && app->save_file->ready()) {
         app->filename = app->save_file->result();
-        app->save_file = std::nullopt;
         save_file(app);
+
+        app->save_file = std::nullopt;
     }
 
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Save As", "Ctrl + Shift + S")) {
+    auto app_save_as = [app]() {
+        app->save_file = pfd::save_file(
+            "Save To", ".",
+            {"All Files", "*"},
+            pfd::opt::none);
+    };
+    auto app_save = [app]() {
+        if (!app->filename.has_value()) {
             app->save_file = pfd::save_file(
                 "Save To", ".",
                 {"All Files", "*"},
                 pfd::opt::none);
+        } else {
+            save_file(app);
         }
+    };
+    auto app_open = [app]() {
+        app->open_file = pfd::open_file(
+            "Open File", ".",
+            {"All Files", "*"},
+            pfd::opt::none);
+    };
 
-        if (ImGui::MenuItem("Save", "Ctrl + S")) {
-            if (!app->filename.has_value()) {
-                app->save_file = pfd::save_file(
-                    "Save To", ".",
-                    {"All Files", "*"},
-                    pfd::opt::none);
-            } else {
-                save_file(app);
-            }
+    {
+        auto io = ImGui::GetIO();
+        if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
+            app_save_as();
+        } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S)) {
+            app_save();
+        } else if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_O)) {
+            app_open();
         }
-
-        if (ImGui::MenuItem("Open", "Ctrl + O")) {
-            app->open_file = pfd::open_file(
-                "Open File", ".",
-                {"All Files", "*"},
-                pfd::opt::none);
+    }
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Save As", "Ctrl + Shift + S")) {
+            app_save_as();
+        } else if (ImGui::MenuItem("Save", "Ctrl + S")) {
+            app_save();
+        } else if (ImGui::MenuItem("Open", "Ctrl + O")) {
+            app_open();
         }
         ImGui::EndMenu();
     }
