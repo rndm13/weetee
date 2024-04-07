@@ -1,3 +1,4 @@
+#include "hello_imgui/hello_imgui.h"
 #include "hello_imgui/hello_imgui_font.h"
 #include "hello_imgui/hello_imgui_logger.h"
 #include "hello_imgui/hello_imgui_theme.h"
@@ -9,7 +10,11 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
+#include "imgui_test_engine/imgui_te_context.h"
 #include "immapp/immapp.h"
+
+#include "imgui_test_engine/imgui_te_engine.h"
+#include "imgui_test_engine/imgui_te_ui.h"
 
 #include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
@@ -34,6 +39,11 @@
 #include "unordered_map"
 #include "utility"
 #include "variant"
+
+#ifndef NDEBUG
+// show test id and parent id in tree view
+// #define LABEL_SHOW_ID
+#endif
 
 #include "textinputcombo.hpp"
 
@@ -829,7 +839,7 @@ struct Test {
     Response response;
 
     const std::string label() const noexcept {
-#ifdef NDEBUG
+#ifndef LABEL_SHOW_ID
         return this->endpoint + "##" + to_string(this->id);
 #else
         return this->endpoint + "__" + to_string(this->id) + "__" + to_string(this->parent_id);
@@ -875,7 +885,7 @@ struct Group {
     std::vector<size_t> children_idx;
 
     const std::string label() const noexcept {
-#ifdef NDEBUG
+#ifndef LABEL_SHOW_ID
         return this->name + "##" + to_string(this->id);
 #else
         return this->name + "__" + to_string(this->id) + "__" + to_string(this->parent_id);
@@ -1563,7 +1573,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
         http_type_button(leaf.type);
         ImGui::SameLine();
-        ImGui::Text("%s", leaf.label().c_str());
+        ImGui::Text("%s", leaf.endpoint.c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
@@ -1610,7 +1620,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         }
         ImGui::SameLine();
         remove_arrow_offset();
-        ImGui::Text("%s", group.label().c_str());
+        ImGui::Text("%s", group.name.c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
@@ -1647,10 +1657,11 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         if (!changed && group.flags & GROUP_OPEN) {
             for (size_t child_id : group.children_idx) {
                 if (!app->tests.contains(child_id)) {
-                    Log(LogLevel::Debug, "SHIT HAPPENED TO %zu NO CHILD %zu\n", group.id, child_id);
-                    printf("SHIT HAPPENED TO %zu NO CHILD %zu\n", group.id, child_id);
+                    // TODO: remove this, bug hopefully is eliminated
+                    Log(LogLevel::Error, "Group %zu has no child %zu", group.id, child_id);
+                    printf("Group %zu has no child %zu\n", group.id, child_id);
                 } else {
-                    // assert(app->tests.contains(child_id));
+                    assert(app->tests.contains(child_id));
                     changed = changed | display_tree_view_test(app, app->tests[child_id], indentation + 22);
                     if (changed) {
                         break;
@@ -2416,7 +2427,11 @@ void show_menus(AppState* app) noexcept {
 
 void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
+#ifndef NDEBUG
     ImGui::ShowDemoWindow();
+    ImGuiTestEngine* engine = HelloImGui::GetImGuiTestEngine();
+    ImGuiTestEngine_ShowTestEngineWindows(engine, nullptr);
+#endif
     ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 
     // saving
@@ -2491,6 +2506,72 @@ void post_init(AppState* app) noexcept {
     // ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }
 
+void register_tests(AppState* app) noexcept {
+    ImGuiTestEngine* e = HelloImGui::GetImGuiTestEngine();
+    const char* root_selectable = "**/##0";
+
+    auto delete_all = [app](ImGuiTestContext* ctx) {
+        std::vector<size_t> top_dirs = std::get<Group>(app->tests[0]).children_idx;
+        ctx->KeyDown(ImGuiKey_ModCtrl);
+        for (size_t id : top_dirs) {
+            ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
+        }
+        ctx->KeyUp(ImGuiKey_ModCtrl);
+        ctx->ItemClick(("**/##" + to_string(top_dirs[0])).c_str(), ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Delete");
+    };
+
+    ImGuiTest* tree_view__basic_context = IM_REGISTER_TEST(e, "tree_view", "basic_context");
+    tree_view__basic_context->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new test");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Copy");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Paste");
+
+        delete_all(ctx);
+    };
+
+    ImGuiTest* tree_view__copy_paste = IM_REGISTER_TEST(e, "tree_view", "copy_paste");
+    tree_view__copy_paste->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+        for (size_t i = 0; i < 5; i++) {
+            ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Copy");
+            ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Paste");
+        }
+
+        delete_all(ctx);
+    };
+
+    ImGuiTest* tree_view__ungroup = IM_REGISTER_TEST(e, "tree_view", "ungroup");
+    tree_view__ungroup->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+        for (size_t i = 0; i < 3; i++) {
+            ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Copy");
+            ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Paste");
+        }
+
+        while (app->tests.size() > 1) {
+            std::vector<size_t> top_dirs = std::get<Group>(app->tests[0]).children_idx;
+            ctx->KeyDown(ImGuiKey_ModCtrl);
+            for (size_t id : top_dirs) {
+                ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
+            }
+            ctx->KeyUp(ImGuiKey_ModCtrl);
+            ctx->ItemClick(("**/##" + to_string(top_dirs[0])).c_str(), ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Ungroup");
+        }
+    };
+}
+
 int main(int argc, char* argv[]) {
     HelloImGui::RunnerParams runner_params;
     auto app = AppState(&runner_params);
@@ -2507,9 +2588,11 @@ int main(int argc, char* argv[]) {
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
     runner_params.callbacks.LoadAdditionalFonts = [&app]() { load_fonts(&app); };
     runner_params.callbacks.PostInit = [&app]() { post_init(&app); };
+    runner_params.callbacks.RegisterTests = [&app]() { register_tests(&app); };
 
     runner_params.dockingParams = layout(&app);
     runner_params.fpsIdling.enableIdling = false;
+    runner_params.useImGuiTestEngine = true;
 
     ImmApp::AddOnsParams addOnsParams;
     ImmApp::Run(runner_params, addOnsParams);
