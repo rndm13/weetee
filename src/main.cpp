@@ -1329,6 +1329,11 @@ struct AppState {
         this->select_with_children(group->id);
     }
 
+    void move(Group* group) noexcept {
+        this->cut();
+        this->paste(group);
+    }
+
     void save_file() noexcept {
         assert(this->filename.has_value());
 
@@ -1442,27 +1447,50 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
         SelectAnalysisResult analysis = select_analysis(app);
 
-        if (ImGui::MenuItem("Edit", "Enter", false, analysis.selected_count == 1) && !changed) {
+        // TODO: shortcut
+        if (ImGui::MenuItem("Edit", "Enter", false, analysis.selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
-        if (ImGui::MenuItem("Delete", "Delete", false, !analysis.selected_root) && !changed) {
+        // TODO: shortcut
+        if (ImGui::MenuItem("Delete", "Delete", false, !analysis.selected_root && !changed)) {
             changed = true;
 
             app->delete_selected();
         }
 
-        if (ImGui::MenuItem("Copy", "Ctrl + C", false) && !changed) {
+        // TODO: dragging
+        if (ImGui::BeginMenu("Move", !changed && !analysis.selected_root)) {
+            for (auto& [id, nt] : app->tests) {
+                // skip if not a group or same parent for selected or selected group
+                if (!std::holds_alternative<Group>(nt) || analysis.same_parent && analysis.parent_id == id || app->selected_tests.contains(id)) {
+                    continue;
+                }
+
+                if (ImGui::MenuItem(std::visit(LabelVisit(), nt).c_str(), nullptr, false, !changed)) {
+                    changed = true;
+
+                    assert(std::holds_alternative<Group>(nt));
+                    app->move(&std::get<Group>(nt));
+                }
+            }
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::MenuItem("Copy", "Ctrl + C", false, !changed)) {
             app->copy();
         }
 
-        if (ImGui::MenuItem("Cut", "Ctrl + X", false, !analysis.selected_root) && !changed) {
+        if (ImGui::MenuItem("Cut", "Ctrl + X", false, !analysis.selected_root && !changed)) {
+            changed = true;
+
             app->cut();
         }
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && analysis.selected_count == 1) && !changed) {
+            if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && analysis.selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1471,7 +1499,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->paste(&selected_group);
             }
 
-            if (ImGui::MenuItem("Add a new test", nullptr, false, analysis.selected_count == 1) && !changed) {
+            if (ImGui::MenuItem("Add a new test", nullptr, false, analysis.selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1489,7 +1517,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem("Add a new group", nullptr, false, analysis.selected_count == 1) && !changed) {
+            if (ImGui::MenuItem("Add a new group", nullptr, false, analysis.selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1504,7 +1532,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 selected_group.children_idx.push_back(id);
             }
 
-            if (ImGui::MenuItem("Ungroup", nullptr, false, !analysis.selected_root) && !changed) {
+            if (ImGui::MenuItem("Ungroup", nullptr, false, !analysis.selected_root && !changed)) {
                 changed = true;
 
                 for (auto selected_id : app->select_top_layer()) {
@@ -1521,7 +1549,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             ImGui::Separator();
         }
 
-        if (analysis.same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !analysis.selected_root) && !changed) {
+        if (analysis.same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !analysis.selected_root && !changed)) {
             changed = true;
 
             app->group_selected(analysis.parent_id);
@@ -2526,13 +2554,13 @@ void register_tests(AppState* app) noexcept {
     const char* root_selectable = "**/##0";
 
     auto delete_all = [app](ImGuiTestContext* ctx) {
-        std::vector<size_t> top_dirs = std::get<Group>(app->tests[0]).children_idx;
+        std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_idx;
         ctx->KeyDown(ImGuiKey_ModCtrl);
-        for (size_t id : top_dirs) {
+        for (size_t id : top_groups) {
             ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
         }
         ctx->KeyUp(ImGuiKey_ModCtrl);
-        ctx->ItemClick(("**/##" + to_string(top_dirs[0])).c_str(), ImGuiMouseButton_Right);
+        ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
         ctx->ItemClick("**/Delete");
     };
 
@@ -2575,13 +2603,13 @@ void register_tests(AppState* app) noexcept {
         }
 
         while (app->tests.size() > 1) {
-            std::vector<size_t> top_dirs = std::get<Group>(app->tests[0]).children_idx;
+            std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_idx;
             ctx->KeyDown(ImGuiKey_ModCtrl);
-            for (size_t id : top_dirs) {
+            for (size_t id : top_groups) {
                 ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
             }
             ctx->KeyUp(ImGuiKey_ModCtrl);
-            ctx->ItemClick(("**/##" + to_string(top_dirs[0])).c_str(), ImGuiMouseButton_Right);
+            ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
             ctx->ItemClick("**/Ungroup");
         }
     };
