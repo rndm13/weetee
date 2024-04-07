@@ -1102,6 +1102,17 @@ struct AppState {
         }
     }
 
+    std::vector<size_t> select_top_layer() noexcept {
+        std::vector<size_t> result;
+        for (auto sel_id : this->selected_tests) {
+            if (!this->parent_selected(sel_id)) {
+                result.push_back(sel_id);
+            }
+        }
+
+        return result;
+    }
+
     bool parent_disabled(const NestedTest* nt) noexcept {
         // TODO: maybe add some cache for every test that clears every frame?
         // if performance becomes a problem
@@ -1172,6 +1183,12 @@ struct AppState {
         this->selected_tests.erase(id);
     }
 
+    void delete_selected() noexcept {
+        for (auto test_id : this->select_top_layer()) {
+            this->delete_test(test_id);
+        }
+    }
+
     void group_selected(size_t common_parent_id) noexcept {
         auto* parent_test = &this->tests[common_parent_id];
         assert(std::holds_alternative<Group>(*parent_test));
@@ -1226,6 +1243,11 @@ struct AppState {
         this->clipboard = {};
         this->clipboard.save(to_copy);
         this->clipboard.finish_save();
+    }
+
+    void cut() noexcept {
+        this->copy();
+        this->delete_selected();
     }
 
     constexpr bool can_paste() const noexcept {
@@ -1408,17 +1430,6 @@ SelectAnalysisResult select_analysis(AppState* app) noexcept {
     return result;
 }
 
-std::vector<size_t> select_top_layer(AppState* app) noexcept {
-    std::vector<size_t> result;
-    for (auto sel_id : app->selected_tests) {
-        if (!app->parent_selected(sel_id)) {
-            result.push_back(sel_id);
-        }
-    }
-
-    return result;
-}
-
 bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     bool changed = false; // this also indicates that analysis data is invalid
     size_t nested_test_id = std::visit(IDVisit(), *nested_test);
@@ -1438,13 +1449,15 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         if (ImGui::MenuItem("Delete", "Delete", false, !analysis.selected_root) && !changed) {
             changed = true;
 
-            for (auto test_id : select_top_layer(app)) {
-                app->delete_test(test_id);
-            }
+            app->delete_selected();
         }
 
         if (ImGui::MenuItem("Copy", "Ctrl + C", false) && !changed) {
             app->copy();
+        }
+
+        if (ImGui::MenuItem("Cut", "Ctrl + X", false, !analysis.selected_root) && !changed) {
+            app->cut();
         }
 
         // only groups without tests
@@ -1494,7 +1507,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             if (ImGui::MenuItem("Ungroup", nullptr, false, !analysis.selected_root) && !changed) {
                 changed = true;
 
-                for (auto selected_id : select_top_layer(app)) {
+                for (auto selected_id : app->select_top_layer()) {
                     auto& selected = app->tests[selected_id];
 
                     assert(std::holds_alternative<Group>(selected));
@@ -2470,6 +2483,8 @@ void show_gui(AppState* app) noexcept {
 
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
         app->copy();
+    } else if (!app->selected_tests.contains(0) && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X)) {
+        app->cut();
     } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
         SelectAnalysisResult analysis = select_analysis(app);
         if (analysis.selected_count == 1) {
