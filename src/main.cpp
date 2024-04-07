@@ -19,8 +19,8 @@
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #endif
 
-#include "../external/cpp-httplib/httplib.h"
-#include "../external/json-include/json.hpp"
+#include "../external/cpp-httplib/out/httplib.h"
+#include "../external/json/include/nlohmann/json.hpp"
 
 #include "BS_thread_pool.hpp"
 
@@ -163,7 +163,7 @@ struct PartialDict {
 template <class Variant, std::size_t I = 0>
 Variant variant_from_index(std::size_t index) {
     if constexpr (I >= std::variant_size_v<Variant>) {
-        throw std::runtime_error{"Variant index " + std::to_string(I + index) + " out of bounds"};
+        throw std::runtime_error{"Variant index " + to_string(I + index) + " out of bounds"};
     } else {
         return index == 0
                    ? Variant{std::in_place_index<I>}
@@ -829,7 +829,11 @@ struct Test {
     Response response;
 
     const std::string label() const noexcept {
+#ifdef NDEBUG
         return this->endpoint + "##" + to_string(this->id);
+#else
+        return this->endpoint + "__" + to_string(this->id) + "__" + to_string(this->parent_id);
+#endif
     }
 
     void save(SaveState* save) const noexcept {
@@ -871,7 +875,11 @@ struct Group {
     std::vector<size_t> children_idx;
 
     const std::string label() const noexcept {
+#ifdef NDEBUG
         return this->name + "##" + to_string(this->id);
+#else
+        return this->name + "__" + to_string(this->id) + "__" + to_string(this->parent_id);
+#endif
     }
 
     void save(SaveState* save) const noexcept {
@@ -1020,11 +1028,20 @@ struct AppState {
                 ++it;
             }
         }
+
+        // remove missing tests from selected
         for (auto it = this->selected_tests.begin(); it != this->selected_tests.end();) {
             if (!this->tests.contains(*it)) {
                 it = this->selected_tests.erase(it);
             } else {
                 ++it;
+            }
+        }
+
+        // add newly selected if parent is selected
+        for (auto& [id, nt] : this->tests) {
+            if (this->parent_selected(id) && !this->selected_tests.contains(id)) {
+                this->select_with_children(std::visit(ParentIDVisit(), nt));
             }
         }
     }
@@ -1043,7 +1060,7 @@ struct AppState {
         this->post_undo();
     }
 
-    constexpr bool parent_selected(size_t id) const noexcept {
+    bool parent_selected(size_t id) const noexcept {
         return this->selected_tests.contains(std::visit(ParentIDVisit(), this->tests.at(id)));
     }
 
@@ -1065,6 +1082,7 @@ struct AppState {
         Group& group = std::get<Group>(nt);
 
         for (size_t child_id : group.children_idx) {
+            assert(this->tests.contains(child_id));
             if constexpr (select) {
                 this->selected_tests.insert(child_id);
             } else if (!this->parent_selected(id)) {
@@ -1079,6 +1097,7 @@ struct AppState {
         // if performance becomes a problem
         size_t id = std::visit(ParentIDVisit(), *nt);
         while (id != -1) {
+            assert(this->tests.contains(id));
             nt = &this->tests[id];
             assert(std::holds_alternative<Group>(*nt));
             const Group& group = std::get<Group>(*nt);
@@ -1105,33 +1124,42 @@ struct AppState {
         group->children_idx.clear();
     }
 
-    void delete_group(const Group* group) noexcept {
-        for (auto child_id : group->children_idx) {
-            this->delete_test(&this->tests[child_id]);
+    void delete_children(const Group* group) noexcept {
+        std::vector<size_t> to_delete = group->children_idx; // DO NOT REMOVE
+        // delete_test also removes it from parent->children_idx
+        // when iterating over it it creates unexpected behaviour
+
+        for (auto child_id : to_delete) {
+            this->delete_test(child_id);
         }
+
+        assert(group->children_idx.size() <= 0); // no remaining children
     }
 
-    void delete_test(NestedTest* test) noexcept {
-        size_t id = std::visit(IDVisit(), *test);
+    void delete_test(size_t id) noexcept {
+        assert(this->tests.contains(id));
+        NestedTest* test = &this->tests[id];
+
         size_t parent_id = std::visit(ParentIDVisit(), *test);
 
         if (std::holds_alternative<Group>(*test)) {
             auto& group = std::get<Group>(*test);
-            this->delete_group(&group);
+            this->delete_children(&group);
         }
 
         // remove it's id from parents child id list
+        assert(this->tests.contains(parent_id));
+        assert(std::holds_alternative<Group>(this->tests[parent_id]));
         auto& parent = std::get<Group>(this->tests[parent_id]);
-        for (auto it = parent.children_idx.begin(); it != parent.children_idx.end(); it++) {
-            if (*it == id) {
-                parent.children_idx.erase(it);
-                break;
-            };
-        }
+
+        size_t count = std::erase(parent.children_idx, id);
+        assert(count == 1);
 
         // remove from tests
         this->tests.erase(id);
+
         this->opened_editor_tabs.erase(id);
+        this->selected_tests.erase(id);
     }
 
     void group_selected(size_t common_parent_id) noexcept {
@@ -1204,7 +1232,7 @@ struct AppState {
         // for groups should also update all children parent_id
         for (auto it = to_paste.begin(); it != to_paste.end(); it++) {
             auto& [id, nt] = *it;
-            Log(LogLevel::Debug, "id: %zu, variant index: %zu", id, nt.index());
+            // Log(LogLevel::Debug, "id: %zu, variant index: %zu", id, nt.index());
 
             if (!this->tests.contains(id)) {
                 // if the id is free don't do anything
@@ -1221,7 +1249,7 @@ struct AppState {
             // update parents children_idx to use new id
             size_t parent_id = std::visit(ParentIDVisit(), nt);
             if (to_paste.contains(parent_id)) {
-                Log(LogLevel::Debug, "parent_id: %zu", parent_id);
+                // Log(LogLevel::Debug, "parent_id: %zu", parent_id);
 
                 auto& parent = to_paste[parent_id];
                 assert(std::holds_alternative<Group>(parent));
@@ -1248,7 +1276,7 @@ struct AppState {
             std::visit(SetIDVisit(new_id), node.mapped());
             to_paste.insert(std::move(node));
 
-            Log(LogLevel::Debug, "new id: %zu", new_id);
+            // Log(LogLevel::Debug, "new id: %zu", new_id);
         }
 
         // insert into passed in group
@@ -1257,7 +1285,7 @@ struct AppState {
 
             size_t parent_id = std::visit(ParentIDVisit(), nt);
             if (!to_paste.contains(parent_id)) {
-                Log(LogLevel::Debug, "pasting id: %zu", id);
+                // Log(LogLevel::Debug, "pasting id: %zu", id);
 
                 group->children_idx.push_back(id);
                 std::visit(SetParentIDVisit(group->id), nt);
@@ -1266,6 +1294,7 @@ struct AppState {
 
         group->flags |= GROUP_OPEN;
         this->tests.merge(to_paste);
+        this->select_with_children(group->id);
     }
 
     void save_file() noexcept {
@@ -1321,7 +1350,7 @@ struct SelectAnalysisResult {
     size_t selected_count;
 };
 
-SelectAnalysisResult select_analysis(AppState* app, NestedTest* nested_test) noexcept {
+SelectAnalysisResult select_analysis(AppState* app) noexcept {
     SelectAnalysisResult result;
     result.selected_count = app->selected_tests.size();
 
@@ -1369,6 +1398,17 @@ SelectAnalysisResult select_analysis(AppState* app, NestedTest* nested_test) noe
     return result;
 }
 
+std::vector<size_t> select_top_layer(AppState* app) noexcept {
+    std::vector<size_t> result;
+    for (auto sel_id : app->selected_tests) {
+        if (!app->parent_selected(sel_id)) {
+            result.push_back(sel_id);
+        }
+    }
+
+    return result;
+}
+
 bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     bool changed = false; // this also indicates that analysis data is invalid
     size_t nested_test_id = std::visit(IDVisit(), *nested_test);
@@ -1379,78 +1419,79 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             app->select_with_children(nested_test_id);
         }
 
-        SelectAnalysisResult analysis = select_analysis(app, nested_test);
+        SelectAnalysisResult analysis = select_analysis(app);
 
-        if (ImGui::MenuItem("Edit", nullptr, false, analysis.selected_count == 1) && !changed) {
+        if (ImGui::MenuItem("Edit", "Enter", false, analysis.selected_count == 1) && !changed) {
             app->editor_open_tab(nested_test_id);
         }
 
-        if (ImGui::MenuItem("Delete", nullptr, false, !analysis.selected_root) && !changed) {
+        if (ImGui::MenuItem("Delete", "Delete", false, !analysis.selected_root) && !changed) {
             changed = true;
-            for (auto test_id : app->selected_tests) {
-                if (!app->parent_selected(test_id)) {
-                    app->delete_test(&app->tests[test_id]);
-                }
-            }
 
-            app->selected_tests.clear();
+            for (auto test_id : select_top_layer(app)) {
+                app->delete_test(test_id);
+            }
         }
 
         if (ImGui::MenuItem("Copy", "Ctrl + C", false) && !changed) {
             app->copy();
         }
 
-        if (analysis.group && !analysis.test && !changed) {
-            assert(std::holds_alternative<Group>(*nested_test));
-            auto& selected_group = std::get<Group>(*nested_test);
-            if (analysis.selected_count == 1) {
-                if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste()) && !changed) {
-                    changed = true;
-                    app->paste(&selected_group);
-                }
+        // only groups without tests
+        if (analysis.group && !analysis.test) {
+            if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && analysis.selected_count == 1) && !changed) {
+                changed = true;
 
-                if (ImGui::MenuItem("Add a new test") && !changed) {
-                    changed = true;
-                    selected_group.flags |= GROUP_OPEN;
+                assert(std::holds_alternative<Group>(*nested_test));
+                auto& selected_group = std::get<Group>(*nested_test);
 
-                    auto id = ++app->id_counter;
-                    app->tests[id] = (Test{
-                        .parent_id = selected_group.id,
-                        .id = id,
-                        .type = HTTP_GET,
-                        .endpoint = "https://example.com",
-                    });
-                    selected_group.children_idx.push_back(id);
-                    app->editor_open_tab(id);
-                }
+                app->paste(&selected_group);
+            }
 
-                if (ImGui::MenuItem("Add a new group") && !changed) {
-                    changed = true;
-                    selected_group.flags |= GROUP_OPEN;
-                    auto id = ++app->id_counter;
-                    app->tests[id] = (Group{
-                        .parent_id = selected_group.id,
-                        .id = id,
-                        .name = "New group",
-                    });
-                    selected_group.children_idx.push_back(id);
-                }
+            if (ImGui::MenuItem("Add a new test", nullptr, false, analysis.selected_count == 1) && !changed) {
+                changed = true;
+
+                assert(std::holds_alternative<Group>(*nested_test));
+                auto& selected_group = std::get<Group>(*nested_test);
+                selected_group.flags |= GROUP_OPEN;
+
+                auto id = ++app->id_counter;
+                app->tests[id] = (Test{
+                    .parent_id = selected_group.id,
+                    .id = id,
+                    .type = HTTP_GET,
+                    .endpoint = "https://example.com",
+                });
+                selected_group.children_idx.push_back(id);
+                app->editor_open_tab(id);
+            }
+
+            if (ImGui::MenuItem("Add a new group", nullptr, false, analysis.selected_count == 1) && !changed) {
+                changed = true;
+
+                assert(std::holds_alternative<Group>(*nested_test));
+                auto& selected_group = std::get<Group>(*nested_test);
+                selected_group.flags |= GROUP_OPEN;
+                auto id = ++app->id_counter;
+                app->tests[id] = (Group{
+                    .parent_id = selected_group.id,
+                    .id = id,
+                    .name = "New group",
+                });
+                selected_group.children_idx.push_back(id);
             }
 
             if (ImGui::MenuItem("Ungroup", nullptr, false, !analysis.selected_root) && !changed) {
                 changed = true;
-                for (auto selected_id : app->selected_tests) {
-                    if (app->parent_selected(selected_id)) {
-                        continue;
-                    }
 
+                for (auto selected_id : select_top_layer(app)) {
                     auto& selected = app->tests[selected_id];
 
                     assert(std::holds_alternative<Group>(selected));
                     auto& selected_group = std::get<Group>(selected);
 
                     app->move_children_up(&selected_group);
-                    app->delete_test(&selected);
+                    app->delete_test(selected_id);
                 }
             }
 
@@ -1459,6 +1500,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
         if (analysis.same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !analysis.selected_root) && !changed) {
             changed = true;
+
             app->group_selected(analysis.parent_id);
         }
 
@@ -1502,12 +1544,14 @@ bool http_type_button(HTTPType type) noexcept {
     return result;
 }
 
-void display_tree_view_test(AppState* app, NestedTest& test,
+bool display_tree_view_test(AppState* app, NestedTest& test,
                             float indentation = 0) noexcept {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     const bool ctrl = ImGui::GetIO().KeyCtrl;
 
     ImGui::PushID(std::visit(IDVisit(), test));
+
+    bool changed = false;
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
@@ -1519,7 +1563,7 @@ void display_tree_view_test(AppState* app, NestedTest& test,
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
         http_type_button(leaf.type);
         ImGui::SameLine();
-        ImGui::Text("%s", leaf.endpoint.c_str());
+        ImGui::Text("%s", leaf.label().c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
@@ -1548,7 +1592,7 @@ void display_tree_view_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // selectable
         const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
-        const bool changed = context_menu_tree_view(app, &test);
+        changed = changed | context_menu_tree_view(app, &test);
 
         if (!changed && double_clicked) {
             app->editor_open_tab(leaf.id);
@@ -1566,7 +1610,7 @@ void display_tree_view_test(AppState* app, NestedTest& test,
         }
         ImGui::SameLine();
         remove_arrow_offset();
-        ImGui::Text("%s", group.name.c_str());
+        ImGui::Text("%s", group.label().c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
         ImSpinner::SpinnerIncDots("running", 5, 1);
@@ -1598,18 +1642,28 @@ void display_tree_view_test(AppState* app, NestedTest& test,
         if (clicked) {
             group.flags ^= GROUP_OPEN; // toggle
         }
-        const bool changed = context_menu_tree_view(app, &test);
+        changed = changed | context_menu_tree_view(app, &test);
 
-        if (group.flags & GROUP_OPEN && !changed) {
+        if (!changed && group.flags & GROUP_OPEN) {
             for (size_t child_id : group.children_idx) {
-                display_tree_view_test(app, app->tests[child_id],
-                                       indentation + 22);
+                if (!app->tests.contains(child_id)) {
+                    Log(LogLevel::Debug, "SHIT HAPPENED TO %zu NO CHILD %zu\n", group.id, child_id);
+                    printf("SHIT HAPPENED TO %zu NO CHILD %zu\n", group.id, child_id);
+                } else {
+                    // assert(app->tests.contains(child_id));
+                    changed = changed | display_tree_view_test(app, app->tests[child_id], indentation + 22);
+                    if (changed) {
+                        break;
+                    }
+                }
             }
         }
     } break;
     }
 
     ImGui::PopID();
+
+    return changed;
 }
 
 void tree_view(AppState* app) noexcept {
@@ -1653,6 +1707,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
 
             if (ImGui::MenuItem("Delete")) {
                 changed = true;
+
                 for (auto& e : pd->elements) {
                     e.to_delete = e.selected;
                 }
@@ -2396,6 +2451,26 @@ void show_gui(AppState* app) noexcept {
         app->undo();
     } else if (app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->redo();
+    }
+
+    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
+        app->copy();
+    } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
+        SelectAnalysisResult analysis = select_analysis(app);
+        if (analysis.selected_count == 1) {
+            NestedTest* parent;
+            // find the one selected group
+            for (size_t sel_id : app->selected_tests) {
+                if (!app->parent_selected(sel_id)) {
+                    parent = &app->tests[sel_id];
+                }
+            }
+
+            if (std::holds_alternative<Group>(*parent)) {
+                app->paste(&std::get<Group>(*parent));
+                app->undo_history.push_undo_history(app);
+            }
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.16)
 project(weetee)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -45,13 +45,25 @@ else (${OpenSSL_FOUND})
     set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "OPENSSL=0")
 endif (${OpenSSL_FOUND})
 
+set(HTTPLIB_COMPILE ON)
 add_subdirectory(external/cpp-httplib)
+
+target_link_libraries(weetee PRIVATE httplib::httplib)
+    # nlohmann_json::nlohmann_json)
+
+# Add json 
+# =============== 
+
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
 add_subdirectory(external/json)
 
-target_link_libraries(
-    weetee PRIVATE
-    httplib::httplib
-    nlohmann_json::nlohmann_json)
+# add_library(json STATIC src/json.hpp src/json.cpp)
+# target_link_libraries(json PUBLIC nlohmann_json::nlohmann_json)
+# target_link_libraries(weetee PRIVATE json)
+
+# target_precompile_headers(weetee INTERFACE ${NLOHMANN_JSON_INCLUDE_BUILD_DIR}/json.hpp)
+target_link_libraries(weetee PRIVATE nlohmann_json::nlohmann_json)
 
 # Add Thread Pool
 # ===============
