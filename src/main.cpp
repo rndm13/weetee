@@ -1334,8 +1334,18 @@ struct AppState {
     }
 
     void move(Group* group) noexcept {
-        this->cut();
-        this->paste(group);
+        for (size_t id : this->selected_tests) {
+            size_t old_parent = std::visit(ParentIDVisit(), this->tests[id]);
+            assert(this->tests.contains(old_parent));
+            assert(std::holds_alternative<Group>(this->tests[old_parent]));
+            std::erase(std::get<Group>(this->tests[old_parent]).children_idx, id);
+
+            std::visit(SetParentIDVisit(group->id), this->tests[id]);
+
+            group->children_idx.push_back(id);
+        }
+
+        group->flags |= GROUP_OPEN;
     }
 
     void save_file() noexcept {
