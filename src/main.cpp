@@ -2657,8 +2657,11 @@ void show_gui(AppState* app) noexcept {
     }
 
     if (app->save_file_dialog.has_value() && app->save_file_dialog->ready()) {
-        app->filename = app->save_file_dialog->result();
-        app->save_file();
+        if (app->save_file_dialog->result().size() > 0) {
+            app->filename = app->save_file_dialog->result();
+            Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
+            app->save_file();
+        }
 
         app->save_file_dialog = std::nullopt;
     }
