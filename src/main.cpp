@@ -958,6 +958,23 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
     return false;
 }
 
+bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id) {
+    const NestedTest& a = tests.at(a_id);
+    const NestedTest& b = tests.at(b_id);
+
+    bool group_a = std::holds_alternative<Group>(a);
+    bool group_b = std::holds_alternative<Group>(b);
+
+    if (group_a != group_b) {
+        return group_a > group_b;
+    }
+
+    std::string label_a = std::visit(LabelVisit(), a);
+    std::string label_b = std::visit(LabelVisit(), b);
+
+    return label_a > label_b;
+}
+
 // keys are ids and values are for separate for editing (must be saved to apply changes)
 // do not save
 struct EditorTab {
@@ -1326,6 +1343,11 @@ struct AppState {
             std::visit(SetIDVisit(new_id), node.mapped());
             to_paste.insert(std::move(node));
 
+            // update groups children parent_id
+            if (std::holds_alternative<Group>(nt)) {
+                auto& group = std::get<Group>(nt);
+                std::sort(group.children_idx.begin(), group.children_idx.end(), [&to_paste](size_t a, size_t b) {  return test_comp(to_paste, a, b); });
+            }
             // Log(LogLevel::Debug, "new id: %zu", new_id);
         }
 
@@ -1364,6 +1386,12 @@ struct AppState {
         }
 
         group->flags |= GROUP_OPEN;
+    }
+
+    void sort(Group& group) noexcept {
+        std::sort(
+            group.children_idx.begin(), group.children_idx.end(),
+            [this](size_t a, size_t b) { return test_comp(this->tests, a, b); });
     }
 
     bool filter(Group& group) noexcept {
@@ -1724,6 +1752,8 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
         if (!app->selected_tests.contains(leaf.id) && ImGui::BeginDragDropTarget()) {
             if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+                changed = true;
+
                 app->move(&std::get<Group>(app->tests[leaf.parent_id]));
             }
             ImGui::EndDragDropTarget();
@@ -1793,12 +1823,14 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
         if (!app->selected_tests.contains(group.id) && ImGui::BeginDragDropTarget()) {
             if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+                changed = true;
+
                 app->move(&group);
             }
             ImGui::EndDragDropTarget();
         }
 
-        changed = changed | context_menu_tree_view(app, &test);
+        changed |= context_menu_tree_view(app, &test);
 
         if (!changed && group.flags & GROUP_OPEN) {
             for (size_t child_id : group.children_idx) {
@@ -1814,6 +1846,11 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
                     }
                 }
             }
+        }
+
+        // changed could be that we have deleted this group too
+        if (changed && app->tests.contains(id)) {
+            app->sort(group);
         }
     } break;
     }
