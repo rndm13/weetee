@@ -944,7 +944,6 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
     case TEST_VARIANT: {
         const auto& test_a = std::get<Test>(*a);
         const auto& test_b = std::get<Test>(*b);
-        // TODO: check request and response
         return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_eq(&test_a.request, &test_b.request) && response_eq(&test_a.response, &test_b.response);
     } break;
     case GROUP_VARIANT:
@@ -1550,7 +1549,6 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             app->delete_selected();
         }
 
-        // TODO: dragging
         if (ImGui::BeginMenu("Move", !changed && !analysis.selected_root)) {
             for (auto& [id, nt] : app->tests) {
                 // skip if not a group or same parent for selected or selected group
@@ -1892,8 +1890,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         }
         elem->selected = true;
     };
-    if (ImGui::TableNextColumn()) { // enabled and selectable
-                                    // TODO: make this look less stupid
+    if (ImGui::TableNextColumn()) {
         changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
         ImGui::SameLine();
         if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
@@ -2170,7 +2167,6 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Headers")) {
-            ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
             changed = changed | partial_dict(app, &test.request.headers, "##headers", RequestHeadersLabels, IM_ARRAYSIZE(RequestHeadersLabels));
             ImGui::PopFont();
@@ -2260,7 +2256,6 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Headers")) {
-            ImGui::Text("TODO: make a suggestions popup (different for request/response)");
             ImGui::PushFont(app->mono_font);
             changed = changed | partial_dict(app, &test.response.headers, "##headers", ResponseHeadersLabels, IM_ARRAYSIZE(ResponseHeadersLabels));
             ImGui::PopFont();
@@ -2733,6 +2728,9 @@ void register_tests(AppState* app) noexcept {
         ctx->KeyUp(ImGuiKey_ModCtrl);
         ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
         ctx->ItemClick("**/Delete");
+        size_t items = app->tests.size();
+
+        IM_CHECK(app->tests.size() == 1); // only root is left
     };
 
     ImGuiTest* tree_view__basic_context = IM_REGISTER_TEST(e, "tree_view", "basic_context");
@@ -2783,6 +2781,31 @@ void register_tests(AppState* app) noexcept {
             ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
             ctx->ItemClick("**/Ungroup");
         }
+    };
+
+    ImGuiTest* tree_view__moving = IM_REGISTER_TEST(e, "tree_view", "moving");
+    tree_view__moving->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new test");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_idx.size(), 3);
+
+        std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_idx;
+        // test should be last
+        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(), ("**/##" + to_string(top_items[0])).c_str());
+
+        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[1])).c_str(), ("**/##" + to_string(top_items[0])).c_str());
+
+        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(), ("**/##" + to_string(top_items[1])).c_str());
+
+        ctx->ItemClick(("**/##" + to_string(top_items[0])).c_str(), ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Delete");
+
+        IM_CHECK(app->tests.size() == 1); // only root is left
     };
 }
 
