@@ -1346,7 +1346,7 @@ struct AppState {
             // update groups children parent_id
             if (std::holds_alternative<Group>(nt)) {
                 auto& group = std::get<Group>(nt);
-                std::sort(group.children_idx.begin(), group.children_idx.end(), [&to_paste](size_t a, size_t b) {  return test_comp(to_paste, a, b); });
+                std::sort(group.children_idx.begin(), group.children_idx.end(), [&to_paste](size_t a, size_t b) { return test_comp(to_paste, a, b); });
             }
             // Log(LogLevel::Debug, "new id: %zu", new_id);
         }
@@ -1976,19 +1976,26 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
     bool changed = false;
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##type", (int*)&elem->data.type, MPBDTypeLabels, IM_ARRAYSIZE(MPBDTypeLabels))) {
-            switch (elem->data.type) {
-            case MPBD_TEXT:
-                elem->data.data = "";
-                if (elem->data.open_file.has_value()) {
-                    elem->data.open_file->kill();
-                    elem->data.open_file.reset();
+        if (ImGui::BeginCombo("##type", MPBDTypeLabels[elem->data.type])) {
+            for (size_t i = 0; i < IM_ARRAYSIZE(MPBDTypeLabels); i++) {
+                if (ImGui::Selectable(MPBDTypeLabels[i], i == elem->data.type)) {
+                    elem->data.type = static_cast<MultiPartBodyDataType>(i);
+
+                    switch (elem->data.type) {
+                    case MPBD_TEXT:
+                        elem->data.data = "";
+                        if (elem->data.open_file.has_value()) {
+                            elem->data.open_file->kill();
+                            elem->data.open_file.reset();
+                        }
+                        break;
+                    case MPBD_FILES:
+                        elem->data.data = std::vector<std::string>{};
+                        break;
+                    }
                 }
-                break;
-            case MPBD_FILES:
-                elem->data.data = std::vector<std::string>{};
-                break;
             }
+            ImGui::EndCombo();
         }
     }
     if (ImGui::TableNextColumn()) { // body
