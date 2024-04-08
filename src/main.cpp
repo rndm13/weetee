@@ -965,6 +965,7 @@ struct AppState {
     ImFont* mono_font;
     HelloImGui::RunnerParams* runner_params;
 
+    std::string tree_view_search;
     SaveState clipboard;
     UndoHistory undo_history;
 
@@ -975,7 +976,6 @@ struct AppState {
     // update on load
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
     std::unordered_set<size_t> selected_tests = {};
-
     // save
     std::unordered_map<size_t, NestedTest> tests = {
         {
@@ -1335,6 +1335,10 @@ struct AppState {
 
     void move(Group* group) noexcept {
         for (size_t id : this->selected_tests) {
+            if (this->parent_selected(id)) {
+                continue;
+            }
+
             size_t old_parent = std::visit(ParentIDVisit(), this->tests[id]);
             assert(this->tests.contains(old_parent));
             assert(std::holds_alternative<Group>(this->tests[old_parent]));
@@ -1347,6 +1351,10 @@ struct AppState {
 
         group->flags |= GROUP_OPEN;
     }
+
+    void filter() noexcept {
+
+    } 
 
     void save_file() noexcept {
         assert(this->filename.has_value());
@@ -1771,14 +1779,23 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
 void tree_view(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
+
+    ImGui::SetNextItemWidth(-1);
+    bool changed = ImGui::InputText("##tree_view_search", &app->tree_view_search);
+
     if (ImGui::BeginTable("tests", 4)) {
         ImGui::TableSetupColumn("test");
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
         ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 0.0f);
-        display_tree_view_test(app, app->tests[0]);
+        changed = changed | display_tree_view_test(app, app->tests[0]);
         ImGui::EndTable();
     }
+
+    if (changed) {
+        app->filter();
+    }
+
     ImGui::PopFont();
 }
 
