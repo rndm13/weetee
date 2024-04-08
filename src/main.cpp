@@ -139,6 +139,20 @@ constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
     return ImVec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
 }
 
+// case insensitive string comparison
+bool contains(const std::string& haystack, const std::string& needle) noexcept {
+    size_t need_idx = 0;
+    for (char hay : haystack) {
+        if (std::tolower(hay) == std::tolower(needle[need_idx])) {
+            need_idx++;
+        }
+        if (need_idx >= needle.size()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 template <typename Data>
 struct PartialDictElement {
     bool enabled = true;
@@ -947,7 +961,6 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 // keys are ids and values are for separate for editing (must be saved to apply changes)
 // do not save
 struct EditorTab {
-    bool open = true;
     bool just_opened = true;
     size_t original_idx;
     std::string name;
@@ -965,7 +978,8 @@ struct AppState {
     ImFont* mono_font;
     HelloImGui::RunnerParams* runner_params;
 
-    std::string tree_view_search;
+    std::string tree_view_filter;
+    std::unordered_set<size_t> filtered_tests = {};
     SaveState clipboard;
     UndoHistory undo_history;
 
@@ -1352,9 +1366,36 @@ struct AppState {
         group->flags |= GROUP_OPEN;
     }
 
-    void filter() noexcept {
+    bool filter(Group& group) noexcept {
+        bool result = true;
+        for (size_t child_id : group.children_idx) {
+            result &= this->filter(&this->tests[child_id]);
+        }
+        result &= !contains(group.name, this->tree_view_filter);
 
-    } 
+        if (result) {
+            group.flags &= ~GROUP_OPEN;
+        } else {
+            group.flags |= GROUP_OPEN;
+        }
+        return result;
+    }
+
+    bool filter(Test& test) noexcept {
+        return !contains(test.endpoint, this->tree_view_filter);
+    }
+
+    // returns true when the value should be filtered *OUT*
+    bool filter(NestedTest* nt) noexcept {
+        bool filter = std::visit([this](auto& nt) { return this->filter(nt); }, *nt);
+
+        if (filter) {
+            this->filtered_tests.insert(std::visit(IDVisit(), *nt));
+        } else {
+            this->filtered_tests.erase(std::visit(IDVisit(), *nt));
+        }
+        return filter;
+    }
 
     void save_file() noexcept {
         assert(this->filename.has_value());
@@ -1622,9 +1663,14 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     const bool ctrl = ImGui::GetIO().KeyCtrl;
 
-    ImGui::PushID(std::visit(IDVisit(), test));
-
+    size_t id = std::visit(IDVisit(), test);
     bool changed = false;
+
+    if (app->filtered_tests.contains(id)) {
+        return changed;
+    }
+
+    ImGui::PushID(id);
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
@@ -1675,7 +1721,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
             ImGui::SetDragDropPayload("MOVE_SELECTED", &leaf.id, sizeof(size_t));
             ImGui::EndDragDropSource();
         }
-        
+
         if (!app->selected_tests.contains(leaf.id) && ImGui::BeginDragDropTarget()) {
             if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
                 app->move(&std::get<Group>(app->tests[leaf.parent_id]));
@@ -1744,7 +1790,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
             ImGui::SetDragDropPayload("MOVE_SELECTED", nullptr, 0);
             ImGui::EndDragDropSource();
         }
-        
+
         if (!app->selected_tests.contains(group.id) && ImGui::BeginDragDropTarget()) {
             if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
                 app->move(&group);
@@ -1781,7 +1827,7 @@ void tree_view(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     ImGui::SetNextItemWidth(-1);
-    bool changed = ImGui::InputText("##tree_view_search", &app->tree_view_search);
+    bool changed = ImGui::InputText("##tree_view_search", &app->tree_view_filter);
 
     if (ImGui::BeginTable("tests", 4)) {
         ImGui::TableSetupColumn("test");
@@ -1793,7 +1839,7 @@ void tree_view(AppState* app) noexcept {
     }
 
     if (changed) {
-        app->filter();
+        app->filter(&app->tests[0]);
     }
 
     ImGui::PopFont();
@@ -2236,8 +2282,9 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     bool changed = false;
 
     EditorTabResult result = TAB_NONE;
+    bool open = true;
     if (ImGui::BeginTabItem(
-            tab.name.c_str(), &tab.open,
+            tab.name.c_str(), &open,
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
@@ -2256,6 +2303,10 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
         ImGui::EndTabItem();
     }
 
+    if (!open) {
+        result = TAB_CLOSED;
+    }
+
     if (changed && result == TAB_NONE) {
         result = TAB_CHANGED;
     }
@@ -2272,8 +2323,9 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     bool changed = false;
 
     EditorTabResult result = TAB_NONE;
+    bool open = true;
     if (ImGui::BeginTabItem(
-            tab.name.c_str(), &tab.open,
+            tab.name.c_str(), &open,
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
@@ -2283,6 +2335,10 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
         }
 
         ImGui::EndTabItem();
+    }
+
+    if (!open) {
+        result = TAB_CLOSED;
     }
 
     if (changed && result == TAB_NONE) {
