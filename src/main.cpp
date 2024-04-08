@@ -116,6 +116,10 @@ static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
     ImGuiSelectableFlags_AllowOverlap |
     ImGuiSelectableFlags_AllowDoubleClick;
 
+static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
+    ImGuiDragDropFlags_SourceNoDisableHover |
+    ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
+
 bool arrow(const char* label, ImGuiDir dir) noexcept {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
@@ -1643,6 +1647,24 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // selectable
         const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
+        if (!changed && !app->selected_tests.contains(0) && ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
+            if (!app->selected_tests.contains(leaf.id)) {
+                app->selected_tests.clear();
+                app->select_with_children(leaf.id);
+            }
+
+            ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
+            ImGui::SetDragDropPayload("MOVE_SELECTED", &leaf.id, sizeof(size_t));
+            ImGui::EndDragDropSource();
+        }
+        
+        if (!app->selected_tests.contains(leaf.id) && ImGui::BeginDragDropTarget()) {
+            if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+                app->move(&std::get<Group>(app->tests[leaf.parent_id]));
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         changed = changed | context_menu_tree_view(app, &test);
 
         if (!changed && double_clicked) {
@@ -1693,6 +1715,25 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         if (clicked) {
             group.flags ^= GROUP_OPEN; // toggle
         }
+
+        if (!changed && !app->selected_tests.contains(0) && ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
+            if (!app->selected_tests.contains(group.id)) {
+                app->selected_tests.clear();
+                app->select_with_children(group.id);
+            }
+
+            ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
+            ImGui::SetDragDropPayload("MOVE_SELECTED", nullptr, 0);
+            ImGui::EndDragDropSource();
+        }
+        
+        if (!app->selected_tests.contains(group.id) && ImGui::BeginDragDropTarget()) {
+            if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+                app->move(&group);
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         changed = changed | context_menu_tree_view(app, &test);
 
         if (!changed && group.flags & GROUP_OPEN) {
