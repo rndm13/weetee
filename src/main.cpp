@@ -1537,12 +1537,10 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
         SelectAnalysisResult analysis = select_analysis(app);
 
-        // TODO: shortcut
         if (ImGui::MenuItem("Edit", "Enter", false, analysis.selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
-        // TODO: shortcut
         if (ImGui::MenuItem("Delete", "Delete", false, !analysis.selected_root && !changed)) {
             changed = true;
 
@@ -2661,6 +2659,8 @@ void show_gui(AppState* app) noexcept {
         app->save_file_dialog = std::nullopt;
     }
 
+    // shortcuts
+    // saving
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
         save_as_file_dialog(app);
     } else if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
@@ -2669,32 +2669,39 @@ void show_gui(AppState* app) noexcept {
         open_file_dialog(app);
     }
 
+    // undo
     if (app->undo_history.can_undo() && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->undo();
     } else if (app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->redo();
     }
 
+    // copy pasting
     if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
         app->copy();
     } else if (!app->selected_tests.contains(0) && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X)) {
         app->cut();
     } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
-        SelectAnalysisResult analysis = select_analysis(app);
-        if (analysis.selected_count == 1) {
-            NestedTest* parent;
-            // find the one selected group
-            for (size_t sel_id : app->selected_tests) {
-                if (!app->parent_selected(sel_id)) {
-                    parent = &app->tests[sel_id];
-                }
-            }
+        auto top_layer = app->select_top_layer();
+        if (top_layer.size() == 1) {
+            NestedTest* parent = &app->tests[top_layer[0]];
 
             if (std::holds_alternative<Group>(*parent)) {
                 app->paste(&std::get<Group>(*parent));
                 app->undo_history.push_undo_history(app);
             }
         }
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+        auto top_layer = app->select_top_layer();
+        if (top_layer.size() == 1) {
+            app->editor_open_tab(top_layer[0]);
+        }
+    }
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+        app->delete_selected();
     }
 }
 
