@@ -53,6 +53,9 @@ using HelloImGui::LogLevel;
 using json = nlohmann::json;
 using std::to_string;
 
+template <typename R>
+bool is_ready(std::future<R> const& f) { return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
+
 template <class... Ts>
 struct overloaded : Ts... {
     using Ts::operator()...;
@@ -886,7 +889,24 @@ struct Test {
 };
 
 struct TestResult {
-    httplib::Response response;
+    httplib::Result http_result;
+};
+
+// used to display currently running tests
+struct RunningTest {
+    bool selected = false;
+    Test original_test;
+    std::future<TestResult> future_result;
+};
+
+// combines finished test result and running test
+struct TestResultRecord {
+    bool selected = false;
+    Test original_test;
+    TestResult test_result;
+
+    std::string status;
+    std::string verdict;
 };
 
 enum GroupFlags : uint8_t {
@@ -983,30 +1003,8 @@ struct EditorTab {
 };
 
 struct AppState {
-    // don't save
-    uint8_t flags = {};
-
     // save
     size_t id_counter = 0;
-
-    // don't save
-    ImFont* regular_font;
-    ImFont* mono_font;
-    HelloImGui::RunnerParams* runner_params;
-
-    std::string tree_view_filter;
-    std::unordered_set<size_t> filtered_tests = {};
-    SaveState clipboard;
-    UndoHistory undo_history;
-
-    std::optional<pfd::open_file> open_file_dialog;
-    std::optional<pfd::save_file> save_file_dialog;
-    std::optional<std::string> filename;
-
-    // update on load
-    std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
-    std::unordered_set<size_t> selected_tests = {};
-    // save
     std::unordered_map<size_t, NestedTest> tests = {
         {
             0,
@@ -1017,8 +1015,29 @@ struct AppState {
             },
         },
     };
+    std::string tree_view_filter;
+    std::unordered_set<size_t> filtered_tests = {};
+
+    std::unordered_set<size_t> selected_tests = {};
+    std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
+
+    // keys are test ids
+    std::unordered_map<size_t, RunningTest> running_tests;
+    std::vector<TestResultRecord> finished_tests;
+
+    SaveState clipboard;
+    UndoHistory undo_history;
+
+    std::optional<pfd::open_file> open_file_dialog;
+    std::optional<pfd::save_file> save_file_dialog;
+    std::optional<std::string> filename;
 
     BS::thread_pool thr_pool;
+
+    // don't save
+    ImFont* regular_font;
+    ImFont* mono_font;
+    HelloImGui::RunnerParams* runner_params;
 
     void save(SaveState* save) const noexcept {
         // this save is obviously going to be pretty big so reserve instantly for speed
@@ -1474,12 +1493,12 @@ struct SelectAnalysisResult {
     bool same_parent = true;
     bool selected_root = false;
     size_t parent_id = -1;
-    size_t selected_count;
+    size_t top_selected_count;
 };
 
 SelectAnalysisResult select_analysis(AppState* app) noexcept {
     SelectAnalysisResult result;
-    result.selected_count = app->selected_tests.size();
+    result.top_selected_count = app->selected_tests.size();
 
     auto check_parent = [&result](size_t id) {
         if (!result.same_parent || result.selected_root) {
@@ -1495,7 +1514,7 @@ SelectAnalysisResult select_analysis(AppState* app) noexcept {
 
     for (auto test_id : app->selected_tests) {
         if (app->parent_selected(test_id)) {
-            result.selected_count--;
+            result.top_selected_count--;
             continue;
         }
 
@@ -1537,7 +1556,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
         SelectAnalysisResult analysis = select_analysis(app);
 
-        if (ImGui::MenuItem("Edit", "Enter", false, analysis.selected_count == 1 && !changed)) {
+        if (ImGui::MenuItem("Edit", "Enter", false, analysis.top_selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
@@ -1577,7 +1596,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && analysis.selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1586,7 +1605,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->paste(&selected_group);
             }
 
-            if (ImGui::MenuItem("Add a new test", nullptr, false, analysis.selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem("Add a new test", nullptr, false, analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1604,7 +1623,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem("Add a new group", nullptr, false, analysis.selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem("Add a new group", nullptr, false, analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1709,7 +1728,10 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         ImGui::Text("%s", leaf.endpoint.c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
-        ImSpinner::SpinnerIncDots("running", 5, 1);
+
+        if (app->running_tests.contains(id)) {
+            ImSpinner::SpinnerIncDots("running", 5, 1);
+        }
 
         ImGui::TableNextColumn(); // enabled / disabled
 
@@ -1776,7 +1798,9 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         ImGui::Text("%s", group.name.c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
-        ImSpinner::SpinnerIncDots("running", 5, 1);
+        if (app->running_tests.contains(id)) {
+            ImSpinner::SpinnerIncDots("running", 5, 1);
+        }
 
         ImGui::TableNextColumn(); // enabled / disabled
 
@@ -2426,36 +2450,6 @@ void tabbed_editor(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
-std::vector<HelloImGui::DockingSplit> splits() noexcept {
-    auto log_split = HelloImGui::DockingSplit(
-        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
-    auto tests_split = HelloImGui::DockingSplit(
-        "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
-    return {log_split, tests_split};
-}
-
-std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
-    auto tab_editor_window = HelloImGui::DockableWindow(
-        "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
-
-    auto tests_window = HelloImGui::DockableWindow(
-        "Tests", "SideBarDockSpace", [app]() { tree_view(app); });
-
-    auto logs_window = HelloImGui::DockableWindow(
-        "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
-
-    return {tests_window, tab_editor_window, logs_window};
-}
-
-HelloImGui::DockingParams layout(AppState* app) noexcept {
-    auto params = HelloImGui::DockingParams();
-
-    params.dockableWindows = windows(app);
-    params.dockingSplits = splits();
-
-    return params;
-}
-
 std::pair<std::string, std::string> split_endpoint(std::string endpoint) {
     size_t semicolon = endpoint.find(":");
     if (semicolon == std::string::npos) {
@@ -2540,22 +2534,163 @@ httplib::Result make_request(AppState* app, Test* test) noexcept {
 }
 
 TestResult run_test(AppState* app, Test test) noexcept {
-    // copy test to not crash if test somehow gets deleted while executing
-    // maybe forbid test deletion while executing?
-    const auto result = make_request(app, &test);
+    httplib::Result result = make_request(app, &test);
     Log(LogLevel::Debug, "Got response for %s: %s", test.endpoint.c_str(), to_string(result.error()).c_str());
     if (result.error() == httplib::Error::Success) {
         Log(LogLevel::Debug, "%d %s", result->status, result->body.c_str());
     }
 
-    return {}; // TODO: return proper value
+    // TODO: run analysis
+    return {
+        .http_result = std::move(result),
+    };
 }
 
-void run_tests(AppState* app, std::vector<Test>* tests) noexcept {
-    for (const auto& test : *tests) {
-        auto result = app->thr_pool.submit_task([app, &test]() { run_test(app, test); });
-        result.wait();
+void run_tests(AppState* app, std::vector<Test> tests) noexcept {
+    app->running_tests.clear();
+    app->finished_tests.clear();
+
+    for (const auto& test : tests) {
+        std::future<TestResult> result = app->thr_pool.submit_task([app, &test]() { return run_test(app, test); });
+
+        app->running_tests.insert_or_assign(
+            test.id,
+            RunningTest{
+                .original_test = test,
+                .future_result = std::move(result),
+            });
     }
+}
+
+void testing_results(AppState* app) noexcept {
+    ImGui::PushFont(app->regular_font);
+
+    for (auto it = app->running_tests.begin(); it != app->running_tests.end();) {
+        if (is_ready(it->second.future_result)) {
+            app->finished_tests.push_back(TestResultRecord{
+                .original_test = it->second.original_test,
+                .test_result = it->second.future_result.get(),
+                .status = "OK",
+                .verdict = "Successfully passed",
+            });
+            it = app->running_tests.erase(it);
+        } else {
+            it++;
+        }
+    }
+
+    auto deselect_all = [app]() {
+        for (auto& [_, rt] : app->running_tests) {
+            rt.selected = false;
+        }
+        for(TestResultRecord& t : app->finished_tests) {
+            t.selected = false;
+        } 
+    };
+
+    // TODO: context menu
+    if (ImGui::BeginTable("results", 3, TABLE_FLAGS)) {
+        ImGui::TableSetupColumn("Test");
+        ImGui::TableSetupColumn("Status");
+        ImGui::TableSetupColumn("Verdict");
+        ImGui::TableHeadersRow();
+
+        for (auto& result : app->finished_tests) {
+            ImGui::TableNextRow();
+            ImGui::PushID(result.original_test.id);
+
+            // test type and name
+            if (ImGui::TableNextColumn()) {
+                http_type_button(result.original_test.type);
+                ImGui::SameLine();
+                if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
+                    if (ImGui::GetIO().KeyCtrl) {
+                        result.selected = !result.selected;
+                    } else {
+                        deselect_all();
+                        result.selected = true;
+                    }
+                }
+            }
+
+            // status
+            if (ImGui::TableNextColumn()) {
+                ImGui::Text("%s", result.status.c_str());
+            }
+
+            // verdict
+            if (ImGui::TableNextColumn()) {
+                ImGui::Text("%s", result.verdict.c_str());
+            }
+
+            ImGui::PopID();
+        }
+
+        for (auto& [test_id, running] : app->running_tests) {
+            ImGui::TableNextRow();
+            ImGui::PushID(test_id);
+
+            // test type and name
+            if (ImGui::TableNextColumn()) {
+                http_type_button(running.original_test.type);
+                ImGui::SameLine();
+                if (ImGui::Selectable(running.original_test.endpoint.c_str(), running.selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
+                    if (ImGui::GetIO().KeyCtrl) {
+                        running.selected = !running.selected;
+                    } else {
+                        deselect_all();
+                        running.selected = true;
+                    }
+                }
+            }
+
+            // status
+            if (ImGui::TableNextColumn()) {
+                ImGui::Text("RUNNING");
+            }
+
+            // verdict (in running tests skip)
+            ImGui::TableNextColumn();
+            ImGui::PopID();
+        }
+
+        ImGui::EndTable();
+    }
+
+    ImGui::PopFont();
+}
+
+std::vector<HelloImGui::DockingSplit> splits() noexcept {
+    auto log_split = HelloImGui::DockingSplit(
+        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
+    auto tests_split = HelloImGui::DockingSplit(
+        "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
+    return {log_split, tests_split};
+}
+
+std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
+    auto tab_editor_window = HelloImGui::DockableWindow(
+        "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
+
+    auto tests_window = HelloImGui::DockableWindow(
+        "Tests", "SideBarDockSpace", [app]() { tree_view(app); });
+
+    auto results_window = HelloImGui::DockableWindow(
+        "Results", "MainDockSpace", [app]() { testing_results(app); });
+
+    auto logs_window = HelloImGui::DockableWindow(
+        "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+
+    return {tests_window, tab_editor_window, results_window, logs_window};
+}
+
+HelloImGui::DockingParams layout(AppState* app) noexcept {
+    auto params = HelloImGui::DockingParams();
+
+    params.dockableWindows = windows(app);
+    params.dockingSplits = splits();
+
+    return params;
 }
 
 void save_as_file_dialog(AppState* app) noexcept {
@@ -2622,7 +2757,7 @@ void show_menus(AppState* app) noexcept {
         }
 
         Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
-        run_tests(app, &tests_to_run);
+        run_tests(app, std::move(tests_to_run));
     }
     ImGui::PopStyleColor(1);
 }
