@@ -16,7 +16,6 @@
 #include "imgui_test_engine/imgui_te_engine.h"
 #include "imgui_test_engine/imgui_te_ui.h"
 
-#include "ImGuiColorTextEdit/TextEditor.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
@@ -30,6 +29,7 @@
 #include "BS_thread_pool.hpp"
 
 #include "algorithm"
+#include "exception"
 #include "fstream"
 #include "future"
 #include "iterator"
@@ -54,7 +54,10 @@ using json = nlohmann::json;
 using std::to_string;
 
 template <typename R>
-bool is_ready(std::future<R> const& f) { return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
+bool is_ready(std::future<R> const& f) noexcept {
+    assert(f.valid());
+    return f.wait_until(std::chrono::system_clock::time_point::min()) == std::future_status::ready;
+}
 
 template <class... Ts>
 struct overloaded : Ts... {
@@ -681,7 +684,6 @@ static const char* RequestBodyTypeLabels[] = {
     [REQUEST_MULTIPART] = (const char*)"Multipart",
 };
 
-// NOTE: maybe change std::string to TextEditor?
 using RequestBody = std::variant<std::string, MultiPartBody>;
 
 struct Request {
@@ -691,8 +693,6 @@ struct Request {
     Cookies cookies;
     Parameters parameters;
     Headers headers;
-
-    TextEditor editor;
 
     void save(SaveState* save) const noexcept {
         save->save(this->body_type);
@@ -724,7 +724,6 @@ static const char* ResponseBodyTypeLabels[] = {
     [RESPONSE_MULTIPART] = (const char*)"Multipart",
 };
 
-// NOTE: maybe change std::string to TextEditor?
 using ResponseBody = std::variant<std::string, MultiPartBody>;
 
 struct Response {
@@ -734,9 +733,6 @@ struct Response {
 
     Cookies cookies;
     Headers headers;
-
-    // do not save
-    TextEditor editor;
 
     void save(SaveState* save) const noexcept {
         save->save(this->status);
@@ -889,21 +885,12 @@ struct Test {
 };
 
 struct TestResult {
-    httplib::Result http_result;
-};
+    bool selected = true;
 
-// used to display currently running tests
-struct RunningTest {
-    bool selected = false;
-    Test original_test;
-    std::future<TestResult> future_result;
-};
+    bool running = true;
 
-// combines finished test result and running test
-struct TestResultRecord {
-    bool selected = false;
     Test original_test;
-    TestResult test_result;
+    std::optional<httplib::Result> http_result;
 
     std::string status;
     std::string verdict;
@@ -1022,8 +1009,7 @@ struct AppState {
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
 
     // keys are test ids
-    std::unordered_map<size_t, RunningTest> running_tests;
-    std::vector<TestResultRecord> finished_tests;
+    std::unordered_map<size_t, TestResult> test_results;
 
     SaveState clipboard;
     UndoHistory undo_history;
@@ -1065,11 +1051,9 @@ struct AppState {
 
     void focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) noexcept {
         for (auto& [id, test] : this->tests) {
-            try {
-                if (!nested_test_eq(&test, &old_tests->at(id))) {
-                    this->editor_open_tab(id);
-                }
-            } catch (std::out_of_range&) {
+            if (old_tests->contains(id) && !nested_test_eq(&test, &old_tests->at(id))) {
+                this->editor_open_tab(id);
+            } else {
                 if (std::holds_alternative<Test>(test)) {
                     this->editor_open_tab(id);
                 }
@@ -1729,7 +1713,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // spinner for running tests
 
-        if (app->running_tests.contains(id)) {
+        if (app->test_results.contains(id) && app->test_results.at(id).running) {
             ImSpinner::SpinnerIncDots("running", 5, 1);
         }
 
@@ -1798,7 +1782,8 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
         ImGui::Text("%s", group.name.c_str());
 
         ImGui::TableNextColumn(); // spinner for running tests
-        if (app->running_tests.contains(id)) {
+
+        if (app->test_results.contains(id) && app->test_results.at(id).running) {
             ImSpinner::SpinnerIncDots("running", 5, 1);
         }
 
@@ -2131,17 +2116,15 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                 switch (test.request.body_type) {
                 case REQUEST_JSON:
                 case REQUEST_RAW:
-                    test.request.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
                     if (!std::holds_alternative<std::string>(test.request.body)) {
                         test.request.body = "{}";
-                        test.request.editor.SetText("{}");
-                        // TODO: allow for palette change within view settings
-                        test.request.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
                     break;
 
                 case REQUEST_MULTIPART:
-                    test.request.body = MultiPartBody{};
+                    if (!std::holds_alternative<MultiPartBody>(test.request.body)) {
+                        test.request.body = MultiPartBody{};
+                    }
                     break;
                 }
             }
@@ -2151,18 +2134,16 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                 ImGui::SameLine();
                 if (ImGui::Button("Format")) {
                     try {
-                        test.request.editor.SetText(
-                            json::parse(test.request.editor.GetText()).dump(4));
+                        assert(std::holds_alternative<std::string>(test.request.body));
+                        test.request.body = json::parse(std::get<std::string>(test.request.body)).dump(4);
                     } catch (json::parse_error& error) {
                         Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
                     }
                 }
             case REQUEST_RAW:
                 ImGui::PushFont(app->mono_font);
-                changed = changed | test.request.editor.Render("##body", false, ImVec2(0, 300));
+                changed = changed | ImGui::InputTextMultiline("##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
                 ImGui::PopFont();
-                // NOTE: possibly slow
-                test.request.body = test.request.editor.GetText();
                 break;
 
             case REQUEST_MULTIPART:
@@ -2227,17 +2208,15 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                 case RESPONSE_JSON:
                 case RESPONSE_HTML:
                 case RESPONSE_RAW:
-                    test.response.editor.SetLanguageDefinition(TextEditor::LanguageDefinition::Json());
                     if (!std::holds_alternative<std::string>(test.response.body)) {
                         test.response.body = "";
-                        test.response.editor.SetText("");
-                        // TODO: allow for palette change within view settings
-                        test.response.editor.SetPalette(TextEditor::GetDarkPalette());
                     }
                     break;
 
                 case RESPONSE_MULTIPART:
-                    test.response.body = MultiPartBody{};
+                    if (!std::holds_alternative<MultiPartBody>(test.response.body)) {
+                        test.response.body = MultiPartBody{};
+                    }
                     break;
                 }
             }
@@ -2247,19 +2226,18 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                 ImGui::SameLine();
                 if (ImGui::Button("Format")) {
                     try {
-                        test.response.editor.SetText(json::parse(test.response.editor.GetText()).dump(4));
+                        assert(std::holds_alternative<std::string>(test.request.body));
+                        test.request.body = json::parse(std::get<std::string>(test.request.body)).dump(4);
                     } catch (json::parse_error& error) {
-                        Log(LogLevel::Error, (std::string("Failed to parse json for formatting: ") + error.what()).c_str());
+                        Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
                     }
                 }
 
             case RESPONSE_HTML:
             case RESPONSE_RAW:
                 ImGui::PushFont(app->mono_font);
-                changed = changed | test.response.editor.Render("##body", false, ImVec2(0, 300));
+                changed = changed | ImGui::InputTextMultiline("##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
                 ImGui::PopFont();
-                // NOTE: possibly slow
-                test.response.body = test.response.editor.GetText();
                 break;
 
             case RESPONSE_MULTIPART:
@@ -2467,7 +2445,7 @@ std::pair<std::string, std::string> split_endpoint(std::string endpoint) {
     return {host, dest};
 }
 
-httplib::Headers test_headers(Test* test) noexcept {
+httplib::Headers test_headers(const Test* test) noexcept {
     httplib::Headers result;
 
     for (const auto& header : test->request.headers.elements) {
@@ -2492,7 +2470,7 @@ httplib::Headers test_headers(Test* test) noexcept {
     return result;
 }
 
-httplib::Params test_params(Test* test) noexcept {
+httplib::Params test_params(const Test* test) noexcept {
     httplib::Params result;
 
     for (const auto& param : test->request.parameters.elements) {
@@ -2505,7 +2483,7 @@ httplib::Params test_params(Test* test) noexcept {
     return result;
 }
 
-httplib::Result make_request(AppState* app, Test* test) noexcept {
+httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto params = test_params(test);
     const auto headers = test_headers(test);
     const httplib::Progress progress = nullptr;
@@ -2533,31 +2511,34 @@ httplib::Result make_request(AppState* app, Test* test) noexcept {
     return result;
 }
 
-TestResult run_test(AppState* app, Test test) noexcept {
-    httplib::Result result = make_request(app, &test);
-    Log(LogLevel::Debug, "Got response for %s: %s", test.endpoint.c_str(), to_string(result.error()).c_str());
+void run_test(AppState* app, const Test *test) noexcept {
+    httplib::Result result = make_request(app, test);
+    Log(LogLevel::Debug, "Got response for %s: %s", test->endpoint.c_str(), to_string(result.error()).c_str());
     if (result.error() == httplib::Error::Success) {
         Log(LogLevel::Debug, "%d %s", result->status, result->body.c_str());
     }
 
     // TODO: run analysis
-    return {
-        .http_result = std::move(result),
-    };
+    assert(app->test_results.contains(test->id));
+    app->test_results.at(test->id).status = "Ok";
+    app->test_results.at(test->id).verdict = "Successfully passed";
+    app->test_results.at(test->id).running = false;
 }
 
-void run_tests(AppState* app, std::vector<Test> tests) noexcept {
-    app->running_tests.clear();
-    app->finished_tests.clear();
+void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
+    app->thr_pool.wait();
+    app->test_results.clear();
 
-    for (const auto& test : tests) {
-        std::future<TestResult> result = app->thr_pool.submit_task([app, &test]() { return run_test(app, test); });
+    for (const auto& test : *tests) {
+        // makes a copy of test
+        app->thr_pool.detach_task([app, test]() { return run_test(app, &test); });
 
-        app->running_tests.insert_or_assign(
+        app->test_results.insert_or_assign(
             test.id,
-            RunningTest{
+            TestResult{
                 .original_test = test,
-                .future_result = std::move(result),
+                .status = "Running",
+                .verdict = "Pending",
             });
     }
 }
@@ -2565,27 +2546,10 @@ void run_tests(AppState* app, std::vector<Test> tests) noexcept {
 void testing_results(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
-    for (auto it = app->running_tests.begin(); it != app->running_tests.end();) {
-        if (is_ready(it->second.future_result)) {
-            app->finished_tests.push_back(TestResultRecord{
-                .original_test = it->second.original_test,
-                .test_result = it->second.future_result.get(),
-                .status = "OK",
-                .verdict = "Successfully passed",
-            });
-            it = app->running_tests.erase(it);
-        } else {
-            it++;
-        }
-    }
-
     auto deselect_all = [app]() {
-        for (auto& [_, rt] : app->running_tests) {
+        for (auto& [_, rt] : app->test_results) {
             rt.selected = false;
         }
-        for(TestResultRecord& t : app->finished_tests) {
-            t.selected = false;
-        } 
     };
 
     // TODO: context menu
@@ -2595,7 +2559,7 @@ void testing_results(AppState* app) noexcept {
         ImGui::TableSetupColumn("Verdict");
         ImGui::TableHeadersRow();
 
-        for (auto& result : app->finished_tests) {
+        for (auto& [id, result] : app->test_results) {
             ImGui::TableNextRow();
             ImGui::PushID(result.original_test.id);
 
@@ -2623,34 +2587,6 @@ void testing_results(AppState* app) noexcept {
                 ImGui::Text("%s", result.verdict.c_str());
             }
 
-            ImGui::PopID();
-        }
-
-        for (auto& [test_id, running] : app->running_tests) {
-            ImGui::TableNextRow();
-            ImGui::PushID(test_id);
-
-            // test type and name
-            if (ImGui::TableNextColumn()) {
-                http_type_button(running.original_test.type);
-                ImGui::SameLine();
-                if (ImGui::Selectable(running.original_test.endpoint.c_str(), running.selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
-                    if (ImGui::GetIO().KeyCtrl) {
-                        running.selected = !running.selected;
-                    } else {
-                        deselect_all();
-                        running.selected = true;
-                    }
-                }
-            }
-
-            // status
-            if (ImGui::TableNextColumn()) {
-                ImGui::Text("RUNNING");
-            }
-
-            // verdict (in running tests skip)
-            ImGui::TableNextColumn();
             ImGui::PopID();
         }
 
@@ -2757,7 +2693,7 @@ void show_menus(AppState* app) noexcept {
         }
 
         Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
-        run_tests(app, std::move(tests_to_run));
+        run_tests(app, &tests_to_run);
     }
     ImGui::PopStyleColor(1);
 }
@@ -2836,7 +2772,9 @@ void show_gui(AppState* app) noexcept {
     }
 
     if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
-        app->delete_selected();
+        if (!app->selected_tests.contains(0)) { // root not selected
+            app->delete_selected();
+        }
     }
 }
 
@@ -2928,6 +2866,7 @@ void register_tests(AppState* app) noexcept {
     ImGuiTest* tree_view__moving = IM_REGISTER_TEST(e, "tree_view", "moving");
     tree_view__moving->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
         ctx->SetRef("Tests");
+
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
         ctx->ItemClick("**/Add a new test");
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
