@@ -883,16 +883,40 @@ struct Test {
     }
 };
 
-struct TestResult {
-    bool selected = true;
+enum TestResultStatus {
+    STATUS_RUNNING,
+    STATUS_CANCELLED,
+    STATUS_OK,
+    STATUS_ERROR,
+    STATUS_WARNING,
+};
+static const char* TestResultStatusLabels[] = {
+    [STATUS_RUNNING] = (const char*)"Running",
+    [STATUS_CANCELLED] = (const char*)"Cancelled",
+    [STATUS_OK] = (const char*)"Ok",
+    [STATUS_ERROR] = (const char*)"Error",
+    [STATUS_WARNING] = (const char*)"Warning",
+};
 
-    bool running = true;
+struct TestResult {
+    // can be written and read from any thread
+    std::atomic_bool running = true;
+    std::atomic<TestResultStatus> status = STATUS_RUNNING;
+
+    // written in draw thread
+    bool selected = true;
 
     Test original_test;
     std::optional<httplib::Result> http_result;
 
-    std::string status;
-    std::string verdict;
+    // written only in test_run threads
+    std::string verdict = "0%";
+
+    // progress
+    size_t progress_total;
+    size_t progress_current;
+
+    TestResult(const Test& original_test) noexcept : original_test(original_test) {}
 };
 
 enum GroupFlags : uint8_t {
@@ -1023,6 +1047,25 @@ struct AppState {
     ImFont* regular_font;
     ImFont* mono_font;
     HelloImGui::RunnerParams* runner_params;
+
+    bool is_running_tests() const noexcept {
+        for (const auto& [id, result] : this->test_results) {
+            if (result.running.load()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void stop_tests() noexcept {
+        for (auto& [id, result] : this->test_results) {
+            result.status.store(STATUS_CANCELLED);
+            result.running.store(false);
+        }
+
+        this->thr_pool.purge();
+    }
 
     void save(SaveState* save) const noexcept {
         // this save is obviously going to be pretty big so reserve instantly for speed
@@ -1712,7 +1755,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // spinner for running tests
 
-        if (app->test_results.contains(id) && app->test_results.at(id).running) {
+        if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
             ImSpinner::SpinnerIncDots("running", 5, 1);
         }
 
@@ -1782,7 +1825,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
 
         ImGui::TableNextColumn(); // spinner for running tests
 
-        if (app->test_results.contains(id) && app->test_results.at(id).running) {
+        if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
             ImSpinner::SpinnerIncDots("running", 5, 1);
         }
 
@@ -2489,11 +2532,36 @@ httplib::Params test_params(const Test* test) noexcept {
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto params = test_params(test);
     const auto headers = test_headers(test);
-    const httplib::Progress progress = nullptr;
+    auto progress = [app, test](size_t current, size_t total) -> bool {
+        printf("Progress test_id: %zu, current: %zu, total: %zu\n", test->id, current, total);
+
+        // missing
+        if (!app->test_results.contains(test->id)) {
+            return false;
+        }
+
+        TestResult* result = &app->test_results.at(test->id);
+
+        // stopped
+        if (!result->running.load()) {
+            result->status.store(STATUS_CANCELLED);
+
+            return false;
+        }
+
+        result->progress_total = total;
+        result->progress_current = current;
+        // result->verdict = to_string(current * 100 / float(total)) + "% ";
+
+        return true;
+    };
+
     httplib::Result result;
     Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type], test->label().c_str());
+
     auto [host, dest] = split_endpoint(test->endpoint);
     Log(LogLevel::Debug, "host: %s, dest: %s", host.c_str(), dest.c_str());
+
     httplib::Client cli(host);
     switch (test->type) {
     case HTTP_GET:
@@ -2522,27 +2590,27 @@ void run_test(AppState* app, const Test* test) noexcept {
     }
 
     // TODO: run analysis
-    assert(app->test_results.contains(test->id));
-    app->test_results.at(test->id).status = "Ok";
-    app->test_results.at(test->id).verdict = "Successfully passed";
-    app->test_results.at(test->id).running = false;
+
+    if (app->test_results.contains(test->id)) {
+        if (result.error() == httplib::Error::Success) {
+            app->test_results.at(test->id).status.store(STATUS_OK);
+        } else {
+            app->test_results.at(test->id).status.store(STATUS_ERROR);
+        }
+        app->test_results.at(test->id).verdict = to_string(result.error());
+        app->test_results.at(test->id).running.store(false);
+    }
 }
 
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
-    app->thr_pool.wait();
+    app->stop_tests();
     app->test_results.clear();
 
     for (const auto& test : *tests) {
+        app->test_results.try_emplace(test.id, test);
+
         // makes a copy of test
         app->thr_pool.detach_task([app, test]() { return run_test(app, &test); });
-
-        app->test_results.insert_or_assign(
-            test.id,
-            TestResult{
-                .original_test = test,
-                .status = "Running",
-                .verdict = "Pending",
-            });
     }
 }
 
@@ -2582,7 +2650,7 @@ void testing_results(AppState* app) noexcept {
 
             // status
             if (ImGui::TableNextColumn()) {
-                ImGui::Text("%s", result.status.c_str());
+                ImGui::Text("%s", TestResultStatusLabels[result.status.load()]);
             }
 
             // verdict
@@ -2676,7 +2744,7 @@ void show_menus(AppState* app) noexcept {
     }
 
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
-    if (arrow("start", ImGuiDir_Right)) {
+    if (!app->is_running_tests() && arrow("start", ImGuiDir_Right)) {
         // find tests to execute
         std::vector<Test> tests_to_run;
         for (const auto& [id, nested_test] : app->tests) {
@@ -2699,6 +2767,11 @@ void show_menus(AppState* app) noexcept {
         run_tests(app, &tests_to_run);
     }
     ImGui::PopStyleColor(1);
+
+    if (app->is_running_tests() && ImGui::Button("Stop")) {
+        app->stop_tests();
+        Log(LogLevel::Warning, "Stopped testing");
+    }
 }
 
 void show_gui(AppState* app) noexcept {
