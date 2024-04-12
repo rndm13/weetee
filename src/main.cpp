@@ -22,9 +22,7 @@
 #if OPENSSL
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #endif
-
 #include "../external/cpp-httplib/out/httplib.h"
-#include "../external/json/include/nlohmann/json.hpp"
 
 #include "BS_thread_pool.hpp"
 
@@ -47,10 +45,11 @@
 
 #include "textinputcombo.hpp"
 
+#include "json.hpp"
+
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
-using json = nlohmann::json;
 using std::to_string;
 
 template <typename R>
@@ -727,7 +726,7 @@ static const char* ResponseBodyTypeLabels[] = {
 using ResponseBody = std::variant<std::string, MultiPartBody>;
 
 struct Response {
-    std::string status; // status string
+    std::string status; // a string so user can get hints and write their own status code
     ResponseBodyType body_type = RESPONSE_JSON;
     ResponseBody body = "{}";
 
@@ -2131,19 +2130,21 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
 
             switch (test.request.body_type) {
             case REQUEST_JSON:
-                ImGui::SameLine();
-                if (ImGui::Button("Format")) {
-                    try {
-                        assert(std::holds_alternative<std::string>(test.request.body));
-                        test.request.body = json::parse(std::get<std::string>(test.request.body)).dump(4);
-                    } catch (json::parse_error& error) {
-                        Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
-                    }
-                }
             case REQUEST_RAW:
                 ImGui::PushFont(app->mono_font);
                 changed = changed | ImGui::InputTextMultiline("##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
                 ImGui::PopFont();
+
+                if (ImGui::BeginPopupContextItem()) {
+                    if (test.request.body_type == REQUEST_JSON && ImGui::MenuItem("Format")) {
+                        assert(std::holds_alternative<std::string>(test.request.body));
+                        const char* error = json_format(&std::get<std::string>(test.request.body));
+                        if (error) {
+                            Log(LogLevel::Error, "Failed to parse json: ", error);
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
                 break;
 
             case REQUEST_MULTIPART:
@@ -2223,21 +2224,23 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
             switch (test.response.body_type) {
             case RESPONSE_JSON:
-                ImGui::SameLine();
-                if (ImGui::Button("Format")) {
-                    try {
-                        assert(std::holds_alternative<std::string>(test.request.body));
-                        test.request.body = json::parse(std::get<std::string>(test.request.body)).dump(4);
-                    } catch (json::parse_error& error) {
-                        Log(LogLevel::Error, "Failed to parse json for formatting: %s", error.what());
-                    }
-                }
-
             case RESPONSE_HTML:
             case RESPONSE_RAW:
                 ImGui::PushFont(app->mono_font);
                 changed = changed | ImGui::InputTextMultiline("##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
                 ImGui::PopFont();
+
+                if (ImGui::BeginPopupContextItem()) {
+                    if (test.response.body_type == RESPONSE_JSON && ImGui::MenuItem("Format")) {
+                        assert(std::holds_alternative<std::string>(test.response.body));
+                        const char* error = json_format(&std::get<std::string>(test.response.body));
+                        if (error) {
+                            Log(LogLevel::Error, "Failed to parse json: ", error);
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+
                 break;
 
             case RESPONSE_MULTIPART:
@@ -2511,7 +2514,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     return result;
 }
 
-void run_test(AppState* app, const Test *test) noexcept {
+void run_test(AppState* app, const Test* test) noexcept {
     httplib::Result result = make_request(app, test);
     Log(LogLevel::Debug, "Got response for %s: %s", test->endpoint.c_str(), to_string(result.error()).c_str());
     if (result.error() == httplib::Error::Success) {
