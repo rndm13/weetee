@@ -19,9 +19,6 @@
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
-#if OPENSSL
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-#endif
 #include "../external/cpp-httplib/out/httplib.h"
 
 #include "BS_thread_pool.hpp"
@@ -31,6 +28,7 @@
 #include "fstream"
 #include "future"
 #include "iterator"
+#include "optional"
 #include "sstream"
 #include "stdexcept"
 #include "type_traits"
@@ -61,6 +59,15 @@ bool is_ready(std::future<R> const& f) noexcept {
 template <class... Ts>
 struct overloaded : Ts... {
     using Ts::operator()...;
+};
+
+struct ClientSettingsVisit {
+    const auto& operator()(const auto& visitable) const noexcept {
+        return visitable.cli_settings;
+    }
+    auto& operator()(auto& visitable) const noexcept {
+        return visitable.cli_settings;
+    }
 };
 
 struct IDVisit {
@@ -252,6 +259,25 @@ struct SaveState {
         this->load((std::byte*)str.data(), length);
 
         this->load_idx++; // skip over null terminator
+    }
+
+    template <class T>
+    void save(const std::optional<T>& opt) noexcept {
+        this->save(opt.has_value());
+        if (opt.has_value()) {
+            this->save(opt.value());
+        }
+    }
+
+    template <class T>
+    void load(const std::optional<T>& opt) noexcept {
+        bool has_value;
+        this->load(has_value);
+        if (has_value) {
+            T value;
+            this->load(value);
+            opt = value;
+        }
     }
 
     template <class K, class V>
@@ -839,6 +865,95 @@ static const char* HTTPStatusLabels[] = {
     (const char*)"511 Network Authentication Required",
 };
 
+enum ClientSettingsFlags : uint8_t {
+    CLIENT_NONE = 0,
+    CLIENT_DYNAMIC = 1 << 0,
+    CLIENT_COMPRESSION = 1 << 1,
+    CLIENT_KEEP_ALIVE = 1 << 2,
+    CLIENT_FOLLOW_REDIRECTS = 1 << 3,
+};
+
+enum CompressionType : uint8_t {
+#if CPPHTTPLIB_ZLIB_SUPPORT
+    COMPRESSION_ZLIB,
+#endif
+#if CPPHTTPLIB_BROTLI_SUPPORT
+    COMPRESSION_BROTLI,
+#endif
+};
+static const char* CompressionTypeLabels[] = {
+#if CPPHTTPLIB_ZLIB_SUPPORT
+    [COMPRESSION_ZLIB] = (const char*)"ZLIB",
+#endif
+#if CPPHTTPLIB_BROTLI_SUPPORT
+    [COMPRESSION_BROTLI] = (const char*)"Brotli",
+#endif
+};
+
+struct ClientSettings {
+    uint8_t flags = CLIENT_NONE;
+#if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
+    CompressionType compression;
+#endif
+
+    void save(SaveState* save) const noexcept {
+        save->save(this->flags);
+#if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
+        save->save(this->compression);
+#endif
+    }
+
+    void load(SaveState* save) noexcept {
+        save->load(this->flags);
+#if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
+        save->load(this->compression);
+#endif
+    }
+};
+
+#define CHECKBOX_FLAG(flags, changed, flag_name, flag_label) \
+    do {                                                     \
+        bool flag = (flags) & (flag_name);                   \
+        if (ImGui::Checkbox((flag_label), &flag)) {          \
+            changed = true;                                  \
+            if (flag) {                                      \
+                (flags) |= (flag_name);                      \
+            } else {                                         \
+                (flags) &= ~(flag_name);                     \
+            }                                                \
+        }                                                    \
+    } while (0);
+
+bool show_client_settings(ClientSettings* set) noexcept {
+    bool changed = false;
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
+    if (set->flags & CLIENT_DYNAMIC) {
+        ImGui::SameLine();
+        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
+    }
+
+#if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_COMPRESSION, "Enable Client Compression");
+    if (set->flags & CLIENT_COMPRESSION) {
+        ImGui::SameLine();
+        if (ImGui::BeginCombo("##compression_type", CompressionTypeLabels[set->compression])) {
+            for (size_t i = 0; i < IM_ARRAYSIZE(CompressionTypeLabels); i++) {
+                if (ImGui::Selectable(CompressionTypeLabels[i], i == set->compression)) {
+                    changed = true;
+                    set->compression = static_cast<CompressionType>(i);
+                }
+            }
+            ImGui::EndCombo();
+        }
+    }
+#endif
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, "Follow Redirects");
+    return changed;
+}
+#undef CHECKBOX_FLAG
+
 enum TestFlags : uint8_t {
     TEST_DISABLED = 1 << 0,
 };
@@ -853,6 +968,8 @@ struct Test {
 
     Request request;
     Response response;
+
+    std::optional<ClientSettings> cli_settings;
 
     const std::string label() const noexcept {
 #ifndef LABEL_SHOW_ID
@@ -870,6 +987,7 @@ struct Test {
         save->save(this->endpoint);
         save->save(this->request);
         save->save(this->response);
+        save->save(this->cli_settings);
     }
 
     void load(SaveState* save) noexcept {
@@ -880,6 +998,7 @@ struct Test {
         save->load(this->endpoint);
         save->load(this->request);
         save->load(this->response);
+        save->load(this->cli_settings);
     }
 };
 
@@ -930,6 +1049,8 @@ struct Group {
     uint8_t flags;
 
     std::string name;
+    std::optional<ClientSettings> cli_settings;
+
     std::vector<size_t> children_idx;
 
     const std::string label() const noexcept {
@@ -946,6 +1067,7 @@ struct Group {
         save->save(this->flags);
         save->save(this->name);
         save->save(this->children_idx);
+        save->save(this->cli_settings);
     }
 
     void load(SaveState* save) noexcept {
@@ -954,6 +1076,7 @@ struct Group {
         save->load(this->flags);
         save->load(this->name);
         save->load(this->children_idx);
+        save->load(this->cli_settings);
     }
 };
 
@@ -1022,6 +1145,7 @@ struct AppState {
                 .parent_id = static_cast<size_t>(-1),
                 .id = 0,
                 .name = "root",
+                .cli_settings = ClientSettings{},
             },
         },
     };
@@ -1058,10 +1182,22 @@ struct AppState {
         return false;
     }
 
+    void stop_test(TestResult& result) noexcept {
+        assert(result.running.load());
+        result.status.store(STATUS_CANCELLED);
+        result.running.store(false);
+    }
+
+    void stop_test(size_t id) noexcept {
+        assert(this->test_results.contains(id));
+
+        auto& result = this->test_results.at(id);
+        this->stop_test(result);
+    }
+
     void stop_tests() noexcept {
         for (auto& [id, result] : this->test_results) {
-            result.status.store(STATUS_CANCELLED);
-            result.running.store(false);
+            this->stop_test(result);
         }
 
         this->thr_pool.purge();
@@ -1081,6 +1217,7 @@ struct AppState {
     }
 
     void editor_open_tab(size_t id) noexcept {
+        this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame = true;
         if (this->opened_editor_tabs.contains(id)) {
             this->opened_editor_tabs[id].just_opened = true;
         } else {
@@ -1151,6 +1288,23 @@ struct AppState {
 
     bool parent_selected(size_t id) const noexcept {
         return this->selected_tests.contains(std::visit(ParentIDVisit(), this->tests.at(id)));
+    }
+
+    const ClientSettings* get_cli_settings(size_t id) const noexcept {
+        assert(this->tests.contains(id));
+        while (id != -1) {
+            const auto& test = this->tests.at(id);
+            const std::optional<ClientSettings>& cli = std::visit(ClientSettingsVisit(), test);
+
+            if (cli.has_value()) {
+                return &cli.value();
+            }
+
+            id = std::visit(ParentIDVisit(), test);
+        }
+
+        assert(false && "root doesn't have client settings");
+        return nullptr;
     }
 
     template <bool select = true>
@@ -1727,8 +1881,8 @@ bool http_type_button(HTTPType type) noexcept {
     return result;
 }
 
-bool display_tree_view_test(AppState* app, NestedTest& test,
-                            float indentation = 0) noexcept {
+bool show_tree_view_test(AppState* app, NestedTest& test,
+                         float indentation = 0) noexcept {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     const bool ctrl = ImGui::GetIO().KeyCtrl;
 
@@ -1887,7 +2041,7 @@ bool display_tree_view_test(AppState* app, NestedTest& test,
                     printf("Group %zu has no child %zu\n", group.id, child_id);
                 } else {
                     assert(app->tests.contains(child_id));
-                    changed = changed | display_tree_view_test(app, app->tests[child_id], indentation + 22);
+                    changed = changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
                     if (changed) {
                         break;
                     }
@@ -1918,7 +2072,7 @@ void tree_view(AppState* app) noexcept {
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
         ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 0.0f);
-        changed = changed | display_tree_view_test(app, app->tests[0]);
+        changed = changed | show_tree_view_test(app, app->tests[0]);
         ImGui::EndTable();
     }
 
@@ -2382,6 +2536,33 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
             changed = changed | editor_test_requests(app, tab, test);
             changed = changed | editor_test_response(app, tab, test);
+
+            ImGui::Text("Client Settings");
+            ImGui::Separator();
+
+            bool enable_settings = test.cli_settings.has_value() || test.parent_id == -1;
+            if (test.parent_id != -1 && ImGui::Checkbox("Override Parent", &enable_settings)) {
+                changed = true;
+                if (enable_settings) {
+                    test.cli_settings = ClientSettings{};
+                } else {
+                    test.cli_settings = std::nullopt;
+                }
+            }
+
+            // removing const is ok here because they are never compile time const and if they don't belong to this test they are disabled
+            ClientSettings* cli_settings = const_cast<ClientSettings*>(app->get_cli_settings(test.id));
+
+            if (!enable_settings) {
+                ImGui::BeginDisabled();
+            }
+
+            changed |= show_client_settings(cli_settings);
+
+            if (!enable_settings) {
+                ImGui::EndDisabled();
+            }
+
             ImGui::EndChild();
         }
 
@@ -2415,7 +2596,36 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
-            changed = changed | ImGui::IsItemDeactivatedAfterEdit();
+            changed |= ImGui::IsItemDeactivatedAfterEdit();
+
+            ImGui::Text("Client Settings");
+            ImGui::Separator();
+
+            bool enable_settings = group.cli_settings.has_value() || group.parent_id == -1;
+            if (group.parent_id != -1 && ImGui::Checkbox("Override Parent", &enable_settings)) {
+                changed = true;
+                if (enable_settings) {
+                    group.cli_settings = ClientSettings{};
+                } else {
+                    group.cli_settings = std::nullopt;
+                }
+            }
+
+            // removing const is ok here because they are never compile time const
+            // and if they don't belong to this group they are disabled
+            ClientSettings* cli_settings = const_cast<ClientSettings*>(app->get_cli_settings(group.id));
+
+            if (!enable_settings) {
+                ImGui::BeginDisabled();
+            }
+
+            changed |= show_client_settings(cli_settings);
+
+            if (!enable_settings) {
+                ImGui::EndDisabled();
+            }
+
+
             ImGui::EndChild();
         }
 
@@ -2603,8 +2813,9 @@ void run_test(AppState* app, const Test* test) noexcept {
 }
 
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
-    app->stop_tests();
+    app->thr_pool.purge();
     app->test_results.clear();
+    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame = true;
 
     for (const auto& test : *tests) {
         app->test_results.try_emplace(test.id, test);
@@ -2645,6 +2856,23 @@ void testing_results(AppState* app) noexcept {
                         deselect_all();
                         result.selected = true;
                     }
+                }
+
+                if (ImGui::BeginPopupContextItem()) {
+                    if (!result.selected) {
+                        deselect_all();
+                        result.selected = true;
+                    }
+
+                    if (ImGui::MenuItem("Stop")) {
+                        for (auto& [_, rt] : app->test_results) {
+                            if (rt.running.load()) {
+                                app->stop_test(rt);
+                            }
+                        }
+                    }
+
+                    ImGui::EndPopup();
                 }
             }
 
@@ -2867,6 +3095,19 @@ void post_init(AppState* app) noexcept {
     Log(LogLevel::Debug, "Ini: %s", ini.c_str());
     HelloImGui::HelloImGuiIniSettings::LoadHelloImGuiMiscSettings(ini, app->runner_params);
     Log(LogLevel::Debug, "Theme: %s", ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
+
+    // idk if this actually works
+
+#if !CPPHTTPLIB_OPENSSL_SUPPORT
+    Log(LogLevel::Warning, "Compiled without OpenSSL support! HTTPS will not work!");
+#endif
+#if !CPPHTTPLIB_ZLIB_SUPPORT
+    Log(LogLevel::Warning, "Compiled without ZLib support! Zlib compression will not work!");
+#endif
+#if !CPPHTTPLIB_BROTLI_SUPPORT
+    Log(LogLevel::Warning, "Compiled without Brotli support! Brotli compression will not work!");
+#endif
+
     // NOTE: you have to do this in show_gui instead because imgui is stupid
     // ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }

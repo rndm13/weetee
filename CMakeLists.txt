@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(weetee)
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake")
+include(cotire)
+set(CMAKE_GENERATOR "Ninja")
+# set(CMAKE_CXX_LINK_EXECUTABLE "ld")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -49,7 +54,6 @@ set(HTTPLIB_COMPILE ON)
 add_subdirectory(external/cpp-httplib)
 
 target_link_libraries(weetee PRIVATE httplib::httplib)
-    # nlohmann_json::nlohmann_json)
 
 # Add json 
 # =============== 
@@ -82,3 +86,4 @@ target_link_libraries(
 add_library(textinputcombo src/textinputcombo.hpp src/textinputcombo.cpp)
 target_link_libraries(textinputcombo hello_imgui)
 target_link_libraries(weetee PRIVATE textinputcombo)
+cotire(weetee)
