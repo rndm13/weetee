@@ -24,7 +24,6 @@
 #include "BS_thread_pool.hpp"
 
 #include "algorithm"
-#include "exception"
 #include "fstream"
 #include "future"
 #include "iterator"
@@ -40,6 +39,13 @@
 // show test id and parent id in tree view
 // #define LABEL_SHOW_ID
 #endif
+
+// TODO: swagger file import/export
+// TODO: test result analysis
+// TODO: fix progress bar for individual tests
+// TODO: implement different request types sending
+// TODO: implement file sending
+// TODO: implement variables for groups with substitution
 
 #include "textinputcombo.hpp"
 
@@ -59,6 +65,12 @@ bool is_ready(std::future<R> const& f) noexcept {
 template <class... Ts>
 struct overloaded : Ts... {
     using Ts::operator()...;
+};
+
+struct EmptyVisit {
+    constexpr bool operator()(const auto& emptyable) const noexcept {
+        return emptyable.empty();
+    }
 };
 
 struct ClientSettingsVisit {
@@ -197,6 +209,10 @@ struct PartialDict {
     bool operator==(const PartialDict& other) const noexcept {
         return this->elements == other.elements;
     }
+
+    constexpr bool empty() const noexcept {
+        return this->elements.empty();
+    }
 };
 
 // got from here https://stackoverflow.com/a/60567091
@@ -263,20 +279,24 @@ struct SaveState {
 
     template <class T>
     void save(const std::optional<T>& opt) noexcept {
-        this->save(opt.has_value());
-        if (opt.has_value()) {
+        bool has_value = opt.has_value();
+        this->save(has_value);
+
+        if (has_value) {
             this->save(opt.value());
         }
     }
 
     template <class T>
-    void load(const std::optional<T>& opt) noexcept {
+    void load(std::optional<T>& opt) noexcept {
         bool has_value;
         this->load(has_value);
+
         if (has_value) {
-            T value;
-            this->load(value);
-            opt = value;
+            opt = T{};
+            this->load(opt.value());
+        } else {
+            opt = std::nullopt;
         }
     }
 
@@ -713,7 +733,7 @@ using RequestBody = std::variant<std::string, MultiPartBody>;
 
 struct Request {
     RequestBodyType body_type = REQUEST_JSON;
-    RequestBody body = "{}";
+    RequestBody body = "";
 
     Cookies cookies;
     Parameters parameters;
@@ -754,7 +774,7 @@ using ResponseBody = std::variant<std::string, MultiPartBody>;
 struct Response {
     std::string status; // a string so user can get hints and write their own status code
     ResponseBodyType body_type = RESPONSE_JSON;
-    ResponseBody body = "{}";
+    ResponseBody body = "";
 
     Cookies cookies;
     Headers headers;
@@ -868,8 +888,8 @@ static const char* HTTPStatusLabels[] = {
 enum ClientSettingsFlags : uint8_t {
     CLIENT_NONE = 0,
     CLIENT_DYNAMIC = 1 << 0,
-    CLIENT_COMPRESSION = 1 << 1,
-    CLIENT_KEEP_ALIVE = 1 << 2,
+    CLIENT_KEEP_ALIVE = 1 << 1,
+    CLIENT_COMPRESSION = 1 << 2,
     CLIENT_FOLLOW_REDIRECTS = 1 << 3,
 };
 
@@ -898,6 +918,7 @@ struct ClientSettings {
 
     void save(SaveState* save) const noexcept {
         save->save(this->flags);
+
 #if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
         save->save(this->compression);
 #endif
@@ -905,6 +926,7 @@ struct ClientSettings {
 
     void load(SaveState* save) noexcept {
         save->load(this->flags);
+
 #if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
         save->load(this->compression);
 #endif
@@ -1197,7 +1219,9 @@ struct AppState {
 
     void stop_tests() noexcept {
         for (auto& [id, result] : this->test_results) {
-            this->stop_test(result);
+            if (result.running.load()) {
+                this->stop_test(result);
+            }
         }
 
         this->thr_pool.purge();
@@ -1347,7 +1371,7 @@ struct AppState {
     }
 
     bool parent_disabled(const NestedTest* nt) noexcept {
-        // TODO: maybe add some cache for every test that clears every frame?
+        // OPTIM: maybe add some cache for every test that clears every frame?
         // if performance becomes a problem
         size_t id = std::visit(ParentIDVisit(), *nt);
         while (id != -1) {
@@ -2035,16 +2059,10 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
 
         if (!changed && group.flags & GROUP_OPEN) {
             for (size_t child_id : group.children_idx) {
-                if (!app->tests.contains(child_id)) {
-                    // TODO: remove this, bug hopefully is eliminated
-                    Log(LogLevel::Error, "Group %zu has no child %zu", group.id, child_id);
-                    printf("Group %zu has no child %zu\n", group.id, child_id);
-                } else {
-                    assert(app->tests.contains(child_id));
-                    changed = changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
-                    if (changed) {
-                        break;
-                    }
+                assert(app->tests.contains(child_id));
+                changed = changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
+                if (changed) {
+                    break;
                 }
             }
         }
@@ -2302,7 +2320,7 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Body")) {
+        if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
                     "Body Type", (int*)&test.request.body_type,
                     RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
@@ -2313,7 +2331,7 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
                 case REQUEST_JSON:
                 case REQUEST_RAW:
                     if (!std::holds_alternative<std::string>(test.request.body)) {
-                        test.request.body = "{}";
+                        test.request.body = "";
                     }
                     break;
 
@@ -2353,10 +2371,14 @@ bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Parameters")) {
-            ImGui::Text("TODO: add undeletable params for url");
-            ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
-            ImGui::PopFont();
+            ImGui::Text("TODO: add undeletable params from url");
+            if (!std::visit(EmptyVisit(), test.request.body)) {
+                ImGui::Text("If body is specified params non-link are disabled");
+            } else {
+                ImGui::PushFont(app->mono_font);
+                changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
+                ImGui::PopFont();
+            }
             ImGui::EndTabItem();
         }
 
@@ -2395,7 +2417,7 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Body")) {
+        if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
                     "Body Type", (int*)&test.response.body_type,
                     ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
@@ -2611,8 +2633,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
                 }
             }
 
-            // removing const is ok here because they are never compile time const
-            // and if they don't belong to this group they are disabled
+            // removing const is ok here because they are never compile time const and if they don't belong to this group they are disabled
             ClientSettings* cli_settings = const_cast<ClientSettings*>(app->get_cli_settings(group.id));
 
             if (!enable_settings) {
@@ -2624,7 +2645,6 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             if (!enable_settings) {
                 ImGui::EndDisabled();
             }
-
 
             ImGui::EndChild();
         }
@@ -2761,7 +2781,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
         result->progress_total = total;
         result->progress_current = current;
-        // result->verdict = to_string(current * 100 / float(total)) + "% ";
+        result->verdict = to_string(current * 100 / float(total)) + "% ";
 
         return true;
     };
@@ -2796,7 +2816,7 @@ void run_test(AppState* app, const Test* test) noexcept {
     httplib::Result result = make_request(app, test);
     Log(LogLevel::Debug, "Got response for %s: %s", test->endpoint.c_str(), to_string(result.error()).c_str());
     if (result.error() == httplib::Error::Success) {
-        Log(LogLevel::Debug, "%d %s", result->status, result->body.c_str());
+        Log(LogLevel::Debug, "%d %zu %s", result->status, result->body.size(), result->body.c_str());
     }
 
     // TODO: run analysis
@@ -2817,11 +2837,14 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
     app->test_results.clear();
     app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame = true;
 
-    for (const auto& test : *tests) {
+    for (Test test : *tests) {
         app->test_results.try_emplace(test.id, test);
+        // add cli settings from parent to a copy
+        test.cli_settings = *app->get_cli_settings(test.id);
 
-        // makes a copy of test
-        app->thr_pool.detach_task([app, test]() { return run_test(app, &test); });
+        app->thr_pool.detach_task([app, test = std::move(test)]() {
+            return run_test(app, &test);
+        });
     }
 }
 
@@ -3095,8 +3118,6 @@ void post_init(AppState* app) noexcept {
     Log(LogLevel::Debug, "Ini: %s", ini.c_str());
     HelloImGui::HelloImGuiIniSettings::LoadHelloImGuiMiscSettings(ini, app->runner_params);
     Log(LogLevel::Debug, "Theme: %s", ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
-
-    // idk if this actually works
 
 #if !CPPHTTPLIB_OPENSSL_SUPPORT
     Log(LogLevel::Warning, "Compiled without OpenSSL support! HTTPS will not work!");
