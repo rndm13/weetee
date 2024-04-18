@@ -2763,7 +2763,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto params = test_params(test);
     const auto headers = test_headers(test);
     auto progress = [app, test](size_t current, size_t total) -> bool {
-        printf("Progress test_id: %zu, current: %zu, total: %zu\n", test->id, current, total);
+        // printf("Progress test_id: %zu, current: %zu, total: %zu\n", test->id, current, total);
 
         // missing
         if (!app->test_results.contains(test->id)) {
@@ -2787,37 +2787,57 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     };
 
     httplib::Result result;
-    Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type], test->label().c_str());
+    // Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type], test->label().c_str());
 
     auto [host, dest] = split_endpoint(test->endpoint);
-    Log(LogLevel::Debug, "host: %s, dest: %s", host.c_str(), dest.c_str());
-
     httplib::Client cli(host);
+
+    cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
+    cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
+
     switch (test->type) {
     case HTTP_GET:
-        // TODO: warn user that get requests will ignore body
-        // or implement it for non file body elements
         result = cli.Get(dest, params, headers, progress);
         break;
     case HTTP_POST:
+        // TODO: POST doesn't use body
+        result = cli.Post(dest, headers, params, progress);
         break;
     case HTTP_PUT:
+        // TODO: PUT doesn't use body
+        // TODO: something goes terribly wrong here
+        result = cli.Put(dest, headers, params, progress);
         break;
     case HTTP_PATCH:
+        // TODO: PATCH doesn't use params
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            // TODO: figure out content types
+            result = cli.Patch(dest, headers, body, "application/json", progress);
+        } else {
+            // Log(LogLevel::Error, "Multi Part Body not implemented for PATCH yet");
+        }
         break;
     case HTTP_DELETE:
+        // TODO: figure out content types
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Delete(dest, headers, body, "application/json", progress);
+        } else {
+            // Log(LogLevel::Error, "Multi Part Body not implemented for DELETE yet");
+        }
         break;
     }
-    Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type], test->label().c_str());
+    // Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type], test->label().c_str());
     return result;
 }
 
 void run_test(AppState* app, const Test* test) noexcept {
     httplib::Result result = make_request(app, test);
-    Log(LogLevel::Debug, "Got response for %s: %s", test->endpoint.c_str(), to_string(result.error()).c_str());
-    if (result.error() == httplib::Error::Success) {
-        Log(LogLevel::Debug, "%d %zu %s", result->status, result->body.size(), result->body.c_str());
-    }
+    // Log(LogLevel::Debug, "Got response for %s: %s", test->endpoint.c_str(), to_string(result.error()).c_str());
+    // if (result.error() == httplib::Error::Success) {
+    //     Log(LogLevel::Debug, "%d %zu %s", result->status, result->body.size(), result->body.c_str());
+    // }
 
     // TODO: run analysis
 
