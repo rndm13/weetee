@@ -756,6 +756,10 @@ struct Request {
         save->load(this->parameters);
         save->load(this->headers);
     }
+
+    constexpr bool operator==(const Request& other) const noexcept {
+        return this->body_type == other.body_type && this->body == other.body && this->cookies == other.cookies && this->headers == other.headers && this->parameters == other.parameters;
+    }
 };
 
 enum ResponseBodyType : uint8_t {
@@ -795,6 +799,10 @@ struct Response {
         save->load(this->body);
         save->load(this->cookies);
         save->load(this->headers);
+    }
+
+    constexpr bool operator==(const Response& other) const noexcept {
+        return this->status == other.status && this->body_type == other.body_type && this->body == other.body && this->cookies == other.cookies && this->headers == other.headers;
     }
 };
 
@@ -932,6 +940,10 @@ struct ClientSettings {
 #if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
         save->load(this->compression);
 #endif
+    }
+
+    constexpr bool operator==(const ClientSettings& other) const noexcept {
+        return this->flags == other.flags && this->flags & CLIENT_COMPRESSION && this->compression == other.compression;
     }
 };
 
@@ -1105,14 +1117,6 @@ struct Group {
     }
 };
 
-constexpr bool request_eq(const Request* a, const Request* b) noexcept {
-    return a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers && a->parameters == b->parameters;
-}
-
-constexpr bool response_eq(const Response* a, const Response* b) noexcept {
-    return a->status == b->status && a->body_type == b->body_type && a->body == b->body && a->cookies == b->cookies && a->headers == b->headers;
-}
-
 constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
     if (a->index() != b->index()) {
         return false;
@@ -1122,12 +1126,12 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
     case TEST_VARIANT: {
         const auto& test_a = std::get<Test>(*a);
         const auto& test_b = std::get<Test>(*b);
-        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && request_eq(&test_a.request, &test_b.request) && response_eq(&test_a.response, &test_b.response);
+        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && test_a.request == test_b.request && test_a.response == test_b.response && test_a.cli_settings == test_b.cli_settings;
     } break;
     case GROUP_VARIANT:
         const auto& group_a = std::get<Group>(*a);
         const auto& group_b = std::get<Group>(*b);
-        return group_a.name == group_b.name;
+        return group_a.name == group_b.name && group_a.cli_settings == group_b.cli_settings;
         break;
     }
 
