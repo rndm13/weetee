@@ -19,9 +19,8 @@
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
-#include "../external/cpp-httplib/out/httplib.h"
-
 #include "BS_thread_pool.hpp"
+#include "httplib.h"
 
 #include "algorithm"
 #include "cmath"
@@ -37,6 +36,10 @@
 #include "utility"
 #include "variant"
 
+#include "textinputcombo.hpp"
+
+#include "json.hpp"
+
 #ifndef NDEBUG
 // show test id and parent id in tree view
 // #define LABEL_SHOW_ID
@@ -48,10 +51,6 @@
 // TODO: implement different request types sending
 // TODO: implement file sending
 // TODO: implement variables for groups with substitution
-
-#include "textinputcombo.hpp"
-
-#include "json.hpp"
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -1061,6 +1060,9 @@ struct TestResult {
 
     // written in draw thread
     bool selected = true;
+
+    // open info in a modal
+    bool open;
 
     Test original_test;
     std::optional<httplib::Result> http_result;
@@ -2322,7 +2324,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
     return changed;
 }
 
-bool editor_test_requests(AppState* app, EditorTab tab, Test& test) noexcept {
+bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
     bool changed = false;
 
     if (ImGui::BeginTabBar("Request")) {
@@ -2518,7 +2520,7 @@ ModalResult unsaved_changes(AppState* app) noexcept {
     }
 
     ModalResult result = MODAL_NONE;
-    if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal("Unsaved Changes", nullptr)) {
         ImGui::TextColored(HTTPTypeColor[HTTP_DELETE], "WARNING");
         ImGui::Text("You are about to lose unsaved changes");
 
@@ -2537,6 +2539,102 @@ ModalResult unsaved_changes(AppState* app) noexcept {
             result = MODAL_CANCEL;
         }
         ImGui::EndPopup();
+    }
+
+    return result;
+}
+
+void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept {
+    // no scrolling
+    if (ImGui::BeginTable("headers", 2, TABLE_FLAGS & ~ImGuiTableFlags_ScrollY)) {
+        ImGui::TableSetupColumn("Key");
+        ImGui::TableSetupColumn("Value");
+        ImGui::TableHeadersRow();
+        ImGui::PushFont(app->mono_font);
+        for (const auto& [key, value] : headers) {
+            ImGui::TableNextRow();
+            ImGui::PushID((key + value).c_str());
+            // is given readonly flag so const_cast is fine
+            if (ImGui::TableNextColumn()) {
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##key", &const_cast<std::string&>(key), ImGuiInputTextFlags_ReadOnly);
+            }
+            // is given readonly flag so const_cast is fine
+            if (ImGui::TableNextColumn()) {
+                ImGui::SetNextItemWidth(-1);
+                ImGui::InputText("##value", &const_cast<std::string&>(value), ImGuiInputTextFlags_ReadOnly);
+            }
+            ImGui::PopID();
+        }
+        ImGui::PopFont();
+        ImGui::EndTable();
+    }
+}
+
+ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
+    if (!ImGui::IsPopupOpen("Test Result Details")) {
+        ImGui::OpenPopup("Test Result Details");
+    }
+
+    ModalResult result = MODAL_NONE;
+    bool open = true;
+    if (ImGui::BeginPopupModal("Test Result Details", &open)) {
+        if (ImGui::Button("Goto original test")) {
+            if (app->tests.contains(tr->original_test.id)) {
+                app->editor_open_tab(tr->original_test.id);
+            } else {
+                Log(LogLevel::Error, "Original test is missing");
+            }
+        }
+
+        ImGui::Text("%s - %s", TestResultStatusLabels[tr->status.load()], tr->verdict.c_str());
+
+        if (tr->http_result && tr->http_result.value()) {
+            const auto& http_result = tr->http_result.value();
+
+            if (http_result.error() != httplib::Error::Success) {
+                ImGui::Text("Error: %s", to_string(http_result.error()).c_str());
+            } else {
+                if (ImGui::TreeNode("Response")) {
+
+                    ImGui::Text("%d - %s", http_result->status, httplib::status_message(http_result->status));
+                    ImGui::SameLine();
+                    ImGui::Button("?");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        ImGui::SetTooltip("Expected: %s", tr->original_test.response.status.c_str());
+                    }
+
+                    // TODO: add a diff like view
+                    ImGui::PushFont(app->mono_font);
+                    // is given readonly flag so const_cast is fine
+                    ImGui::InputTextMultiline(
+                        "##response_body", &const_cast<std::string&>(http_result->body),
+                        ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
+
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                        std::string body = "*Multipart Data*";
+                        if (std::holds_alternative<std::string>(tr->original_test.response.body)) {
+                            body = std::get<std::string>(tr->original_test.response.body);
+                        }
+                        ImGui::SetTooltip("Expected: %s\n%s", ResponseBodyTypeLabels[tr->original_test.response.body_type], body.c_str());
+                    }
+                    ImGui::PopFont();
+
+                    // TODO: add expected headers in split window
+                    show_httplib_headers(app, http_result->headers);
+
+                    ImGui::TreePop();
+                }
+            }
+        } else {
+            ImGui::Text("No response");
+        }
+
+        ImGui::EndPopup();
+    }
+
+    if (!open) {
+        result = MODAL_CONTINUE;
     }
 
     return result;
@@ -2570,7 +2668,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                                     "Type", (int*)&test.type,
                                     HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
 
-            changed = changed | editor_test_requests(app, tab, test);
+            changed = changed | editor_test_request(app, tab, test);
             changed = changed | editor_test_response(app, tab, test);
 
             ImGui::Text("Client Settings");
@@ -2935,6 +3033,7 @@ void testing_results(AppState* app) noexcept {
             if (ImGui::TableNextColumn()) {
                 http_type_button(result.original_test.type);
                 ImGui::SameLine();
+
                 if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
                     if (ImGui::GetIO().KeyCtrl) {
                         result.selected = !result.selected;
@@ -2950,12 +3049,12 @@ void testing_results(AppState* app) noexcept {
                         result.selected = true;
                     }
 
+                    if (ImGui::MenuItem("Details")) {
+                        result.open = true;
+                    }
+
                     if (ImGui::MenuItem("Stop")) {
-                        for (auto& [_, rt] : app->test_results) {
-                            if (rt.running.load()) {
-                                app->stop_test(rt);
-                            }
-                        }
+                        app->stop_tests();
                     }
 
                     ImGui::EndPopup();
@@ -2973,6 +3072,11 @@ void testing_results(AppState* app) noexcept {
             }
 
             ImGui::PopID();
+
+            if (result.open) {
+                auto modal = open_result_details(app, &result);
+                result.open &= modal == MODAL_NONE;
+            }
         }
 
         ImGui::EndTable();
@@ -3097,7 +3201,7 @@ void show_gui(AppState* app) noexcept {
 #endif
     ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 
-    if (!app->tree_view_focused) { // clear out so shortcuts can work properly
+    if (!app->tree_view_focused) {
         app->selected_tests.clear();
     }
 
@@ -3124,7 +3228,8 @@ void show_gui(AppState* app) noexcept {
         app->save_file_dialog = std::nullopt;
     }
 
-    // shortcuts
+    // SHORTCUTS
+    //
     // saving
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
         save_as_file_dialog(app);
@@ -3284,6 +3389,7 @@ void register_tests(AppState* app) noexcept {
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_idx.size(), 3);
 
         std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_idx;
+
         // test should be last
         ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(), ("**/##" + to_string(top_items[0])).c_str());
 
