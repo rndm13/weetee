@@ -2087,10 +2087,6 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
 }
 
 void tree_view(AppState* app) noexcept {
-    if (!ImGui::IsWindowFocused()) {
-        app->selected_tests.clear();
-    }
-
     ImGui::PushFont(app->regular_font);
 
     ImGui::SetNextItemWidth(-1);
@@ -2675,6 +2671,10 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 }
 
 void tabbed_editor(AppState* app) noexcept {
+    if (ImGui::IsWindowFocused()) {
+        app->selected_tests.clear();
+    }
+
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::BeginTabBar("editor")) {
@@ -2909,6 +2909,10 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
 }
 
 void testing_results(AppState* app) noexcept {
+    if (ImGui::IsWindowFocused()) {
+        app->selected_tests.clear();
+    }
+
     ImGui::PushFont(app->regular_font);
 
     auto deselect_all = [app]() {
