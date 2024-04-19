@@ -1190,16 +1190,19 @@ struct AppState {
     SaveState clipboard;
     UndoHistory undo_history;
 
+    // don't save
+
     std::optional<pfd::open_file> open_file_dialog;
     std::optional<pfd::save_file> save_file_dialog;
     std::optional<std::string> filename;
 
     BS::thread_pool thr_pool;
 
-    // don't save
     ImFont* regular_font;
     ImFont* mono_font;
     HelloImGui::RunnerParams* runner_params;
+
+    bool tree_view_focused; // updated every frame
 
     bool is_running_tests() const noexcept {
         for (const auto& [id, result] : this->test_results) {
@@ -1760,6 +1763,8 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     size_t nested_test_id = std::visit(IDVisit(), *nested_test);
 
     if (ImGui::BeginPopupContextItem()) {
+        app->tree_view_focused = true;
+
         if (!app->selected_tests.contains(nested_test_id)) {
             app->selected_tests.clear();
             app->select_with_children(nested_test_id);
@@ -2087,6 +2092,8 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
 }
 
 void tree_view(AppState* app) noexcept {
+    app->tree_view_focused = ImGui::IsWindowFocused();
+
     ImGui::PushFont(app->regular_font);
 
     ImGui::SetNextItemWidth(-1);
@@ -2671,10 +2678,6 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 }
 
 void tabbed_editor(AppState* app) noexcept {
-    if (ImGui::IsWindowFocused()) {
-        app->selected_tests.clear();
-    }
-
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::BeginTabBar("editor")) {
@@ -2909,10 +2912,6 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
 }
 
 void testing_results(AppState* app) noexcept {
-    if (ImGui::IsWindowFocused()) {
-        app->selected_tests.clear();
-    }
-
     ImGui::PushFont(app->regular_font);
 
     auto deselect_all = [app]() {
@@ -3097,6 +3096,10 @@ void show_gui(AppState* app) noexcept {
     ImGuiTestEngine_ShowTestEngineWindows(engine, nullptr);
 #endif
     ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
+
+    if (!app->tree_view_focused) { // clear out so shortcuts can work properly
+        app->selected_tests.clear();
+    }
 
     // saving
     if (app->open_file_dialog.has_value() && app->open_file_dialog->ready()) {
