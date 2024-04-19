@@ -2087,6 +2087,10 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
 }
 
 void tree_view(AppState* app) noexcept {
+    if (!ImGui::IsWindowFocused()) {
+        app->selected_tests.clear();
+    }
+
     ImGui::PushFont(app->regular_font);
 
     ImGui::SetNextItemWidth(-1);
@@ -2859,13 +2863,11 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result, htt
         if (!status_match(test->response.status, http_result->status)) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = "Unexpected status";
-
             break;
         }
 
         test_result->status.store(STATUS_OK);
         test_result->verdict = "Success";
-
         break;
     case httplib::Error::Canceled:
         test_result->status.store(STATUS_CANCELLED);
@@ -3132,33 +3134,36 @@ void show_gui(AppState* app) noexcept {
         app->redo();
     }
 
-    // copy pasting
-    if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
-        app->copy();
-    } else if (!app->selected_tests.contains(0) && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X)) {
-        app->cut();
-    } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
-        auto top_layer = app->select_top_layer();
-        if (top_layer.size() == 1) {
-            NestedTest* parent = &app->tests[top_layer[0]];
+    // tree view
+    if (app->selected_tests.size() > 0) {
+        // copy pasting
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
+            app->copy();
+        } else if (!app->selected_tests.contains(0) && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X)) {
+            app->cut();
+        } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
+            auto top_layer = app->select_top_layer();
+            if (top_layer.size() == 1) {
+                NestedTest* parent = &app->tests[top_layer[0]];
 
-            if (std::holds_alternative<Group>(*parent)) {
-                app->paste(&std::get<Group>(*parent));
-                app->undo_history.push_undo_history(app);
+                if (std::holds_alternative<Group>(*parent)) {
+                    app->paste(&std::get<Group>(*parent));
+                    app->undo_history.push_undo_history(app);
+                }
             }
         }
-    }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-        auto top_layer = app->select_top_layer();
-        if (top_layer.size() == 1) {
-            app->editor_open_tab(top_layer[0]);
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            auto top_layer = app->select_top_layer();
+            if (top_layer.size() == 1) {
+                app->editor_open_tab(top_layer[0]);
+            }
         }
-    }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
-        if (!app->selected_tests.contains(0)) { // root not selected
-            app->delete_selected();
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+            if (!app->selected_tests.contains(0)) { // root not selected
+                app->delete_selected();
+            }
         }
     }
 }
