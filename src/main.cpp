@@ -765,16 +765,14 @@ enum ResponseBodyType : uint8_t {
     RESPONSE_JSON,
     RESPONSE_HTML,
     RESPONSE_RAW,
-    RESPONSE_MULTIPART,
 };
 static const char* ResponseBodyTypeLabels[] = {
     [RESPONSE_JSON] = (const char*)"JSON",
     [RESPONSE_HTML] = (const char*)"HTML",
     [RESPONSE_RAW] = (const char*)"Raw",
-    [RESPONSE_MULTIPART] = (const char*)"Multipart",
 };
 
-using ResponseBody = std::variant<std::string, MultiPartBody>;
+using ResponseBody = std::variant<std::string>; // probably will need to add file responses so will keep it this way
 
 struct Response {
     std::string status; // a string so user can get hints and write their own status code
@@ -2433,7 +2431,7 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
-        if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
+        if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo(
                     "Body Type", (int*)&test.response.body_type,
                     ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
@@ -2446,12 +2444,6 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                 case RESPONSE_RAW:
                     if (!std::holds_alternative<std::string>(test.response.body)) {
                         test.response.body = "";
-                    }
-                    break;
-
-                case RESPONSE_MULTIPART:
-                    if (!std::holds_alternative<MultiPartBody>(test.response.body)) {
-                        test.response.body = MultiPartBody{};
                     }
                     break;
                 }
@@ -2476,11 +2468,6 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
                     ImGui::EndPopup();
                 }
 
-                break;
-
-            case RESPONSE_MULTIPART:
-                auto& mpb = std::get<MultiPartBody>(test.response.body);
-                changed = changed | partial_dict(app, &mpb, "##body");
                 break;
             }
             ImGui::EndTabItem();
@@ -2545,7 +2532,7 @@ ModalResult unsaved_changes(AppState* app) noexcept {
 }
 
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept {
-    // no scrolling
+    // no scrolling for popup
     if (ImGui::BeginTable("headers", 2, TABLE_FLAGS & ~ImGuiTableFlags_ScrollY)) {
         ImGui::TableSetupColumn("Key");
         ImGui::TableSetupColumn("Value");
@@ -2871,9 +2858,21 @@ httplib::Params test_params(const Test* test) noexcept {
     return result;
 }
 
+std::string test_content_type(const Test* test) noexcept {
+    switch (test->request.body_type) {
+    case REQUEST_JSON:
+        return "application/json";
+    case REQUEST_RAW:
+        return "text/plain";
+    case REQUEST_MULTIPART:
+        return "multipart/form-data";
+    }
+}
+
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto params = test_params(test);
     const auto headers = test_headers(test);
+    const std::string content_type = test_content_type(test);
     auto progress = [app, test](size_t current, size_t total) -> bool {
         // printf("Progress test_id: %zu, current: %zu, total: %zu\n", test->id, current, total);
 
@@ -2924,7 +2923,6 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
         // TODO: PATCH doesn't use params
         if (std::holds_alternative<std::string>(test->request.body)) {
             std::string body = std::get<std::string>(test->request.body);
-            // TODO: figure out content types
             result = cli.Patch(dest, headers, body, "application/json", progress);
         } else {
             // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PATCH yet");
