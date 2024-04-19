@@ -24,12 +24,14 @@
 #include "BS_thread_pool.hpp"
 
 #include "algorithm"
+#include "cmath"
 #include "fstream"
 #include "future"
 #include "iterator"
 #include "optional"
 #include "sstream"
 #include "stdexcept"
+#include "string"
 #include "type_traits"
 #include "unordered_map"
 #include "utility"
@@ -1042,6 +1044,7 @@ static const char* TestResultStatusLabels[] = {
 struct TestResult {
     // can be written and read from any thread
     std::atomic_bool running = true;
+    // main thread writes when stopping tests
     std::atomic<TestResultStatus> status = STATUS_RUNNING;
 
     // written in draw thread
@@ -2815,7 +2818,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
             // TODO: figure out content types
             result = cli.Patch(dest, headers, body, "application/json", progress);
         } else {
-            // Log(LogLevel::Error, "Multi Part Body not implemented for PATCH yet");
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PATCH yet");
         }
         break;
     case HTTP_DELETE:
@@ -2824,7 +2827,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
             std::string body = std::get<std::string>(test->request.body);
             result = cli.Delete(dest, headers, body, "application/json", progress);
         } else {
-            // Log(LogLevel::Error, "Multi Part Body not implemented for DELETE yet");
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for DELETE yet");
         }
         break;
     }
@@ -2832,24 +2835,55 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     return result;
 }
 
+bool status_match(const std::string& match, int status) noexcept {
+    auto status_str = to_string(status);
+    for (int i = 0; i < std::min(match.size(), 3ul); i++) {
+        if (std::tolower(match[i]) == 'x') {
+            continue;
+        }
+        if (match[i] != status_str[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void test_analysis(AppState* app, const Test* test, TestResult* test_result, httplib::Result&& http_result) noexcept {
+    switch (http_result.error()) {
+    case httplib::Error::Success:
+
+        if (!status_match(test->response.status, http_result->status)) {
+            test_result->status.store(STATUS_ERROR);
+            test_result->verdict = "Unexpected status";
+
+            break;
+        }
+
+        test_result->status.store(STATUS_OK);
+        test_result->verdict = "Success";
+
+        break;
+    case httplib::Error::Canceled:
+        test_result->status.store(STATUS_CANCELLED);
+        break;
+    default:
+        test_result->status.store(STATUS_ERROR);
+        test_result->verdict = to_string(http_result.error());
+        break;
+    }
+
+    test_result->http_result = std::forward<httplib::Result>(http_result);
+}
+
 void run_test(AppState* app, const Test* test) noexcept {
     httplib::Result result = make_request(app, test);
-    // Log(LogLevel::Debug, "Got response for %s: %s", test->endpoint.c_str(), to_string(result.error()).c_str());
-    // if (result.error() == httplib::Error::Success) {
-    //     Log(LogLevel::Debug, "%d %zu %s", result->status, result->body.size(), result->body.c_str());
-    // }
-
-    // TODO: run analysis
-
-    if (app->test_results.contains(test->id)) {
-        if (result.error() == httplib::Error::Success) {
-            app->test_results.at(test->id).status.store(STATUS_OK);
-        } else {
-            app->test_results.at(test->id).status.store(STATUS_ERROR);
-        }
-        app->test_results.at(test->id).verdict = to_string(result.error());
-        app->test_results.at(test->id).running.store(false);
+    if (!app->test_results.contains(test->id)) {
+        return;
     }
+
+    TestResult* test_result = &app->test_results.at(test->id);
+    test_result->running.store(false);
+    test_analysis(app, test, test_result, std::move(result));
 }
 
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
