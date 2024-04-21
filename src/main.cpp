@@ -28,17 +28,16 @@
 #include "iterator"
 #include "optional"
 #include "sstream"
-#include "stdexcept"
 #include "string"
 #include "type_traits"
 #include "unordered_map"
 #include "utility"
 #include "variant"
+#include "algorithm"
+#include "cstdint"
 
 #include "textinputcombo.hpp"
-
 #include "json.hpp"
-#include <cstdint>
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -51,6 +50,7 @@
 // TODO: implement different request types sending
 // TODO: implement file sending
 // TODO: implement variables for groups with substitution
+// TODO: fix crash on undo/redo after file opens
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -128,6 +128,7 @@ static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
     ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
 
 bool arrow(const char* label, ImGuiDir dir) noexcept {
+    assert(label);
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
@@ -193,14 +194,15 @@ template <typename Data> struct PartialDict {
     constexpr bool empty() const noexcept { return this->elements.empty(); }
 };
 
-// got from here https://stackoverflow.com/a/60567091
-template <class Variant, size_t I = 0> Variant variant_from_index(size_t index) {
-    if constexpr (I >= std::variant_size_v<Variant>) {
-        throw std::runtime_error{"Variant index " + to_string(I + index) + " out of bounds"};
-    } else {
+template <class Variant> constexpr bool valid_variant_from_index(size_t index) noexcept {
+    return index < std::variant_size_v<Variant>;
+}
+template <class Variant, size_t I = 0> constexpr Variant variant_from_index(size_t index) noexcept {
+    if constexpr (valid_variant_from_index<Variant>(I)) {
         return index == 0 ? Variant{std::in_place_index<I>}
                           : variant_from_index<Variant, I + 1>(index - 1);
     }
+    assert(false && "Invalid variant index");
 }
 
 struct SaveState {
@@ -210,6 +212,8 @@ struct SaveState {
 
     // helpers
     template <class T = void> void save(const char* ptr, size_t size = sizeof(T)) noexcept {
+        assert(ptr);
+        assert(size > 0);
         std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
     }
 
@@ -219,6 +223,8 @@ struct SaveState {
     }
 
     template <class T = void> void load(char* ptr, size_t size = sizeof(T)) noexcept {
+        assert(ptr);
+        assert(size > 0);
         std::copy(this->cur_load(), this->cur_load(size), ptr);
         this->load_idx += size;
     }
@@ -292,7 +298,8 @@ struct SaveState {
             V v;
             this->load(k);
             this->load(v);
-            map[k] = v;
+            assert(!map.contains(k));
+            map.emplace(k, v);
         }
     }
 
@@ -309,7 +316,9 @@ struct SaveState {
         this->load(index);
         assert(index != std::variant_npos);
 
+        assert(valid_variant_from_index<std::variant<T...>>(index));
         variant = variant_from_index<std::variant<T...>>(index);
+
         std::visit([this](auto& s) { this->load(s); }, variant);
     }
 
@@ -371,12 +380,15 @@ struct SaveState {
 
     void finish_save() noexcept {
         this->original_size = this->original_buffer.size();
-        // this->original_buffer.shrink_to_fit();
+        this->original_buffer.shrink_to_fit();
     }
 
     void reset_load() noexcept { this->load_idx = 0; }
 
     void write(std::ostream& os) const noexcept {
+        assert(this->original_size > 0);
+        assert(this->original_buffer.size() == this->original_size);
+
         os.write(reinterpret_cast<const char*>(&this->original_size), sizeof(size_t));
         os.write(this->original_buffer.data(), static_cast<int32_t>(this->original_buffer.size()));
         os.flush();
@@ -385,9 +397,9 @@ struct SaveState {
     void read(std::istream& is) noexcept {
         is.read(reinterpret_cast<char*>(&this->original_size), sizeof(size_t));
 
-        if (this->original_size != 0) {
-            this->original_buffer.reserve(this->original_size);
-        }
+        assert(this->original_size > 0);
+
+        this->original_buffer.reserve(this->original_size);
         this->original_buffer.resize(this->original_size);
 
         is.read(this->original_buffer.data(), static_cast<int32_t>(this->original_size));
@@ -400,6 +412,8 @@ struct UndoHistory {
 
     // should be called after every edit
     template <class T> void push_undo_history(const T* obj) noexcept {
+        assert(obj);
+
         if (this->undo_idx < this->undo_history.size() - 1) {
             // remove redos
             this->undo_history.resize(this->undo_idx);
@@ -410,7 +424,7 @@ struct UndoHistory {
         new_save->save(*obj);
         new_save->finish_save();
 
-        this->undo_idx++;
+        this->undo_idx = this->undo_history.size() - 1;
     }
 
     template <class T> void reset_undo_history(const T* obj) noexcept {
@@ -477,11 +491,15 @@ struct MultiPartBodyElementData {
     }
 
     void save(SaveState* save) const noexcept {
+        assert(save);
+
         save->save(this->type);
         save->save(this->data);
     }
 
     void load(SaveState* save) noexcept {
+        assert(save);
+
         save->load(this->type);
         save->load(this->data);
     }
@@ -503,9 +521,17 @@ struct CookiesElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const noexcept { save->save(data); }
+    void save(SaveState* save) const noexcept {
+        assert(save);
 
-    void load(SaveState* save) noexcept { save->load(data); }
+        save->save(data);
+    }
+
+    void load(SaveState* save) noexcept {
+        assert(save);
+
+        save->load(data);
+    }
 };
 const char* CookiesElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
@@ -543,9 +569,17 @@ struct HeadersElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const noexcept { save->save(data); }
+    void save(SaveState* save) const noexcept {
+        assert(save);
 
-    void load(SaveState* save) noexcept { save->load(data); }
+        save->save(data);
+    }
+
+    void load(SaveState* save) noexcept {
+        assert(save);
+
+        save->load(data);
+    }
 };
 const char* HeadersElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
@@ -677,6 +711,8 @@ struct Request {
     Headers headers;
 
     void save(SaveState* save) const noexcept {
+        assert(save);
+
         save->save(this->body_type);
         save->save(this->body);
         save->save(this->cookies);
@@ -685,6 +721,8 @@ struct Request {
     }
 
     void load(SaveState* save) noexcept {
+        assert(save);
+
         save->load(this->body_type);
         save->load(this->body);
         save->load(this->cookies);
@@ -722,6 +760,8 @@ struct Response {
     Headers headers;
 
     void save(SaveState* save) const noexcept {
+        assert(save);
+
         save->save(this->status);
         save->save(this->body_type);
         save->save(this->body);
@@ -730,6 +770,8 @@ struct Response {
     }
 
     void load(SaveState* save) noexcept {
+        assert(save);
+
         save->load(this->status);
         save->load(this->body_type);
         save->load(this->body);
@@ -864,16 +906,18 @@ struct ClientSettings {
 #endif
 
     void save(SaveState* save) const noexcept {
-        save->save(this->flags);
+        assert(save);
 
+        save->save(this->flags);
 #if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
         save->save(this->compression);
 #endif
     }
 
     void load(SaveState* save) noexcept {
-        save->load(this->flags);
+        assert(save);
 
+        save->load(this->flags);
 #if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
         save->load(this->compression);
 #endif
@@ -899,6 +943,8 @@ struct ClientSettings {
     } while (0);
 
 bool show_client_settings(ClientSettings* set) noexcept {
+    assert(set);
+
     bool changed = false;
 
     CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
@@ -955,6 +1001,8 @@ struct Test {
     }
 
     void save(SaveState* save) const noexcept {
+        assert(save);
+
         save->save(this->id);
         save->save(this->parent_id);
         save->save(this->type);
@@ -966,6 +1014,8 @@ struct Test {
     }
 
     void load(SaveState* save) noexcept {
+        assert(save);
+
         save->load(this->id);
         save->load(this->parent_id);
         save->load(this->type);
@@ -1031,7 +1081,7 @@ struct Group {
     std::string name;
     std::optional<ClientSettings> cli_settings;
 
-    std::vector<size_t> children_idx;
+    std::vector<size_t> children_ids;
 
     const std::string label() const noexcept {
 #ifndef LABEL_SHOW_ID
@@ -1042,20 +1092,24 @@ struct Group {
     }
 
     void save(SaveState* save) const noexcept {
+        assert(save);
+
         save->save(this->id);
         save->save(this->parent_id);
         save->save(this->flags);
         save->save(this->name);
-        save->save(this->children_idx);
+        save->save(this->children_ids);
         save->save(this->cli_settings);
     }
 
     void load(SaveState* save) noexcept {
+        assert(save);
+
         save->load(this->id);
         save->load(this->parent_id);
         save->load(this->flags);
         save->load(this->name);
-        save->load(this->children_idx);
+        save->load(this->children_ids);
         save->load(this->cli_settings);
     }
 };
@@ -1067,6 +1121,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 
     switch (a->index()) {
     case TEST_VARIANT: {
+        assert(std::holds_alternative<Test>(*a));
+        assert(std::holds_alternative<Test>(*b));
+
         const auto& test_a = std::get<Test>(*a);
         const auto& test_b = std::get<Test>(*b);
         return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type &&
@@ -1074,6 +1131,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
                test_a.cli_settings == test_b.cli_settings;
     } break;
     case GROUP_VARIANT:
+        assert(std::holds_alternative<Group>(*a));
+        assert(std::holds_alternative<Group>(*b));
+
         const auto& group_a = std::get<Group>(*a);
         const auto& group_b = std::get<Group>(*b);
         return group_a.name == group_b.name && group_a.cli_settings == group_b.cli_settings;
@@ -1085,6 +1145,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 }
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id) {
+    assert(tests.contains(a_id));
+    assert(tests.contains(b_id));
+
     const NestedTest& a = tests.at(a_id);
     const NestedTest& b = tests.at(b_id);
 
@@ -1121,7 +1184,7 @@ struct AppState {
                 .flags = GROUP_NONE,
                 .name = "root",
                 .cli_settings = ClientSettings{},
-                .children_idx = {},
+                .children_ids = {},
             },
         },
     };
@@ -1163,6 +1226,7 @@ struct AppState {
 
     void stop_test(TestResult& result) noexcept {
         assert(result.running.load());
+
         result.status.store(STATUS_CANCELLED);
         result.running.store(false);
     }
@@ -1185,19 +1249,25 @@ struct AppState {
     }
 
     void save(SaveState* save) const noexcept {
+        assert(save);
+
         // this save is obviously going to be pretty big so reserve instantly for speed
-        save->original_buffer.reserve(512);
+        save->original_buffer.reserve(4096);
 
         save->save(this->id_counter);
         save->save(this->tests);
     }
 
     void load(SaveState* save) noexcept {
+        assert(save);
+
         save->load(this->id_counter);
         save->load(this->tests);
     }
 
     void editor_open_tab(size_t id) noexcept {
+        assert(this->test_results.contains(id));
+
         this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame =
             true;
         if (this->opened_editor_tabs.contains(id)) {
@@ -1211,6 +1281,8 @@ struct AppState {
     }
 
     void focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) noexcept {
+        assert(old_tests);
+
         for (auto& [id, test] : this->tests) {
             if (old_tests->contains(id) && !nested_test_eq(&test, &old_tests->at(id))) {
                 this->editor_open_tab(id);
@@ -1269,6 +1341,8 @@ struct AppState {
     }
 
     bool parent_selected(size_t id) const noexcept {
+        assert(this->tests.contains(id));
+
         return this->selected_tests.contains(std::visit(ParentIDVisitor(), this->tests.at(id)));
     }
 
@@ -1290,14 +1364,15 @@ struct AppState {
     }
 
     template <bool select = true> void select_with_children(size_t id) noexcept {
+        assert(this->tests.contains(id));
+
         if constexpr (select) {
             this->selected_tests.insert(id);
         } else if (!this->parent_selected(id)) {
             this->selected_tests.erase(id);
         }
 
-        assert(this->tests.contains(id));
-        NestedTest& nt = this->tests[id];
+        NestedTest& nt = this->tests.at(id);
 
         if (!std::holds_alternative<Group>(nt)) {
             return;
@@ -1305,13 +1380,14 @@ struct AppState {
 
         Group& group = std::get<Group>(nt);
 
-        for (size_t child_id : group.children_idx) {
+        for (size_t child_id : group.children_ids) {
             assert(this->tests.contains(child_id));
             if constexpr (select) {
                 this->selected_tests.insert(child_id);
             } else if (!this->parent_selected(id)) {
                 this->selected_tests.erase(child_id);
             }
+
             select_with_children<select>(child_id);
         }
     }
@@ -1328,41 +1404,48 @@ struct AppState {
     }
 
     bool parent_disabled(const NestedTest* nt) noexcept {
-        assert(nt != nullptr);
+        assert(nt);
 
         // OPTIM: maybe add some cache for every test that clears every frame?
         // if performance becomes a problem
         size_t id = std::visit(ParentIDVisitor(), *nt);
         while (id != -1ull) {
             assert(this->tests.contains(id));
-            nt = &this->tests[id];
+            nt = &this->tests.at(id);
+
             assert(std::holds_alternative<Group>(*nt));
             const Group& group = std::get<Group>(*nt);
             if (group.flags & GROUP_DISABLED) {
                 return true;
             }
+
             id = group.parent_id;
         }
         return false;
     }
 
     void move_children_up(Group* group) noexcept {
+        assert(group);
         assert(group->id != 0); // not root
+
         auto& parent = this->tests[group->parent_id];
         assert(std::holds_alternative<Group>(parent));
         auto& parent_group = std::get<Group>(parent);
 
-        for (auto child_id : group->children_idx) {
-            auto& child = this->tests[child_id];
+        for (auto child_id : group->children_ids) {
+            assert(this->tests.contains(child_id));
+            auto& child = this->tests.at(child_id);
+
             std::visit(SetParentIDVisitor(parent_group.id), child);
-            parent_group.children_idx.push_back(child_id);
+            parent_group.children_ids.push_back(child_id);
         }
 
-        group->children_idx.clear();
+        group->children_ids.clear();
     }
 
     void delete_children(const Group* group) noexcept {
-        std::vector<size_t> to_delete = group->children_idx; // DO NOT REMOVE
+        assert(group);
+        std::vector<size_t> to_delete = group->children_ids;
         // delete_test also removes it from parent->children_idx
         // when iterating over it it creates unexpected behaviour
 
@@ -1370,7 +1453,7 @@ struct AppState {
             this->delete_test(child_id);
         }
 
-        assert(group->children_idx.size() <= 0); // no remaining children
+        assert(group->children_ids.size() <= 0); // no remaining children
     }
 
     void delete_test(size_t id) noexcept {
@@ -1389,7 +1472,7 @@ struct AppState {
         assert(std::holds_alternative<Group>(this->tests[parent_id]));
         auto& parent = std::get<Group>(this->tests[parent_id]);
 
-        size_t count = std::erase(parent.children_idx, id);
+        size_t count = std::erase(parent.children_ids, id);
         assert(count == 1);
 
         // remove from tests
@@ -1406,24 +1489,18 @@ struct AppState {
     }
 
     void group_selected(size_t common_parent_id) noexcept {
+        assert(this->tests.contains(common_parent_id));
         auto* parent_test = &this->tests[common_parent_id];
         assert(std::holds_alternative<Group>(*parent_test));
         auto& parent_group = std::get<Group>(*parent_test);
 
         // remove selected from old parent
-        for (auto test_id : this->selected_tests) {
-            if (this->parent_selected(test_id)) {
-                continue;
-            }
-
-            for (auto it = parent_group.children_idx.begin(); it != parent_group.children_idx.end();
-                 it++) {
-                if (*it == test_id) {
-                    parent_group.children_idx.erase(it);
-                    break;
-                }
-            }
-        }
+        auto& children_idx = parent_group.children_ids;
+        children_idx.erase(
+            std::remove_if(children_idx.begin(), children_idx.end(), [this](size_t idx) {
+                assert(this->tests.contains(idx));
+                return this->selected_tests.contains(idx) && !this->parent_selected(idx);
+            }));
 
         parent_group.flags |= GROUP_OPEN;
         auto id = ++this->id_counter;
@@ -1433,30 +1510,37 @@ struct AppState {
             .flags = GROUP_OPEN,
             .name = "New group",
             .cli_settings = {},
-            .children_idx = {},
+            .children_ids = {},
         };
 
-        // add selected to new parent
-        for (auto test_id : this->selected_tests) {
-            if (this->parent_selected(test_id)) {
-                continue;
-            }
+        // Copy selected to new group
+        std::copy_if(this->selected_tests.begin(), this->selected_tests.end(),
+                     std::back_inserter(new_group.children_ids), [this](size_t id) {
+                         assert(this->tests.contains(id));
+                         return !this->parent_selected(id);
+                     });
 
-            new_group.children_idx.push_back(test_id);
-            // set new parent id to tests
-            std::visit(SetParentIDVisitor(id), this->tests[test_id]);
-        }
+        // Set selected parent id to new group's id
+        std::for_each(this->selected_tests.begin(), this->selected_tests.end(),
+                      [this, id](size_t test_id) {
+                          assert(this->tests.contains(test_id));
+                          std::visit(SetParentIDVisitor(id), this->tests.at(test_id));
+                      });
 
-        parent_group.children_idx.push_back(id);
-        this->tests[id] = new_group;
+        // Add new group to original parent's children
+        parent_group.children_ids.push_back(id);
+
+        this->tests.emplace(id, new_group);
     }
 
     void copy() noexcept {
         std::unordered_map<size_t, NestedTest> to_copy;
+
         to_copy.reserve(this->selected_tests.size());
         for (auto sel_id : this->selected_tests) {
-            auto* cpy = &this->tests[sel_id];
-            to_copy[sel_id] = *cpy;
+            assert(this->tests.contains(sel_id));
+
+            to_copy.emplace(sel_id, this->tests.at(sel_id));
         }
 
         this->clipboard = {};
@@ -1481,58 +1565,52 @@ struct AppState {
         // for groups should also update all children parent_id
         for (auto it = to_paste.begin(); it != to_paste.end(); it++) {
             auto& [id, nt] = *it;
-            // Log(LogLevel::Debug, "id: %zu, variant index: %zu", id, nt.index());
 
             if (!this->tests.contains(id)) {
                 // if the id is free don't do anything
                 continue;
             }
-            size_t new_id = ++this->id_counter;
 
-            // code to account for if ids present in to_paste are higher than id_counter
-            // this could be reproduced by copying and then undoing the creation of copied object
-            while (to_paste.contains(new_id)) {
+            size_t new_id;
+            do {
                 new_id = ++this->id_counter;
-            }
+            } while (to_paste.contains(new_id));
 
-            // update parents children_idx to use new id
+            // Update parents children_idx to use new id
             size_t parent_id = std::visit(ParentIDVisitor(), nt);
             if (to_paste.contains(parent_id)) {
-                // Log(LogLevel::Debug, "parent_id: %zu", parent_id);
-
                 auto& parent = to_paste[parent_id];
                 assert(std::holds_alternative<Group>(parent));
                 Group& parent_group = std::get<Group>(parent);
-                auto& children_idx = parent_group.children_idx;
+                auto& children_ids = parent_group.children_ids;
 
-                // must have it as child
-                assert(std::find(children_idx.begin(), children_idx.end(), id) <
-                       children_idx.end());
-                std::erase(children_idx, id);
-                children_idx.push_back(new_id);
+                size_t count = std::erase(children_ids, id);
+                assert(count == 1);
+
+                children_ids.push_back(new_id);
             }
 
-            // update groups children parent_id
+            // Update groups children parent_id
             if (std::holds_alternative<Group>(nt)) {
                 auto& group_nt = std::get<Group>(nt);
-                for (size_t child_id : group_nt.children_idx) {
+                for (size_t child_id : group_nt.children_ids) {
                     assert(to_paste.contains(child_id));
                     std::visit(SetParentIDVisitor(new_id), to_paste[child_id]);
                 }
             }
 
+            // Replace key value in map
             auto node = to_paste.extract(it);
             node.key() = new_id;
             std::visit(SetIDVisitor(new_id), node.mapped());
             to_paste.insert(std::move(node));
 
-            // update groups children parent_id
+            // Update groups children parent_id
             if (std::holds_alternative<Group>(nt)) {
                 auto& group_nt = std::get<Group>(nt);
-                std::sort(group_nt.children_idx.begin(), group_nt.children_idx.end(),
+                std::sort(group_nt.children_ids.begin(), group_nt.children_ids.end(),
                           [&to_paste](size_t a, size_t b) { return test_comp(to_paste, a, b); });
             }
-            // Log(LogLevel::Debug, "new id: %zu", new_id);
         }
 
         // insert into passed in group
@@ -1541,9 +1619,7 @@ struct AppState {
 
             size_t parent_id = std::visit(ParentIDVisitor(), nt);
             if (!to_paste.contains(parent_id)) {
-                // Log(LogLevel::Debug, "pasting id: %zu", id);
-
-                group->children_idx.push_back(id);
+                group->children_ids.push_back(id);
                 std::visit(SetParentIDVisitor(group->id), nt);
             }
         }
@@ -1555,31 +1631,35 @@ struct AppState {
 
     void move(Group* group) noexcept {
         for (size_t id : this->selected_tests) {
+            assert(this->tests.contains(id));
+
             if (this->parent_selected(id)) {
                 continue;
             }
 
+            // Remove from old parent's children
             size_t old_parent = std::visit(ParentIDVisitor(), this->tests[id]);
             assert(this->tests.contains(old_parent));
-            assert(std::holds_alternative<Group>(this->tests[old_parent]));
-            std::erase(std::get<Group>(this->tests[old_parent]).children_idx, id);
+            assert(std::holds_alternative<Group>(this->tests.at(old_parent)));
+            std::erase(std::get<Group>(this->tests.at(old_parent)).children_ids, id);
 
-            std::visit(SetParentIDVisitor(group->id), this->tests[id]);
+            // Set to new parent
+            std::visit(SetParentIDVisitor(group->id), this->tests.at(id));
 
-            group->children_idx.push_back(id);
+            group->children_ids.push_back(id);
         }
 
         group->flags |= GROUP_OPEN;
     }
 
     void sort(Group& group) noexcept {
-        std::sort(group.children_idx.begin(), group.children_idx.end(),
+        std::sort(group.children_ids.begin(), group.children_ids.end(),
                   [this](size_t a, size_t b) { return test_comp(this->tests, a, b); });
     }
 
     bool filter(Group& group) noexcept {
         bool result = true;
-        for (size_t child_id : group.children_idx) {
+        for (size_t child_id : group.children_ids) {
             result &= this->filter(&this->tests[child_id]);
         }
         result &= !contains(group.name, this->tree_view_filter);
@@ -1793,7 +1873,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                     .response = {},
                     .cli_settings = {},
                 });
-                selected_group.children_idx.push_back(id);
+                selected_group.children_ids.push_back(id);
                 app->editor_open_tab(id);
             }
 
@@ -1811,9 +1891,9 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                     .flags = GROUP_NONE,
                     .name = "New group",
                     .cli_settings = {},
-                    .children_idx = {},
+                    .children_ids = {},
                 });
-                selected_group.children_idx.push_back(id);
+                selected_group.children_ids.push_back(id);
             }
 
             if (ImGui::MenuItem("Ungroup", nullptr, false, !analysis.selected_root && !changed)) {
@@ -2033,7 +2113,7 @@ bool show_tree_view_test(AppState* app, NestedTest& test, float indentation = 0)
         changed |= context_menu_tree_view(app, &test);
 
         if (!changed && group.flags & GROUP_OPEN) {
-            for (size_t child_id : group.children_idx) {
+            for (size_t child_id : group.children_ids) {
                 assert(app->tests.contains(child_id));
                 changed =
                     changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
@@ -2837,7 +2917,7 @@ httplib::Params test_params(const Test* test) noexcept {
 }
 
 std::string test_content_type(const Test* test) noexcept {
-    assert(test != nullptr);
+    assert(test);
     switch (test->request.body_type) {
     case REQUEST_JSON:
         return "application/json";
@@ -3296,7 +3376,7 @@ void register_tests(AppState* app) noexcept {
     const char* root_selectable = "**/##0";
 
     auto delete_all = [app](ImGuiTestContext* ctx) {
-        std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_idx;
+        std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_ids;
         ctx->KeyDown(ImGuiKey_ModCtrl);
         for (size_t id : top_groups) {
             ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
@@ -3347,7 +3427,7 @@ void register_tests(AppState* app) noexcept {
         }
 
         while (app->tests.size() > 1) {
-            std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_idx;
+            std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_ids;
             ctx->KeyDown(ImGuiKey_ModCtrl);
             for (size_t id : top_groups) {
                 ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
@@ -3368,9 +3448,9 @@ void register_tests(AppState* app) noexcept {
         ctx->ItemClick("**/Add a new group");
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
         ctx->ItemClick("**/Add a new group");
-        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_idx.size(), 3);
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
 
-        std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_idx;
+        std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_ids;
 
         // test should be last
         ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(),
