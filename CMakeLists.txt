@@ -7,6 +7,7 @@ set(CMAKE_GENERATOR "Ninja")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op")
 
 # Add imgui_bundle
 # =================
@@ -32,8 +33,7 @@ endif()
 
 imgui_bundle_add_app(weetee src/main.cpp)
 target_link_libraries(weetee PRIVATE
-    "$<$<CONFIG:DEBUG>:-fsanitize=address>"
-    "$<$<CONFIG:DEBUG>:-fsanitize=undefined>")
+    "$<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>")
 
 # Add https and json
 # ==================

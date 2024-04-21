@@ -7,7 +7,6 @@
 #include "hello_imgui/runner_params.h"
 
 #include "imgui.h"
-#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
@@ -39,6 +38,7 @@
 #include "textinputcombo.hpp"
 
 #include "json.hpp"
+#include <cstdint>
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -57,63 +57,48 @@ using HelloImGui::LogLevel;
 
 using std::to_string;
 
-template <typename R>
-bool is_ready(std::future<R> const& f) noexcept {
+template <typename R> bool is_ready(std::future<R> const& f) noexcept {
     assert(f.valid());
     return f.wait_until(std::chrono::system_clock::time_point::min()) == std::future_status::ready;
 }
 
-template <class... Ts>
-struct overloaded : Ts... {
+template <class... Ts> struct overloaded : Ts... {
     using Ts::operator()...;
 };
 
-struct EmptyVisit {
-    constexpr bool operator()(const auto& emptyable) const noexcept {
-        return emptyable.empty();
-    }
-};
+#define GETTER_VISITOR(property)                                                                   \
+    struct {                                                                                       \
+        constexpr const auto& operator()(const auto& visitee) const noexcept {                     \
+            return visitee.property;                                                               \
+        }                                                                                          \
+                                                                                                   \
+        auto& operator()(auto& visitee) const noexcept { return visitee.property; }                \
+    };
 
-struct ClientSettingsVisit {
-    const auto& operator()(const auto& visitable) const noexcept {
-        return visitable.cli_settings;
-    }
-    auto& operator()(auto& visitable) const noexcept {
-        return visitable.cli_settings;
-    }
-};
+#define COPY_GETTER_VISITOR(property)                                                              \
+    struct {                                                                                       \
+        constexpr auto operator()(const auto& visitee) const noexcept { return visitee.property; } \
+    };
 
-struct IDVisit {
-    size_t operator()(const auto& idable) const noexcept {
-        return idable.id;
-    }
-};
+#define SETTER_VISITOR(property, type)                                                             \
+    struct {                                                                                       \
+        const type new_property;                                                                   \
+        type operator()(auto& visitee) const noexcept {                                            \
+            return visitee.property = this->new_property;                                          \
+        }                                                                                          \
+    };
+#define ARRAYSIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
 
-struct SetIDVisit {
-    const size_t new_id;
-    size_t operator()(auto& idable) const noexcept {
-        return idable.id = this->new_id;
-    }
-};
+using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings);
 
-struct ParentIDVisit {
-    size_t operator()(const auto& parent_idable) const noexcept {
-        return parent_idable.parent_id;
-    }
-};
+using IDVisitor = COPY_GETTER_VISITOR(id);
+using SetIDVisitor = SETTER_VISITOR(id, size_t);
 
-struct SetParentIDVisit {
-    const size_t new_id;
-    size_t operator()(auto& parent_idable) const noexcept {
-        return parent_idable.parent_id = this->new_id;
-    }
-};
+using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id);
+using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t);
 
-struct LabelVisit {
-    const std::string operator()(const auto& labelable) const noexcept {
-        return labelable.label();
-    }
-};
+using LabelVisitor = COPY_GETTER_VISITOR(label());
+using EmptyVisitor = COPY_GETTER_VISITOR(empty());
 
 template <class T>
 constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
@@ -131,19 +116,16 @@ constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noex
 }
 
 static constexpr ImGuiTableFlags TABLE_FLAGS =
-    ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV |
-    ImGuiTableFlags_Hideable | ImGuiTableFlags_BordersOuter |
-    ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
+    ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV | ImGuiTableFlags_Hideable |
+    ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
     ImGuiTableFlags_Resizable;
 
-static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS =
-    ImGuiSelectableFlags_SpanAllColumns |
-    ImGuiSelectableFlags_AllowOverlap |
-    ImGuiSelectableFlags_AllowDoubleClick;
+static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS = ImGuiSelectableFlags_SpanAllColumns |
+                                                         ImGuiSelectableFlags_AllowOverlap |
+                                                         ImGuiSelectableFlags_AllowDoubleClick;
 
 static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
-    ImGuiDragDropFlags_SourceNoDisableHover |
-    ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
+    ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
 
 bool arrow(const char* label, ImGuiDir dir) noexcept {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
@@ -156,12 +138,11 @@ bool arrow(const char* label, ImGuiDir dir) noexcept {
     return result;
 }
 
-void remove_arrow_offset() noexcept {
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8);
-}
+void remove_arrow_offset() noexcept { ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8); }
 
 constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
-    return ImVec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+    return ImVec4(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f,
+                  static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
 }
 
 // case insensitive string comparison
@@ -178,8 +159,7 @@ bool contains(const std::string& haystack, const std::string& needle) noexcept {
     return false;
 }
 
-template <typename Data>
-struct PartialDictElement {
+template <typename Data> struct PartialDictElement {
     bool enabled = true;
 
     // do not save
@@ -197,8 +177,7 @@ struct PartialDictElement {
         return this->data != other.data;
     }
 };
-template <typename Data>
-struct PartialDict {
+template <typename Data> struct PartialDict {
     using DataType = Data;
     using ElementType = PartialDictElement<Data>;
     using SizeType = std::vector<PartialDictElement<Data>>::size_type;
@@ -211,41 +190,35 @@ struct PartialDict {
         return this->elements == other.elements;
     }
 
-    constexpr bool empty() const noexcept {
-        return this->elements.empty();
-    }
+    constexpr bool empty() const noexcept { return this->elements.empty(); }
 };
 
 // got from here https://stackoverflow.com/a/60567091
-template <class Variant, std::size_t I = 0>
-Variant variant_from_index(std::size_t index) {
+template <class Variant, size_t I = 0> Variant variant_from_index(size_t index) {
     if constexpr (I >= std::variant_size_v<Variant>) {
         throw std::runtime_error{"Variant index " + to_string(I + index) + " out of bounds"};
     } else {
-        return index == 0
-                   ? Variant{std::in_place_index<I>}
-                   : variant_from_index<Variant, I + 1>(index - 1);
+        return index == 0 ? Variant{std::in_place_index<I>}
+                          : variant_from_index<Variant, I + 1>(index - 1);
     }
 }
 
 struct SaveState {
     size_t original_size = {};
     size_t load_idx = {};
-    std::vector<std::byte> original_buffer;
+    std::vector<char> original_buffer;
 
     // helpers
-    template <class T = void>
-    void save(const std::byte* ptr, size_t size = sizeof(T)) noexcept {
+    template <class T = void> void save(const char* ptr, size_t size = sizeof(T)) noexcept {
         std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
     }
 
-    std::byte* cur_load(std::size_t offset = 0) const noexcept {
+    char* cur_load(size_t offset = 0) noexcept {
         assert(this->load_idx + offset <= original_buffer.size());
-        return (std::byte*)original_buffer.data() + this->load_idx + offset;
+        return original_buffer.data() + this->load_idx + offset;
     }
 
-    template <class T = void>
-    void load(std::byte* ptr, size_t size = sizeof(T)) noexcept {
+    template <class T = void> void load(char* ptr, size_t size = sizeof(T)) noexcept {
         std::copy(this->cur_load(), this->cur_load(size), ptr);
         this->load_idx += size;
     }
@@ -253,33 +226,32 @@ struct SaveState {
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
     void save(T trivial) noexcept {
-        this->save<T>((std::byte*)(&trivial));
+        this->save<T>(reinterpret_cast<char*>(&trivial));
     }
 
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
     void load(T& trivial) noexcept {
-        this->load((std::byte*)&trivial, sizeof(T));
+        this->load(reinterpret_cast<char*>(&trivial), sizeof(T));
     }
 
     void save(const std::string& str) noexcept {
-        this->save((std::byte*)str.data(), str.length());
+        this->save(str.data(), str.length());
         this->save('\0');
     }
 
     void load(std::string& str) noexcept {
         size_t length = 0;
-        while (*this->cur_load(length) != std::byte(0)) {
+        while (*this->cur_load(length) != char(0)) {
             length++;
         }
         str.resize(length);
-        this->load((std::byte*)str.data(), length);
+        this->load(str.data(), length);
 
         this->load_idx++; // skip over null terminator
     }
 
-    template <class T>
-    void save(const std::optional<T>& opt) noexcept {
+    template <class T> void save(const std::optional<T>& opt) noexcept {
         bool has_value = opt.has_value();
         this->save(has_value);
 
@@ -288,8 +260,7 @@ struct SaveState {
         }
     }
 
-    template <class T>
-    void load(std::optional<T>& opt) noexcept {
+    template <class T> void load(std::optional<T>& opt) noexcept {
         bool has_value;
         this->load(has_value);
 
@@ -301,8 +272,7 @@ struct SaveState {
         }
     }
 
-    template <class K, class V>
-    void save(const std::unordered_map<K, V>& map) noexcept {
+    template <class K, class V> void save(const std::unordered_map<K, V>& map) noexcept {
         size_t size = map.size();
         this->save(size);
 
@@ -312,8 +282,7 @@ struct SaveState {
         }
     }
 
-    template <class K, class V>
-    void load(std::unordered_map<K, V>& map) noexcept {
+    template <class K, class V> void load(std::unordered_map<K, V>& map) noexcept {
         size_t size;
         this->load(size);
 
@@ -327,8 +296,7 @@ struct SaveState {
         }
     }
 
-    template <class... T>
-    void save(const std::variant<T...>& variant) noexcept {
+    template <class... T> void save(const std::variant<T...>& variant) noexcept {
         assert(variant.index() != std::variant_npos);
         size_t index = variant.index();
         this->save(index);
@@ -336,8 +304,7 @@ struct SaveState {
         std::visit([this](const auto& s) { this->save(s); }, variant);
     }
 
-    template <class... T>
-    void load(std::variant<T...>& variant) noexcept {
+    template <class... T> void load(std::variant<T...>& variant) noexcept {
         size_t index;
         this->load(index);
         assert(index != std::variant_npos);
@@ -346,8 +313,7 @@ struct SaveState {
         std::visit([this](auto& s) { this->load(s); }, variant);
     }
 
-    template <class Element>
-    void save(const std::vector<Element>& vec) noexcept {
+    template <class Element> void save(const std::vector<Element>& vec) noexcept {
         size_t size = vec.size();
         this->save(size);
 
@@ -356,8 +322,7 @@ struct SaveState {
         }
     }
 
-    template <class Element>
-    void load(std::vector<Element>& vec) noexcept {
+    template <class Element> void load(std::vector<Element>& vec) noexcept {
         size_t size;
         this->load(size);
 
@@ -372,25 +337,19 @@ struct SaveState {
         }
     }
 
-    template <class Data>
-    void save(const PartialDict<Data>& pd) noexcept {
+    template <class Data> void save(const PartialDict<Data>& pd) noexcept {
         this->save(pd.elements);
     }
 
-    template <class Data>
-    void save(const PartialDictElement<Data>& element) noexcept {
+    template <class Data> void save(const PartialDictElement<Data>& element) noexcept {
         this->save(element.enabled);
         this->save(element.key);
         this->save(element.data);
     }
 
-    template <class Data>
-    void load(PartialDict<Data>& pd) noexcept {
-        this->load(pd.elements);
-    }
+    template <class Data> void load(PartialDict<Data>& pd) noexcept { this->load(pd.elements); }
 
-    template <class Data>
-    void load(PartialDictElement<Data>& element) noexcept {
+    template <class Data> void load(PartialDictElement<Data>& element) noexcept {
         this->load(element.enabled);
         this->load(element.key);
         this->load(element.data);
@@ -415,25 +374,23 @@ struct SaveState {
         // this->original_buffer.shrink_to_fit();
     }
 
-    void reset_load() noexcept {
-        this->load_idx = 0;
-    }
+    void reset_load() noexcept { this->load_idx = 0; }
 
     void write(std::ostream& os) const noexcept {
-        os.write((char*)&this->original_size, sizeof(std::size_t));
-        os.write((char*)this->original_buffer.data(), this->original_buffer.size());
+        os.write(reinterpret_cast<const char*>(&this->original_size), sizeof(size_t));
+        os.write(this->original_buffer.data(), static_cast<int32_t>(this->original_buffer.size()));
         os.flush();
     }
 
     void read(std::istream& is) noexcept {
-        is.read((char*)&this->original_size, sizeof(std::size_t));
+        is.read(reinterpret_cast<char*>(&this->original_size), sizeof(size_t));
 
         if (this->original_size != 0) {
             this->original_buffer.reserve(this->original_size);
         }
         this->original_buffer.resize(this->original_size);
 
-        is.read((char*)this->original_buffer.data(), this->original_size);
+        is.read(this->original_buffer.data(), static_cast<int32_t>(this->original_size));
     }
 };
 
@@ -442,8 +399,7 @@ struct UndoHistory {
     std::vector<SaveState> undo_history;
 
     // should be called after every edit
-    template <class T>
-    void push_undo_history(const T* obj) noexcept {
+    template <class T> void push_undo_history(const T* obj) noexcept {
         if (this->undo_idx < this->undo_history.size() - 1) {
             // remove redos
             this->undo_history.resize(this->undo_idx);
@@ -457,20 +413,16 @@ struct UndoHistory {
         this->undo_idx++;
     }
 
-    template <class T>
-    void reset_undo_history(const T* obj) noexcept {
+    template <class T> void reset_undo_history(const T* obj) noexcept {
         // add initial undo
         this->undo_history.clear();
-        this->push_undo_history(obj);
         this->undo_idx = 0;
+        this->push_undo_history(obj);
     }
 
-    constexpr bool can_undo() const noexcept {
-        return this->undo_idx > 0;
-    }
+    constexpr bool can_undo() const noexcept { return this->undo_idx > 0; }
 
-    template <class T>
-    void undo(T* obj) noexcept {
+    template <class T> void undo(T* obj) noexcept {
         assert(this->can_undo());
 
         this->undo_idx--;
@@ -482,8 +434,7 @@ struct UndoHistory {
         return this->undo_idx < this->undo_history.size() - 1;
     }
 
-    template <class T>
-    void redo(T* obj) noexcept {
+    template <class T> void redo(T* obj) noexcept {
         assert(this->can_redo());
 
         this->undo_idx++;
@@ -492,10 +443,7 @@ struct UndoHistory {
     }
 
     UndoHistory() {}
-    template <class T>
-    UndoHistory(const T* obj) noexcept {
-        reset_undo_history(obj);
-    }
+    template <class T> UndoHistory(const T* obj) noexcept { reset_undo_history(obj); }
 
     UndoHistory(const UndoHistory&) = default;
     UndoHistory(UndoHistory&&) = default;
@@ -509,8 +457,8 @@ enum MultiPartBodyDataType : uint8_t {
 };
 
 static const char* MPBDTypeLabels[] = {
-    [MPBD_FILES] = (const char*)"Files",
-    [MPBD_TEXT] = (const char*)"Text",
+    /* [MPBD_FILES] = */ reinterpret_cast<const char*>("Files"),
+    /* [MPBD_TEXT] = */ reinterpret_cast<const char*>("Text"),
 };
 
 using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
@@ -539,8 +487,8 @@ struct MultiPartBodyElementData {
     }
 };
 const char* MultiPartBodyElementData::field_labels[field_count] = {
-    (const char*)"Type",
-    (const char*)"Data",
+    reinterpret_cast<const char*>("Type"),
+    reinterpret_cast<const char*>("Data"),
 };
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;
 using MultiPartBodyElement = MultiPartBody::ElementType;
@@ -555,16 +503,12 @@ struct CookiesElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const noexcept {
-        save->save(data);
-    }
+    void save(SaveState* save) const noexcept { save->save(data); }
 
-    void load(SaveState* save) noexcept {
-        save->load(data);
-    }
+    void load(SaveState* save) noexcept { save->load(data); }
 };
 const char* CookiesElementData::field_labels[field_count] = {
-    (const char*)"Data",
+    reinterpret_cast<const char*>("Data"),
 };
 using Cookies = PartialDict<CookiesElementData>;
 using CookiesElement = Cookies::ElementType;
@@ -579,16 +523,12 @@ struct ParametersElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const noexcept {
-        save->save(data);
-    }
+    void save(SaveState* save) const noexcept { save->save(data); }
 
-    void load(SaveState* save) noexcept {
-        save->load(data);
-    }
+    void load(SaveState* save) noexcept { save->load(data); }
 };
 const char* ParametersElementData::field_labels[field_count] = {
-    (const char*)"Data",
+    reinterpret_cast<const char*>("Data"),
 };
 using Parameters = PartialDict<ParametersElementData>;
 using ParametersElement = Parameters::ElementType;
@@ -603,112 +543,108 @@ struct HeadersElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const noexcept {
-        save->save(data);
-    }
+    void save(SaveState* save) const noexcept { save->save(data); }
 
-    void load(SaveState* save) noexcept {
-        save->load(data);
-    }
+    void load(SaveState* save) noexcept { save->load(data); }
 };
 const char* HeadersElementData::field_labels[field_count] = {
-    (const char*)"Data",
+    reinterpret_cast<const char*>("Data"),
 };
 using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
 
 const char* RequestHeadersLabels[] = {
-    (const char*)"A-IM",
-    (const char*)"Accept",
-    (const char*)"Accept-Charset",
-    (const char*)"Accept-Datetime",
-    (const char*)"Accept-Encoding",
-    (const char*)"Accept-Language",
-    (const char*)"Access-Control-Request-Method",
-    (const char*)"Access-Control-Request-Headers",
-    (const char*)"Authorization",
-    (const char*)"Cache-Control",
-    (const char*)"Connection",
-    (const char*)"Content-Encoding",
-    (const char*)"Content-Length",
-    (const char*)"Content-MD5",
-    (const char*)"Content-Type",
-    (const char*)"Cookie",
-    (const char*)"Date",
-    (const char*)"Expect",
-    (const char*)"Forwarded",
-    (const char*)"From",
-    (const char*)"Host",
-    (const char*)"HTTP2-Settings",
-    (const char*)"If-Match",
-    (const char*)"If-Modified-Since",
-    (const char*)"If-None-Match",
-    (const char*)"If-Range",
-    (const char*)"If-Unmodified-Since",
-    (const char*)"Max-Forwards",
-    (const char*)"Origin",
-    (const char*)"Pragma",
-    (const char*)"Prefer",
-    (const char*)"Proxy-Authorization",
-    (const char*)"Range",
-    (const char*)"Referer",
-    (const char*)"TE",
-    (const char*)"Trailer",
-    (const char*)"Transfer-Encoding",
-    (const char*)"User-Agent",
-    (const char*)"Upgrade",
-    (const char*)"Via",
-    (const char*)"Warning",
+    reinterpret_cast<const char*>("A-IM"),
+    reinterpret_cast<const char*>("Accept"),
+    reinterpret_cast<const char*>("Accept-Charset"),
+    reinterpret_cast<const char*>("Accept-Datetime"),
+    reinterpret_cast<const char*>("Accept-Encoding"),
+    reinterpret_cast<const char*>("Accept-Language"),
+    reinterpret_cast<const char*>("Access-Control-Request-Method"),
+    reinterpret_cast<const char*>("Access-Control-Request-Headers"),
+    reinterpret_cast<const char*>("Authorization"),
+    reinterpret_cast<const char*>("Cache-Control"),
+    reinterpret_cast<const char*>("Connection"),
+    reinterpret_cast<const char*>("Content-Encoding"),
+    reinterpret_cast<const char*>("Content-Length"),
+    reinterpret_cast<const char*>("Content-MD5"),
+    reinterpret_cast<const char*>("Content-Type"),
+    reinterpret_cast<const char*>("Cookie"),
+    reinterpret_cast<const char*>("Date"),
+    reinterpret_cast<const char*>("Expect"),
+    reinterpret_cast<const char*>("Forwarded"),
+    reinterpret_cast<const char*>("From"),
+    reinterpret_cast<const char*>("Host"),
+    reinterpret_cast<const char*>("HTTP2-Settings"),
+    reinterpret_cast<const char*>("If-Match"),
+    reinterpret_cast<const char*>("If-Modified-Since"),
+    reinterpret_cast<const char*>("If-None-Match"),
+    reinterpret_cast<const char*>("If-Range"),
+    reinterpret_cast<const char*>("If-Unmodified-Since"),
+    reinterpret_cast<const char*>("Max-Forwards"),
+    reinterpret_cast<const char*>("Origin"),
+    reinterpret_cast<const char*>("Pragma"),
+    reinterpret_cast<const char*>("Prefer"),
+    reinterpret_cast<const char*>("Proxy-Authorization"),
+    reinterpret_cast<const char*>("Range"),
+    reinterpret_cast<const char*>("Referer"),
+    reinterpret_cast<const char*>("TE"),
+    reinterpret_cast<const char*>("Trailer"),
+    reinterpret_cast<const char*>("Transfer-Encoding"),
+    reinterpret_cast<const char*>("User-Agent"),
+    reinterpret_cast<const char*>("Upgrade"),
+    reinterpret_cast<const char*>("Via"),
+    reinterpret_cast<const char*>("Warning"),
 };
 static const char* ResponseHeadersLabels[] = {
-    (const char*)"Accept-CH",
-    (const char*)"Access-Control-Allow-Origin",
-    (const char*)"Access-Control-Allow-Credentials",
-    (const char*)"Access-Control-Expose-Headers",
-    (const char*)"Access-Control-Max-Age",
-    (const char*)"Access-Control-Allow-Methods",
-    (const char*)"Access-Control-Allow-Headers",
-    (const char*)"Accept-Patch",
-    (const char*)"Accept-Ranges",
-    (const char*)"Age",
-    (const char*)"Allow",
-    (const char*)"Alt-Svc",
-    (const char*)"Cache-Control",
-    (const char*)"Connection",
-    (const char*)"Content-Disposition",
-    (const char*)"Content-Encoding",
-    (const char*)"Content-Language",
-    (const char*)"Content-Length",
-    (const char*)"Content-Location",
-    (const char*)"Content-MD5",
-    (const char*)"Content-Range",
-    (const char*)"Content-Type",
-    (const char*)"Date",
-    (const char*)"Delta-Base",
-    (const char*)"ETag",
-    (const char*)"Expires",
-    (const char*)"IM",
-    (const char*)"Last-Modified",
-    (const char*)"Link",
-    (const char*)"Location",
-    (const char*)"P3P",
-    (const char*)"Pragma",
-    (const char*)"Preference-Applied",
-    (const char*)"Proxy-Authenticate",
-    (const char*)"Public-Key-Pins",
-    (const char*)"Retry-After",
-    (const char*)"Server",
-    (const char*)"Set-Cookie",
-    (const char*)"Strict-Transport-Security",
-    (const char*)"Trailer",
-    (const char*)"Transfer-Encoding",
-    (const char*)"Tk",
-    (const char*)"Upgrade",
-    (const char*)"Vary",
-    (const char*)"Via",
-    (const char*)"Warning",
-    (const char*)"WWW-Authenticate",
-    (const char*)"X-Frame-Options",
+    reinterpret_cast<const char*>("Accept-CH"),
+    reinterpret_cast<const char*>("Access-Control-Allow-Origin"),
+    reinterpret_cast<const char*>("Access-Control-Allow-Credentials"),
+    reinterpret_cast<const char*>("Access-Control-Expose-Headers"),
+    reinterpret_cast<const char*>("Access-Control-Max-Age"),
+    reinterpret_cast<const char*>("Access-Control-Allow-Methods"),
+    reinterpret_cast<const char*>("Access-Control-Allow-Headers"),
+    reinterpret_cast<const char*>("Accept-Patch"),
+    reinterpret_cast<const char*>("Accept-Ranges"),
+    reinterpret_cast<const char*>("Age"),
+    reinterpret_cast<const char*>("Allow"),
+    reinterpret_cast<const char*>("Alt-Svc"),
+    reinterpret_cast<const char*>("Cache-Control"),
+    reinterpret_cast<const char*>("Connection"),
+    reinterpret_cast<const char*>("Content-Disposition"),
+    reinterpret_cast<const char*>("Content-Encoding"),
+    reinterpret_cast<const char*>("Content-Language"),
+    reinterpret_cast<const char*>("Content-Length"),
+    reinterpret_cast<const char*>("Content-Location"),
+    reinterpret_cast<const char*>("Content-MD5"),
+    reinterpret_cast<const char*>("Content-Range"),
+    reinterpret_cast<const char*>("Content-Type"),
+    reinterpret_cast<const char*>("Date"),
+    reinterpret_cast<const char*>("Delta-Base"),
+    reinterpret_cast<const char*>("ETag"),
+    reinterpret_cast<const char*>("Expires"),
+    reinterpret_cast<const char*>("IM"),
+    reinterpret_cast<const char*>("Last-Modified"),
+    reinterpret_cast<const char*>("Link"),
+    reinterpret_cast<const char*>("Location"),
+    reinterpret_cast<const char*>("P3P"),
+    reinterpret_cast<const char*>("Pragma"),
+    reinterpret_cast<const char*>("Preference-Applied"),
+    reinterpret_cast<const char*>("Proxy-Authenticate"),
+    reinterpret_cast<const char*>("Public-Key-Pins"),
+    reinterpret_cast<const char*>("Retry-After"),
+    reinterpret_cast<const char*>("Server"),
+    reinterpret_cast<const char*>("Set-Cookie"),
+    reinterpret_cast<const char*>("Strict-Transport-Security"),
+    reinterpret_cast<const char*>("Trailer"),
+    reinterpret_cast<const char*>("Transfer-Encoding"),
+    reinterpret_cast<const char*>("Tk"),
+    reinterpret_cast<const char*>("Upgrade"),
+    reinterpret_cast<const char*>("Vary"),
+    reinterpret_cast<const char*>("Via"),
+    reinterpret_cast<const char*>("Warning"),
+    reinterpret_cast<const char*>("WWW-Authenticate"),
+    reinterpret_cast<const char*>("X-Frame-Options"),
 };
 
 struct Test;
@@ -725,9 +661,9 @@ enum RequestBodyType : uint8_t {
     REQUEST_MULTIPART,
 };
 static const char* RequestBodyTypeLabels[] = {
-    [REQUEST_JSON] = (const char*)"JSON",
-    [REQUEST_RAW] = (const char*)"Raw",
-    [REQUEST_MULTIPART] = (const char*)"Multipart",
+    /* [REQUEST_JSON] = */ reinterpret_cast<const char*>("JSON"),
+    /* [REQUEST_RAW] = */ reinterpret_cast<const char*>("Raw"),
+    /* [REQUEST_MULTIPART] = */ reinterpret_cast<const char*>("Multipart"),
 };
 
 using RequestBody = std::variant<std::string, MultiPartBody>;
@@ -757,7 +693,9 @@ struct Request {
     }
 
     constexpr bool operator==(const Request& other) const noexcept {
-        return this->body_type == other.body_type && this->body == other.body && this->cookies == other.cookies && this->headers == other.headers && this->parameters == other.parameters;
+        return this->body_type == other.body_type && this->body == other.body &&
+               this->cookies == other.cookies && this->headers == other.headers &&
+               this->parameters == other.parameters;
     }
 };
 
@@ -767,12 +705,13 @@ enum ResponseBodyType : uint8_t {
     RESPONSE_RAW,
 };
 static const char* ResponseBodyTypeLabels[] = {
-    [RESPONSE_JSON] = (const char*)"JSON",
-    [RESPONSE_HTML] = (const char*)"HTML",
-    [RESPONSE_RAW] = (const char*)"Raw",
+    /* [RESPONSE_JSON] = */ reinterpret_cast<const char*>("JSON"),
+    /* [RESPONSE_HTML] = */ reinterpret_cast<const char*>("HTML"),
+    /* [RESPONSE_RAW] = */ reinterpret_cast<const char*>("Raw"),
 };
 
-using ResponseBody = std::variant<std::string>; // probably will need to add file responses so will keep it this way
+using ResponseBody =
+    std::variant<std::string>; // probably will need to add file responses so will keep it this way
 
 struct Response {
     std::string status; // a string so user can get hints and write their own status code
@@ -799,7 +738,9 @@ struct Response {
     }
 
     constexpr bool operator==(const Response& other) const noexcept {
-        return this->status == other.status && this->body_type == other.body_type && this->body == other.body && this->cookies == other.cookies && this->headers == other.headers;
+        return this->status == other.status && this->body_type == other.body_type &&
+               this->body == other.body && this->cookies == other.cookies &&
+               this->headers == other.headers;
     }
 };
 
@@ -807,89 +748,88 @@ enum HTTPType : uint8_t {
     HTTP_GET,
     HTTP_POST,
     HTTP_PUT,
-
     HTTP_DELETE,
     HTTP_PATCH,
 };
 static const char* HTTPTypeLabels[] = {
-    [HTTP_GET] = (const char*)"GET",
-    [HTTP_POST] = (const char*)"POST",
-    [HTTP_PUT] = (const char*)"PUT",
-    [HTTP_DELETE] = (const char*)"DELETE",
-    [HTTP_PATCH] = (const char*)"PATCH",
+    /* [HTTP_GET] = */ reinterpret_cast<const char*>("GET"),
+    /* [HTTP_POST] = */ reinterpret_cast<const char*>("POST"),
+    /* [HTTP_PUT] = */ reinterpret_cast<const char*>("PUT"),
+    /* [HTTP_DELETE] = */ reinterpret_cast<const char*>("DELETE"),
+    /* [HTTP_PATCH] = */ reinterpret_cast<const char*>("PATCH"),
 };
 static ImVec4 HTTPTypeColor[] = {
-    [HTTP_GET] = rgb_to_ImVec4(58, 142, 48, 255),
-    [HTTP_POST] = rgb_to_ImVec4(160, 173, 64, 255),
-    [HTTP_PUT] = rgb_to_ImVec4(181, 94, 65, 255),
-    [HTTP_DELETE] = rgb_to_ImVec4(201, 61, 22, 255),
-    [HTTP_PATCH] = rgb_to_ImVec4(99, 22, 90, 255),
+    /* [HTTP_GET] = */ rgb_to_ImVec4(58, 142, 48, 255),
+    /* [HTTP_POST] = */ rgb_to_ImVec4(160, 173, 64, 255),
+    /* [HTTP_PUT] = */ rgb_to_ImVec4(181, 94, 65, 255),
+    /* [HTTP_DELETE] = */ rgb_to_ImVec4(201, 61, 22, 255),
+    /* [HTTP_PATCH] = */ rgb_to_ImVec4(99, 22, 90, 255),
 };
 
 static const char* HTTPStatusLabels[] = {
-    (const char*)"100 Continue",
-    (const char*)"101 Switching Protocol",
-    (const char*)"102 Processing",
-    (const char*)"103 Early Hints",
-    (const char*)"200 OK",
-    (const char*)"201 Created",
-    (const char*)"202 Accepted",
-    (const char*)"203 Non-Authoritative Information",
-    (const char*)"204 No Content",
-    (const char*)"205 Reset Content",
-    (const char*)"206 Partial Content",
-    (const char*)"207 Multi-Status",
-    (const char*)"208 Already Reported",
-    (const char*)"226 IM Used",
-    (const char*)"300 Multiple Choices",
-    (const char*)"301 Moved Permanently",
-    (const char*)"302 Found",
-    (const char*)"303 See Other",
-    (const char*)"304 Not Modified",
-    (const char*)"305 Use Proxy",
-    (const char*)"306 unused",
-    (const char*)"307 Temporary Redirect",
-    (const char*)"308 Permanent Redirect",
-    (const char*)"400 Bad Request",
-    (const char*)"401 Unauthorized",
-    (const char*)"402 Payment Required",
-    (const char*)"403 Forbidden",
-    (const char*)"404 Not Found",
-    (const char*)"405 Method Not Allowed",
-    (const char*)"406 Not Acceptable",
-    (const char*)"407 Proxy Authentication Required",
-    (const char*)"408 Request Timeout",
-    (const char*)"409 Conflict",
-    (const char*)"410 Gone",
-    (const char*)"411 Length Required",
-    (const char*)"412 Precondition Failed",
-    (const char*)"413 Payload Too Large",
-    (const char*)"414 URI Too Long",
-    (const char*)"415 Unsupported Media Type",
-    (const char*)"416 Range Not Satisfiable",
-    (const char*)"417 Expectation Failed",
-    (const char*)"418 I'm a teapot",
-    (const char*)"421 Misdirected Request",
-    (const char*)"422 Unprocessable Content",
-    (const char*)"423 Locked",
-    (const char*)"424 Failed Dependency",
-    (const char*)"425 Too Early",
-    (const char*)"426 Upgrade Required",
-    (const char*)"428 Precondition Required",
-    (const char*)"429 Too Many Requests",
-    (const char*)"431 Request Header Fields Too Large",
-    (const char*)"451 Unavailable For Legal Reasons",
-    (const char*)"500 Internal Server Error",
-    (const char*)"501 Not Implemented",
-    (const char*)"502 Bad Gateway",
-    (const char*)"503 Service Unavailable",
-    (const char*)"504 Gateway Timeout",
-    (const char*)"505 HTTP Version Not Supported",
-    (const char*)"506 Variant Also Negotiates",
-    (const char*)"507 Insufficient Storage",
-    (const char*)"508 Loop Detected",
-    (const char*)"510 Not Extended",
-    (const char*)"511 Network Authentication Required",
+    reinterpret_cast<const char*>("100 Continue"),
+    reinterpret_cast<const char*>("101 Switching Protocol"),
+    reinterpret_cast<const char*>("102 Processing"),
+    reinterpret_cast<const char*>("103 Early Hints"),
+    reinterpret_cast<const char*>("200 OK"),
+    reinterpret_cast<const char*>("201 Created"),
+    reinterpret_cast<const char*>("202 Accepted"),
+    reinterpret_cast<const char*>("203 Non-Authoritative Information"),
+    reinterpret_cast<const char*>("204 No Content"),
+    reinterpret_cast<const char*>("205 Reset Content"),
+    reinterpret_cast<const char*>("206 Partial Content"),
+    reinterpret_cast<const char*>("207 Multi-Status"),
+    reinterpret_cast<const char*>("208 Already Reported"),
+    reinterpret_cast<const char*>("226 IM Used"),
+    reinterpret_cast<const char*>("300 Multiple Choices"),
+    reinterpret_cast<const char*>("301 Moved Permanently"),
+    reinterpret_cast<const char*>("302 Found"),
+    reinterpret_cast<const char*>("303 See Other"),
+    reinterpret_cast<const char*>("304 Not Modified"),
+    reinterpret_cast<const char*>("305 Use Proxy"),
+    reinterpret_cast<const char*>("306 unused"),
+    reinterpret_cast<const char*>("307 Temporary Redirect"),
+    reinterpret_cast<const char*>("308 Permanent Redirect"),
+    reinterpret_cast<const char*>("400 Bad Request"),
+    reinterpret_cast<const char*>("401 Unauthorized"),
+    reinterpret_cast<const char*>("402 Payment Required"),
+    reinterpret_cast<const char*>("403 Forbidden"),
+    reinterpret_cast<const char*>("404 Not Found"),
+    reinterpret_cast<const char*>("405 Method Not Allowed"),
+    reinterpret_cast<const char*>("406 Not Acceptable"),
+    reinterpret_cast<const char*>("407 Proxy Authentication Required"),
+    reinterpret_cast<const char*>("408 Request Timeout"),
+    reinterpret_cast<const char*>("409 Conflict"),
+    reinterpret_cast<const char*>("410 Gone"),
+    reinterpret_cast<const char*>("411 Length Required"),
+    reinterpret_cast<const char*>("412 Precondition Failed"),
+    reinterpret_cast<const char*>("413 Payload Too Large"),
+    reinterpret_cast<const char*>("414 URI Too Long"),
+    reinterpret_cast<const char*>("415 Unsupported Media Type"),
+    reinterpret_cast<const char*>("416 Range Not Satisfiable"),
+    reinterpret_cast<const char*>("417 Expectation Failed"),
+    reinterpret_cast<const char*>("418 I'm a teapot"),
+    reinterpret_cast<const char*>("421 Misdirected Request"),
+    reinterpret_cast<const char*>("422 Unprocessable Content"),
+    reinterpret_cast<const char*>("423 Locked"),
+    reinterpret_cast<const char*>("424 Failed Dependency"),
+    reinterpret_cast<const char*>("425 Too Early"),
+    reinterpret_cast<const char*>("426 Upgrade Required"),
+    reinterpret_cast<const char*>("428 Precondition Required"),
+    reinterpret_cast<const char*>("429 Too Many Requests"),
+    reinterpret_cast<const char*>("431 Request Header Fields Too Large"),
+    reinterpret_cast<const char*>("451 Unavailable For Legal Reasons"),
+    reinterpret_cast<const char*>("500 Internal Server Error"),
+    reinterpret_cast<const char*>("501 Not Implemented"),
+    reinterpret_cast<const char*>("502 Bad Gateway"),
+    reinterpret_cast<const char*>("503 Service Unavailable"),
+    reinterpret_cast<const char*>("504 Gateway Timeout"),
+    reinterpret_cast<const char*>("505 HTTP Version Not Supported"),
+    reinterpret_cast<const char*>("506 Variant Also Negotiates"),
+    reinterpret_cast<const char*>("507 Insufficient Storage"),
+    reinterpret_cast<const char*>("508 Loop Detected"),
+    reinterpret_cast<const char*>("510 Not Extended"),
+    reinterpret_cast<const char*>("511 Network Authentication Required"),
 };
 
 enum ClientSettingsFlags : uint8_t {
@@ -910,10 +850,10 @@ enum CompressionType : uint8_t {
 };
 static const char* CompressionTypeLabels[] = {
 #if CPPHTTPLIB_ZLIB_SUPPORT
-    [COMPRESSION_ZLIB] = (const char*)"ZLIB",
+    /* [COMPRESSION_ZLIB] = */ reinterpret_cast<const char*>("ZLIB"),
 #endif
 #if CPPHTTPLIB_BROTLI_SUPPORT
-    [COMPRESSION_BROTLI] = (const char*)"Brotli",
+    /* [COMPRESSION_BROTLI] = */ reinterpret_cast<const char*>("Brotli"),
 #endif
 };
 
@@ -940,21 +880,22 @@ struct ClientSettings {
     }
 
     constexpr bool operator==(const ClientSettings& other) const noexcept {
-        return this->flags == other.flags && this->flags & CLIENT_COMPRESSION && this->compression == other.compression;
+        return this->flags == other.flags && this->flags & CLIENT_COMPRESSION &&
+               this->compression == other.compression;
     }
 };
 
-#define CHECKBOX_FLAG(flags, changed, flag_name, flag_label) \
-    do {                                                     \
-        bool flag = (flags) & (flag_name);                   \
-        if (ImGui::Checkbox((flag_label), &flag)) {          \
-            changed = true;                                  \
-            if (flag) {                                      \
-                (flags) |= (flag_name);                      \
-            } else {                                         \
-                (flags) &= ~(flag_name);                     \
-            }                                                \
-        }                                                    \
+#define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
+    do {                                                                                           \
+        bool flag = (flags) & (flag_name);                                                         \
+        if (ImGui::Checkbox((flag_label), &flag)) {                                                \
+            changed = true;                                                                        \
+            if (flag) {                                                                            \
+                (flags) |= (flag_name);                                                            \
+            } else {                                                                               \
+                (flags) &= ~(flag_name);                                                           \
+            }                                                                                      \
+        }                                                                                          \
     } while (0);
 
 bool show_client_settings(ClientSettings* set) noexcept {
@@ -971,7 +912,7 @@ bool show_client_settings(ClientSettings* set) noexcept {
     if (set->flags & CLIENT_COMPRESSION) {
         ImGui::SameLine();
         if (ImGui::BeginCombo("##compression_type", CompressionTypeLabels[set->compression])) {
-            for (size_t i = 0; i < IM_ARRAYSIZE(CompressionTypeLabels); i++) {
+            for (size_t i = 0; i < ARRAYSIZE(CompressionTypeLabels); i++) {
                 if (ImGui::Selectable(CompressionTypeLabels[i], i == set->compression)) {
                     changed = true;
                     set->compression = static_cast<CompressionType>(i);
@@ -988,6 +929,7 @@ bool show_client_settings(ClientSettings* set) noexcept {
 #undef CHECKBOX_FLAG
 
 enum TestFlags : uint8_t {
+    TEST_NONE = 0,
     TEST_DISABLED = 1 << 0,
 };
 
@@ -1043,11 +985,11 @@ enum TestResultStatus {
     STATUS_WARNING,
 };
 static const char* TestResultStatusLabels[] = {
-    [STATUS_RUNNING] = (const char*)"Running",
-    [STATUS_CANCELLED] = (const char*)"Cancelled",
-    [STATUS_OK] = (const char*)"Ok",
-    [STATUS_ERROR] = (const char*)"Error",
-    [STATUS_WARNING] = (const char*)"Warning",
+    /* [STATUS_RUNNING] = */ reinterpret_cast<const char*>("Running"),
+    /* [STATUS_CANCELLED] = */ reinterpret_cast<const char*>("Cancelled"),
+    /* [STATUS_OK] = */ reinterpret_cast<const char*>("Ok"),
+    /* [STATUS_ERROR] = */ reinterpret_cast<const char*>("Error"),
+    /* [STATUS_WARNING] = */ reinterpret_cast<const char*>("Warning"),
 };
 
 struct TestResult {
@@ -1072,10 +1014,11 @@ struct TestResult {
     size_t progress_total;
     size_t progress_current;
 
-    TestResult(const Test& original_test) noexcept : original_test(original_test) {}
+    TestResult(const Test& _original_test) noexcept : original_test(_original_test) {}
 };
 
 enum GroupFlags : uint8_t {
+    GROUP_NONE = 0,
     GROUP_DISABLED = 1 << 0,
     GROUP_OPEN = 1 << 1,
 };
@@ -1126,7 +1069,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
     case TEST_VARIANT: {
         const auto& test_a = std::get<Test>(*a);
         const auto& test_b = std::get<Test>(*b);
-        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type && test_a.request == test_b.request && test_a.response == test_b.response && test_a.cli_settings == test_b.cli_settings;
+        return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type &&
+               test_a.request == test_b.request && test_a.response == test_b.response &&
+               test_a.cli_settings == test_b.cli_settings;
     } break;
     case GROUP_VARIANT:
         const auto& group_a = std::get<Group>(*a);
@@ -1150,8 +1095,8 @@ bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id,
         return group_a > group_b;
     }
 
-    std::string label_a = std::visit(LabelVisit(), a);
-    std::string label_b = std::visit(LabelVisit(), b);
+    std::string label_a = std::visit(LabelVisitor(), a);
+    std::string label_b = std::visit(LabelVisitor(), b);
 
     return label_a > label_b;
 }
@@ -1173,8 +1118,10 @@ struct AppState {
             Group{
                 .parent_id = static_cast<size_t>(-1),
                 .id = 0,
+                .flags = GROUP_NONE,
                 .name = "root",
                 .cli_settings = ClientSettings{},
+                .children_idx = {},
             },
         },
     };
@@ -1251,13 +1198,14 @@ struct AppState {
     }
 
     void editor_open_tab(size_t id) noexcept {
-        this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame = true;
+        this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame =
+            true;
         if (this->opened_editor_tabs.contains(id)) {
             this->opened_editor_tabs[id].just_opened = true;
         } else {
             this->opened_editor_tabs[id] = EditorTab{
                 .original_idx = id,
-                .name = std::visit(LabelVisit(), this->tests[id]),
+                .name = std::visit(LabelVisitor(), this->tests[id]),
             };
         }
     }
@@ -1301,7 +1249,7 @@ struct AppState {
         // add newly selected if parent is selected
         for (auto& [id, nt] : this->tests) {
             if (this->parent_selected(id) && !this->selected_tests.contains(id)) {
-                this->select_with_children(std::visit(ParentIDVisit(), nt));
+                this->select_with_children(std::visit(ParentIDVisitor(), nt));
             }
         }
     }
@@ -1321,28 +1269,27 @@ struct AppState {
     }
 
     bool parent_selected(size_t id) const noexcept {
-        return this->selected_tests.contains(std::visit(ParentIDVisit(), this->tests.at(id)));
+        return this->selected_tests.contains(std::visit(ParentIDVisitor(), this->tests.at(id)));
     }
 
-    const ClientSettings* get_cli_settings(size_t id) const noexcept {
+    ClientSettings get_cli_settings(size_t id) const noexcept {
         assert(this->tests.contains(id));
-        while (id != -1) {
+
+        while (id != -1ull) {
             const auto& test = this->tests.at(id);
-            const std::optional<ClientSettings>& cli = std::visit(ClientSettingsVisit(), test);
+            std::optional<ClientSettings> cli = std::visit(ClientSettingsVisitor(), test);
 
             if (cli.has_value()) {
-                return &cli.value();
+                return cli.value();
             }
 
-            id = std::visit(ParentIDVisit(), test);
+            id = std::visit(ParentIDVisitor(), test);
         }
 
         assert(false && "root doesn't have client settings");
-        return nullptr;
     }
 
-    template <bool select = true>
-    void select_with_children(size_t id) noexcept {
+    template <bool select = true> void select_with_children(size_t id) noexcept {
         if constexpr (select) {
             this->selected_tests.insert(id);
         } else if (!this->parent_selected(id)) {
@@ -1381,10 +1328,12 @@ struct AppState {
     }
 
     bool parent_disabled(const NestedTest* nt) noexcept {
+        assert(nt != nullptr);
+
         // OPTIM: maybe add some cache for every test that clears every frame?
         // if performance becomes a problem
-        size_t id = std::visit(ParentIDVisit(), *nt);
-        while (id != -1) {
+        size_t id = std::visit(ParentIDVisitor(), *nt);
+        while (id != -1ull) {
             assert(this->tests.contains(id));
             nt = &this->tests[id];
             assert(std::holds_alternative<Group>(*nt));
@@ -1405,7 +1354,7 @@ struct AppState {
 
         for (auto child_id : group->children_idx) {
             auto& child = this->tests[child_id];
-            std::visit(SetParentIDVisit(parent_group.id), child);
+            std::visit(SetParentIDVisitor(parent_group.id), child);
             parent_group.children_idx.push_back(child_id);
         }
 
@@ -1428,7 +1377,7 @@ struct AppState {
         assert(this->tests.contains(id));
         NestedTest* test = &this->tests[id];
 
-        size_t parent_id = std::visit(ParentIDVisit(), *test);
+        size_t parent_id = std::visit(ParentIDVisitor(), *test);
 
         if (std::holds_alternative<Group>(*test)) {
             auto& group = std::get<Group>(*test);
@@ -1467,7 +1416,8 @@ struct AppState {
                 continue;
             }
 
-            for (auto it = parent_group.children_idx.begin(); it != parent_group.children_idx.end(); it++) {
+            for (auto it = parent_group.children_idx.begin(); it != parent_group.children_idx.end();
+                 it++) {
                 if (*it == test_id) {
                     parent_group.children_idx.erase(it);
                     break;
@@ -1482,6 +1432,8 @@ struct AppState {
             .id = id,
             .flags = GROUP_OPEN,
             .name = "New group",
+            .cli_settings = {},
+            .children_idx = {},
         };
 
         // add selected to new parent
@@ -1492,7 +1444,7 @@ struct AppState {
 
             new_group.children_idx.push_back(test_id);
             // set new parent id to tests
-            std::visit(SetParentIDVisit(id), this->tests[test_id]);
+            std::visit(SetParentIDVisitor(id), this->tests[test_id]);
         }
 
         parent_group.children_idx.push_back(id);
@@ -1517,9 +1469,7 @@ struct AppState {
         this->delete_selected();
     }
 
-    constexpr bool can_paste() const noexcept {
-        return this->clipboard.original_size > 0;
-    }
+    constexpr bool can_paste() const noexcept { return this->clipboard.original_size > 0; }
 
     void paste(Group* group) noexcept {
         std::unordered_map<size_t, NestedTest> to_paste;
@@ -1546,7 +1496,7 @@ struct AppState {
             }
 
             // update parents children_idx to use new id
-            size_t parent_id = std::visit(ParentIDVisit(), nt);
+            size_t parent_id = std::visit(ParentIDVisitor(), nt);
             if (to_paste.contains(parent_id)) {
                 // Log(LogLevel::Debug, "parent_id: %zu", parent_id);
 
@@ -1556,29 +1506,31 @@ struct AppState {
                 auto& children_idx = parent_group.children_idx;
 
                 // must have it as child
-                assert(std::find(children_idx.begin(), children_idx.end(), id) < children_idx.end());
+                assert(std::find(children_idx.begin(), children_idx.end(), id) <
+                       children_idx.end());
                 std::erase(children_idx, id);
                 children_idx.push_back(new_id);
             }
 
             // update groups children parent_id
             if (std::holds_alternative<Group>(nt)) {
-                auto& group = std::get<Group>(nt);
-                for (size_t child_id : group.children_idx) {
+                auto& group_nt = std::get<Group>(nt);
+                for (size_t child_id : group_nt.children_idx) {
                     assert(to_paste.contains(child_id));
-                    std::visit(SetParentIDVisit(new_id), to_paste[child_id]);
+                    std::visit(SetParentIDVisitor(new_id), to_paste[child_id]);
                 }
             }
 
             auto node = to_paste.extract(it);
             node.key() = new_id;
-            std::visit(SetIDVisit(new_id), node.mapped());
+            std::visit(SetIDVisitor(new_id), node.mapped());
             to_paste.insert(std::move(node));
 
             // update groups children parent_id
             if (std::holds_alternative<Group>(nt)) {
-                auto& group = std::get<Group>(nt);
-                std::sort(group.children_idx.begin(), group.children_idx.end(), [&to_paste](size_t a, size_t b) { return test_comp(to_paste, a, b); });
+                auto& group_nt = std::get<Group>(nt);
+                std::sort(group_nt.children_idx.begin(), group_nt.children_idx.end(),
+                          [&to_paste](size_t a, size_t b) { return test_comp(to_paste, a, b); });
             }
             // Log(LogLevel::Debug, "new id: %zu", new_id);
         }
@@ -1587,12 +1539,12 @@ struct AppState {
         for (auto it = to_paste.begin(); it != to_paste.end(); it++) {
             auto& [id, nt] = *it;
 
-            size_t parent_id = std::visit(ParentIDVisit(), nt);
+            size_t parent_id = std::visit(ParentIDVisitor(), nt);
             if (!to_paste.contains(parent_id)) {
                 // Log(LogLevel::Debug, "pasting id: %zu", id);
 
                 group->children_idx.push_back(id);
-                std::visit(SetParentIDVisit(group->id), nt);
+                std::visit(SetParentIDVisitor(group->id), nt);
             }
         }
 
@@ -1607,12 +1559,12 @@ struct AppState {
                 continue;
             }
 
-            size_t old_parent = std::visit(ParentIDVisit(), this->tests[id]);
+            size_t old_parent = std::visit(ParentIDVisitor(), this->tests[id]);
             assert(this->tests.contains(old_parent));
             assert(std::holds_alternative<Group>(this->tests[old_parent]));
             std::erase(std::get<Group>(this->tests[old_parent]).children_idx, id);
 
-            std::visit(SetParentIDVisit(group->id), this->tests[id]);
+            std::visit(SetParentIDVisitor(group->id), this->tests[id]);
 
             group->children_idx.push_back(id);
         }
@@ -1621,9 +1573,8 @@ struct AppState {
     }
 
     void sort(Group& group) noexcept {
-        std::sort(
-            group.children_idx.begin(), group.children_idx.end(),
-            [this](size_t a, size_t b) { return test_comp(this->tests, a, b); });
+        std::sort(group.children_idx.begin(), group.children_idx.end(),
+                  [this](size_t a, size_t b) { return test_comp(this->tests, a, b); });
     }
 
     bool filter(Group& group) noexcept {
@@ -1641,18 +1592,16 @@ struct AppState {
         return result;
     }
 
-    bool filter(Test& test) noexcept {
-        return !contains(test.endpoint, this->tree_view_filter);
-    }
+    bool filter(Test& test) noexcept { return !contains(test.endpoint, this->tree_view_filter); }
 
     // returns true when the value should be filtered *OUT*
     bool filter(NestedTest* nt) noexcept {
-        bool filter = std::visit([this](auto& nt) { return this->filter(nt); }, *nt);
+        bool filter = std::visit([this](auto& elem) { return this->filter(elem); }, *nt);
 
         if (filter) {
-            this->filtered_tests.insert(std::visit(IDVisit(), *nt));
+            this->filtered_tests.insert(std::visit(IDVisitor(), *nt));
         } else {
-            this->filtered_tests.erase(std::visit(IDVisit(), *nt));
+            this->filtered_tests.erase(std::visit(IDVisitor(), *nt));
         }
         return filter;
     }
@@ -1690,7 +1639,7 @@ struct AppState {
         this->post_open();
     }
 
-    AppState(HelloImGui::RunnerParams* runner_params) noexcept : runner_params(runner_params) {
+    AppState(HelloImGui::RunnerParams* _runner_params) noexcept : runner_params(_runner_params) {
         this->undo_history.reset_undo_history(this);
     }
 
@@ -1706,7 +1655,7 @@ struct SelectAnalysisResult {
     bool test = false;
     bool same_parent = true;
     bool selected_root = false;
-    size_t parent_id = -1;
+    size_t parent_id = -1ull;
     size_t top_selected_count;
 };
 
@@ -1719,7 +1668,7 @@ SelectAnalysisResult select_analysis(AppState* app) noexcept {
             return;
         }
 
-        if (result.parent_id == -1) {
+        if (result.parent_id == -1ull) {
             result.parent_id = id;
         } else if (result.parent_id != id) {
             result.same_parent = false;
@@ -1760,7 +1709,7 @@ SelectAnalysisResult select_analysis(AppState* app) noexcept {
 
 bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     bool changed = false; // this also indicates that analysis data is invalid
-    size_t nested_test_id = std::visit(IDVisit(), *nested_test);
+    size_t nested_test_id = std::visit(IDVisitor(), *nested_test);
 
     if (ImGui::BeginPopupContextItem()) {
         app->tree_view_focused = true;
@@ -1785,11 +1734,14 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
         if (ImGui::BeginMenu("Move", !changed && !analysis.selected_root)) {
             for (auto& [id, nt] : app->tests) {
                 // skip if not a group or same parent for selected or selected group
-                if (!std::holds_alternative<Group>(nt) || analysis.same_parent && analysis.parent_id == id || app->selected_tests.contains(id)) {
+                if (!std::holds_alternative<Group>(nt) ||
+                    (analysis.same_parent && analysis.parent_id == id) ||
+                    app->selected_tests.contains(id)) {
                     continue;
                 }
 
-                if (ImGui::MenuItem(std::visit(LabelVisit(), nt).c_str(), nullptr, false, !changed)) {
+                if (ImGui::MenuItem(std::visit(LabelVisitor(), nt).c_str(), nullptr, false,
+                                    !changed)) {
                     changed = true;
 
                     assert(std::holds_alternative<Group>(nt));
@@ -1812,7 +1764,8 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem("Paste", "Ctrl + V", false,
+                                app->can_paste() && analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1821,7 +1774,8 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->paste(&selected_group);
             }
 
-            if (ImGui::MenuItem("Add a new test", nullptr, false, analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem("Add a new test", nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1832,14 +1786,19 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->tests[id] = (Test{
                     .parent_id = selected_group.id,
                     .id = id,
+                    .flags = TEST_NONE,
                     .type = HTTP_GET,
                     .endpoint = "https://example.com",
+                    .request = {},
+                    .response = {},
+                    .cli_settings = {},
                 });
                 selected_group.children_idx.push_back(id);
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem("Add a new group", nullptr, false, analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem("Add a new group", nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 assert(std::holds_alternative<Group>(*nested_test));
@@ -1849,7 +1808,10 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->tests[id] = (Group{
                     .parent_id = selected_group.id,
                     .id = id,
+                    .flags = GROUP_NONE,
                     .name = "New group",
+                    .cli_settings = {},
+                    .children_idx = {},
                 });
                 selected_group.children_idx.push_back(id);
             }
@@ -1871,7 +1833,8 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             ImGui::Separator();
         }
 
-        if (analysis.same_parent && ImGui::MenuItem("Group Selected", nullptr, false, !analysis.selected_root && !changed)) {
+        if (analysis.same_parent && ImGui::MenuItem("Group Selected", nullptr, false,
+                                                    !analysis.selected_root && !changed)) {
             changed = true;
 
             app->group_selected(analysis.parent_id);
@@ -1890,7 +1853,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
 }
 
 bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
-    const auto id = std::visit(IDVisit(), test);
+    const auto id = std::visit(IDVisitor(), test);
     bool item_is_selected = app->selected_tests.contains(id);
     if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
         if (ImGui::GetIO().KeyCtrl) {
@@ -1917,19 +1880,15 @@ bool http_type_button(HTTPType type) noexcept {
     return result;
 }
 
-bool show_tree_view_test(AppState* app, NestedTest& test,
-                         float indentation = 0) noexcept {
-    ImGuiWindow* window = ImGui::GetCurrentWindow();
-    const bool ctrl = ImGui::GetIO().KeyCtrl;
-
-    size_t id = std::visit(IDVisit(), test);
+bool show_tree_view_test(AppState* app, NestedTest& test, float indentation = 0) noexcept {
+    size_t id = std::visit(IDVisitor(), test);
     bool changed = false;
 
     if (app->filtered_tests.contains(id)) {
         return changed;
     }
 
-    ImGui::PushID(id);
+    ImGui::PushID(static_cast<int32_t>(id));
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
     switch (test.index()) {
@@ -1972,8 +1931,11 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
         }
 
         ImGui::TableNextColumn(); // selectable
-        const bool double_clicked = tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) && io.MouseDoubleClicked[0];
-        if (!changed && !app->selected_tests.contains(0) && ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
+        const bool double_clicked =
+            tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) &&
+            io.MouseDoubleClicked[0];
+        if (!changed && !app->selected_tests.contains(0) &&
+            ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
             if (!app->selected_tests.contains(leaf.id)) {
                 app->selected_tests.clear();
                 app->select_with_children(leaf.id);
@@ -2047,7 +2009,8 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
             group.flags ^= GROUP_OPEN; // toggle
         }
 
-        if (!changed && !app->selected_tests.contains(0) && ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
+        if (!changed && !app->selected_tests.contains(0) &&
+            ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
             if (!app->selected_tests.contains(group.id)) {
                 app->selected_tests.clear();
                 app->select_with_children(group.id);
@@ -2072,7 +2035,8 @@ bool show_tree_view_test(AppState* app, NestedTest& test,
         if (!changed && group.flags & GROUP_OPEN) {
             for (size_t child_id : group.children_idx) {
                 assert(app->tests.contains(child_id));
-                changed = changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
+                changed =
+                    changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
                 if (changed) {
                     break;
                 }
@@ -2169,7 +2133,8 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 elem->cfs = ComboFilterState{};
             }
             ImGui::SetNextItemWidth(-1);
-            changed = changed | ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
+            changed =
+                changed | ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
         } else {
             ImGui::SetNextItemWidth(-1);
             changed = changed | ImGui::InputText("##name", &elem->key);
@@ -2180,7 +2145,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Cookies* pd, CookiesElement* elem) noexcept {
+bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         changed = changed | ImGui::InputText("##data", &elem->data.data);
@@ -2188,7 +2153,7 @@ bool partial_dict_data_row(AppState* app, Cookies* pd, CookiesElement* elem) noe
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Parameters* pd, ParametersElement* elem) noexcept {
+bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         changed = changed | ImGui::InputText("##data", &elem->data.data);
@@ -2196,7 +2161,7 @@ bool partial_dict_data_row(AppState* app, Parameters* pd, ParametersElement* ele
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Headers* pd, HeadersElement* elem) noexcept {
+bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         changed = changed | ImGui::InputText("##data", &elem->data.data);
@@ -2204,12 +2169,12 @@ bool partial_dict_data_row(AppState* app, Headers* pd, HeadersElement* elem) noe
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyElement* elem) noexcept {
+bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##type", MPBDTypeLabels[elem->data.type])) {
-            for (size_t i = 0; i < IM_ARRAYSIZE(MPBDTypeLabels); i++) {
+            for (size_t i = 0; i < ARRAYSIZE(MPBDTypeLabels); i++) {
                 if (ImGui::Selectable(MPBDTypeLabels[i], i == elem->data.type)) {
                     elem->data.type = static_cast<MultiPartBodyDataType>(i);
 
@@ -2240,9 +2205,12 @@ bool partial_dict_data_row(AppState* app, MultiPartBody* mpb, MultiPartBodyEleme
         case MPBD_FILES:
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
             auto& files = std::get<std::vector<std::string>>(elem->data.data);
-            std::string text = files.empty() ? "Select Files" : "Selected " + to_string(files.size()) + " Files (Hover to see names)";
+            std::string text = files.empty() ? "Select Files"
+                                             : "Selected " + to_string(files.size()) +
+                                                   " Files (Hover to see names)";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
-                elem->data.open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
+                elem->data.open_file =
+                    pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
             }
 
             if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -2269,7 +2237,6 @@ template <typename Data>
 bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
                   const char** hints = nullptr, const size_t hint_count = 0) noexcept {
     using DataType = PartialDict<Data>::DataType;
-    using ElementType = PartialDict<Data>::ElementType;
 
     bool changed = false;
 
@@ -2285,7 +2252,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
         for (size_t i = 0; i < pd->elements.size(); i++) {
             auto* elem = &pd->elements[i];
             ImGui::TableNextRow();
-            ImGui::PushID(i);
+            ImGui::PushID(static_cast<int32_t>(i));
             changed = partial_dict_row(app, pd, elem, hints, hint_count);
             deletion |= elem->to_delete;
             ImGui::PopID();
@@ -2294,11 +2261,8 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
         if (deletion) {
             changed = true;
 
-            for (int i = pd->elements.size() - 1; i >= 0; i--) {
-                if (pd->elements[i].to_delete) {
-                    pd->elements.erase(pd->elements.begin() + i);
-                }
-            }
+            pd->elements.erase(std::remove_if(pd->elements.begin(), pd->elements.end(),
+                                              [](const auto& elem) { return elem.to_delete; }));
         }
 
         ImGui::TableNextRow();
@@ -2308,7 +2272,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
         }
 
         ImGui::TableNextRow();
-        ImGui::PushID(pd->elements.size());
+        ImGui::PushID(static_cast<int32_t>(pd->elements.size()));
         if (partial_dict_row(app, pd, &pd->add_element, hints, hint_count)) {
             changed = true;
 
@@ -2322,7 +2286,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
     return changed;
 }
 
-bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
+bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
     bool changed = false;
 
     if (ImGui::BeginTabBar("Request")) {
@@ -2335,9 +2299,8 @@ bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
         }
 
         if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
-            if (ImGui::Combo(
-                    "Body Type", (int*)&test.request.body_type,
-                    RequestBodyTypeLabels, IM_ARRAYSIZE(RequestBodyTypeLabels))) {
+            if (ImGui::Combo("Body Type", reinterpret_cast<int*>(&test.request.body_type),
+                             RequestBodyTypeLabels, ARRAYSIZE(RequestBodyTypeLabels))) {
                 changed = true;
 
                 // TODO: convert between current body types
@@ -2361,7 +2324,9 @@ bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
             case REQUEST_JSON:
             case REQUEST_RAW:
                 ImGui::PushFont(app->mono_font);
-                changed = changed | ImGui::InputTextMultiline("##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
+                changed = changed |
+                          ImGui::InputTextMultiline(
+                              "##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
                 ImGui::PopFont();
 
                 if (ImGui::BeginPopupContextItem()) {
@@ -2386,7 +2351,7 @@ bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Parameters")) {
             ImGui::Text("TODO: add undeletable params from url");
-            if (!std::visit(EmptyVisit(), test.request.body)) {
+            if (!std::visit(EmptyVisitor(), test.request.body)) {
                 ImGui::Text("If body is specified params non-link are disabled");
             } else {
                 ImGui::PushFont(app->mono_font);
@@ -2405,7 +2370,8 @@ bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.headers, "##headers", RequestHeadersLabels, IM_ARRAYSIZE(RequestHeadersLabels));
+            changed = changed | partial_dict(app, &test.request.headers, "##headers",
+                                             RequestHeadersLabels, ARRAYSIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -2417,7 +2383,7 @@ bool editor_test_request(AppState* app, EditorTab tab, Test& test) noexcept {
     return changed;
 }
 
-bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
+bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
     bool changed = false;
 
     if (ImGui::BeginTabBar("Response")) {
@@ -2425,16 +2391,16 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Response")) {
             static ComboFilterState s{};
-            ComboFilter("Status", &test.response.status, HTTPStatusLabels, IM_ARRAYSIZE(HTTPStatusLabels), &s);
+            ComboFilter("Status", &test.response.status, HTTPStatusLabels,
+                        ARRAYSIZE(HTTPStatusLabels), &s);
             ImGui::Text("Select any of the tabs to edit test's expected response");
             ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Body")) {
-            if (ImGui::Combo(
-                    "Body Type", (int*)&test.response.body_type,
-                    ResponseBodyTypeLabels, IM_ARRAYSIZE(ResponseBodyTypeLabels))) {
+            if (ImGui::Combo("Body Type", reinterpret_cast<int*>(&test.response.body_type),
+                             ResponseBodyTypeLabels, ARRAYSIZE(ResponseBodyTypeLabels))) {
                 changed = true;
 
                 // TODO: convert between current body types
@@ -2454,7 +2420,9 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
             case RESPONSE_HTML:
             case RESPONSE_RAW:
                 ImGui::PushFont(app->mono_font);
-                changed = changed | ImGui::InputTextMultiline("##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
+                changed = changed |
+                          ImGui::InputTextMultiline(
+                              "##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
                 ImGui::PopFont();
 
                 if (ImGui::BeginPopupContextItem()) {
@@ -2482,7 +2450,9 @@ bool editor_test_response(AppState* app, EditorTab tab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.response.headers, "##headers", ResponseHeadersLabels, IM_ARRAYSIZE(ResponseHeadersLabels));
+            changed =
+                changed | partial_dict(app, &test.response.headers, "##headers",
+                                       ResponseHeadersLabels, ARRAYSIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -2501,7 +2471,7 @@ enum ModalResult : uint8_t {
     MODAL_CANCEL,
 };
 
-ModalResult unsaved_changes(AppState* app) noexcept {
+ModalResult unsaved_changes(AppState*) noexcept {
     if (!ImGui::IsPopupOpen("Unsaved Changes")) {
         ImGui::OpenPopup("Unsaved Changes");
     }
@@ -2544,12 +2514,14 @@ void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexce
             // is given readonly flag so const_cast is fine
             if (ImGui::TableNextColumn()) {
                 ImGui::SetNextItemWidth(-1);
-                ImGui::InputText("##key", &const_cast<std::string&>(key), ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputText("##key", &const_cast<std::string&>(key),
+                                 ImGuiInputTextFlags_ReadOnly);
             }
             // is given readonly flag so const_cast is fine
             if (ImGui::TableNextColumn()) {
                 ImGui::SetNextItemWidth(-1);
-                ImGui::InputText("##value", &const_cast<std::string&>(value), ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputText("##value", &const_cast<std::string&>(value),
+                                 ImGuiInputTextFlags_ReadOnly);
             }
             ImGui::PopID();
         }
@@ -2584,26 +2556,31 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
             } else {
                 if (ImGui::TreeNode("Response")) {
 
-                    ImGui::Text("%d - %s", http_result->status, httplib::status_message(http_result->status));
+                    ImGui::Text("%d - %s", http_result->status,
+                                httplib::status_message(http_result->status));
                     ImGui::SameLine();
                     ImGui::Button("?");
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                        ImGui::SetTooltip("Expected: %s", tr->original_test.response.status.c_str());
+                        ImGui::SetTooltip("Expected: %s",
+                                          tr->original_test.response.status.c_str());
                     }
 
                     // TODO: add a diff like view
                     ImGui::PushFont(app->mono_font);
                     // is given readonly flag so const_cast is fine
-                    ImGui::InputTextMultiline(
-                        "##response_body", &const_cast<std::string&>(http_result->body),
-                        ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
+                    ImGui::InputTextMultiline("##response_body",
+                                              &const_cast<std::string&>(http_result->body),
+                                              ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
 
                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                         std::string body = "*Multipart Data*";
                         if (std::holds_alternative<std::string>(tr->original_test.response.body)) {
                             body = std::get<std::string>(tr->original_test.response.body);
                         }
-                        ImGui::SetTooltip("Expected: %s\n%s", ResponseBodyTypeLabels[tr->original_test.response.body_type], body.c_str());
+                        ImGui::SetTooltip(
+                            "Expected: %s\n%s",
+                            ResponseBodyTypeLabels[tr->original_test.response.body_type],
+                            body.c_str());
                     }
                     ImGui::PopFont();
 
@@ -2651,9 +2628,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::InputText("Endpoint", &test.endpoint);
             changed = changed | ImGui::IsItemDeactivatedAfterEdit();
 
-            changed = changed | ImGui::Combo(
-                                    "Type", (int*)&test.type,
-                                    HTTPTypeLabels, IM_ARRAYSIZE(HTTPTypeLabels));
+            changed = changed | ImGui::Combo("Type", reinterpret_cast<int*>(&test.type),
+                                             HTTPTypeLabels, ARRAYSIZE(HTTPTypeLabels));
 
             changed = changed | editor_test_request(app, tab, test);
             changed = changed | editor_test_response(app, tab, test);
@@ -2661,8 +2637,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::Text("Client Settings");
             ImGui::Separator();
 
-            bool enable_settings = test.cli_settings.has_value() || test.parent_id == -1;
-            if (test.parent_id != -1 && ImGui::Checkbox("Override Parent", &enable_settings)) {
+            bool enable_settings = test.cli_settings.has_value() || test.parent_id == -1ull;
+            if (test.parent_id != -1ull && ImGui::Checkbox("Override Parent", &enable_settings)) {
                 changed = true;
                 if (enable_settings) {
                     test.cli_settings = ClientSettings{};
@@ -2671,14 +2647,15 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 }
             }
 
-            // removing const is ok here because they are never compile time const and if they don't belong to this test they are disabled
-            ClientSettings* cli_settings = const_cast<ClientSettings*>(app->get_cli_settings(test.id));
-
             if (!enable_settings) {
                 ImGui::BeginDisabled();
             }
 
-            changed |= show_client_settings(cli_settings);
+            ClientSettings cli_settings = app->get_cli_settings(test.id);
+            if (show_client_settings(&cli_settings)) {
+                changed = true;
+                test.cli_settings = cli_settings;
+            }
 
             if (!enable_settings) {
                 ImGui::EndDisabled();
@@ -2722,8 +2699,8 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             ImGui::Text("Client Settings");
             ImGui::Separator();
 
-            bool enable_settings = group.cli_settings.has_value() || group.parent_id == -1;
-            if (group.parent_id != -1 && ImGui::Checkbox("Override Parent", &enable_settings)) {
+            bool enable_settings = group.cli_settings.has_value() || group.parent_id == -1ull;
+            if (group.parent_id != -1ull && ImGui::Checkbox("Override Parent", &enable_settings)) {
                 changed = true;
                 if (enable_settings) {
                     group.cli_settings = ClientSettings{};
@@ -2732,14 +2709,15 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
                 }
             }
 
-            // removing const is ok here because they are never compile time const and if they don't belong to this group they are disabled
-            ClientSettings* cli_settings = const_cast<ClientSettings*>(app->get_cli_settings(group.id));
-
             if (!enable_settings) {
                 ImGui::BeginDisabled();
             }
 
-            changed |= show_client_settings(cli_settings);
+            ClientSettings cli_settings = app->get_cli_settings(group.id);
+            if (show_client_settings(&cli_settings)) {
+                changed = true;
+                group.cli_settings = cli_settings;
+            }
 
             if (!enable_settings) {
                 ImGui::EndDisabled();
@@ -2766,7 +2744,7 @@ void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::BeginTabBar("editor")) {
-        size_t closed_id = -1;
+        size_t closed_id = -1ull;
         for (auto& [id, tab] : app->opened_editor_tabs) {
             NestedTest* original = &app->tests[tab.original_idx];
             EditorTabResult result;
@@ -2787,7 +2765,7 @@ void tabbed_editor(AppState* app) noexcept {
                 closed_id = id;
                 break;
             case TAB_CHANGED:
-                tab.name = std::visit(LabelVisit(), *original);
+                tab.name = std::visit(LabelVisitor(), *original);
                 tab.just_opened = true; // to force refocus after
                 app->undo_history.push_undo_history(app);
             case TAB_NONE:
@@ -2795,7 +2773,7 @@ void tabbed_editor(AppState* app) noexcept {
             }
         }
 
-        if (closed_id != -1) {
+        if (closed_id != -1ull) {
             app->opened_editor_tabs.erase(closed_id);
         }
         ImGui::EndTabBar();
@@ -2859,6 +2837,7 @@ httplib::Params test_params(const Test* test) noexcept {
 }
 
 std::string test_content_type(const Test* test) noexcept {
+    assert(test != nullptr);
     switch (test->request.body_type) {
     case REQUEST_JSON:
         return "application/json";
@@ -2867,6 +2846,7 @@ std::string test_content_type(const Test* test) noexcept {
     case REQUEST_MULTIPART:
         return "multipart/form-data";
     }
+    assert(false && "Unknown request body type");
 }
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
@@ -2892,13 +2872,15 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
         result->progress_total = total;
         result->progress_current = current;
-        result->verdict = to_string(current * 100 / float(total)) + "% ";
+        result->verdict =
+            to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
 
         return true;
     };
 
     httplib::Result result;
-    // Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type], test->label().c_str());
+    // Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type],
+    // test->label().c_str());
 
     auto [host, dest] = split_endpoint(test->endpoint);
     httplib::Client cli(host);
@@ -2938,13 +2920,14 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
         }
         break;
     }
-    // Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type], test->label().c_str());
+    // Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type],
+    // test->label().c_str());
     return result;
 }
 
 bool status_match(const std::string& match, int status) noexcept {
     auto status_str = to_string(status);
-    for (int i = 0; i < std::min(match.size(), 3ul); i++) {
+    for (size_t i = 0; i < std::min(match.size(), 3ul); i++) {
         if (std::tolower(match[i]) == 'x') {
             continue;
         }
@@ -2955,7 +2938,8 @@ bool status_match(const std::string& match, int status) noexcept {
     return true;
 }
 
-void test_analysis(AppState* app, const Test* test, TestResult* test_result, httplib::Result&& http_result) noexcept {
+void test_analysis(AppState*, const Test* test, TestResult* test_result,
+                   httplib::Result&& http_result) noexcept {
     switch (http_result.error()) {
     case httplib::Error::Success:
 
@@ -2994,16 +2978,16 @@ void run_test(AppState* app, const Test* test) noexcept {
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
     app->thr_pool.purge();
     app->test_results.clear();
-    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame = true;
+    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
+        true;
 
     for (Test test : *tests) {
         app->test_results.try_emplace(test.id, test);
-        // add cli settings from parent to a copy
-        test.cli_settings = *app->get_cli_settings(test.id);
 
-        app->thr_pool.detach_task([app, test = std::move(test)]() {
-            return run_test(app, &test);
-        });
+        // add cli settings from parent to a copy
+        test.cli_settings = app->get_cli_settings(test.id);
+
+        app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
     }
 }
 
@@ -3025,14 +3009,15 @@ void testing_results(AppState* app) noexcept {
 
         for (auto& [id, result] : app->test_results) {
             ImGui::TableNextRow();
-            ImGui::PushID(result.original_test.id);
+            ImGui::PushID(static_cast<int32_t>(result.original_test.id));
 
             // test type and name
             if (ImGui::TableNextColumn()) {
                 http_type_button(result.original_test.type);
                 ImGui::SameLine();
 
-                if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
+                if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
+                                      SELECTABLE_FLAGS, ImVec2(0, 0))) {
                     if (ImGui::GetIO().KeyCtrl) {
                         result.selected = !result.selected;
                     } else {
@@ -3084,25 +3069,24 @@ void testing_results(AppState* app) noexcept {
 }
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
-    auto log_split = HelloImGui::DockingSplit(
-        "MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2);
-    auto tests_split = HelloImGui::DockingSplit(
-        "MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2);
+    auto log_split = HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2f);
+    auto tests_split =
+        HelloImGui::DockingSplit("MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2f);
     return {log_split, tests_split};
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
-    auto tab_editor_window = HelloImGui::DockableWindow(
-        "Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
+    auto tab_editor_window =
+        HelloImGui::DockableWindow("Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
 
-    auto tests_window = HelloImGui::DockableWindow(
-        "Tests", "SideBarDockSpace", [app]() { tree_view(app); });
+    auto tests_window =
+        HelloImGui::DockableWindow("Tests", "SideBarDockSpace", [app]() { tree_view(app); });
 
-    auto results_window = HelloImGui::DockableWindow(
-        "Results", "MainDockSpace", [app]() { testing_results(app); });
+    auto results_window =
+        HelloImGui::DockableWindow("Results", "MainDockSpace", [app]() { testing_results(app); });
 
-    auto logs_window = HelloImGui::DockableWindow(
-        "Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+    auto logs_window =
+        HelloImGui::DockableWindow("Logs", "LogDockSpace", []() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, results_window, logs_window};
 }
@@ -3117,10 +3101,7 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
 }
 
 void save_as_file_dialog(AppState* app) noexcept {
-    app->save_file_dialog = pfd::save_file(
-        "Save To", ".",
-        {"All Files", "*"},
-        pfd::opt::none);
+    app->save_file_dialog = pfd::save_file("Save To", ".", {"All Files", "*"}, pfd::opt::none);
 }
 
 void save_file_dialog(AppState* app) noexcept {
@@ -3132,10 +3113,7 @@ void save_file_dialog(AppState* app) noexcept {
 }
 
 void open_file_dialog(AppState* app) noexcept {
-    app->open_file_dialog = pfd::open_file(
-        "Open File", ".",
-        {"All Files", "*"},
-        pfd::opt::none);
+    app->open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
 }
 
 void show_menus(AppState* app) noexcept {
@@ -3153,7 +3131,8 @@ void show_menus(AppState* app) noexcept {
     if (ImGui::BeginMenu("Edit")) {
         if (ImGui::MenuItem("Undo", "Ctrl + Z", nullptr, app->undo_history.can_undo())) {
             app->undo();
-        } else if (ImGui::MenuItem("Redo", "Ctrl + Shift + Z", nullptr, app->undo_history.can_redo())) {
+        } else if (ImGui::MenuItem("Redo", "Ctrl + Shift + Z", nullptr,
+                                   app->undo_history.can_redo())) {
             app->redo();
         }
         ImGui::EndMenu();
@@ -3238,9 +3217,11 @@ void show_gui(AppState* app) noexcept {
     }
 
     // undo
-    if (app->undo_history.can_undo() && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    if (app->undo_history.can_undo() && io.KeyCtrl && !io.KeyShift &&
+        ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->undo();
-    } else if (app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    } else if (app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift &&
+               ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->redo();
     }
 
@@ -3249,7 +3230,8 @@ void show_gui(AppState* app) noexcept {
         // copy pasting
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
             app->copy();
-        } else if (!app->selected_tests.contains(0) && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_X)) {
+        } else if (!app->selected_tests.contains(0) && io.KeyCtrl &&
+                   ImGui::IsKeyPressed(ImGuiKey_X)) {
             app->cut();
         } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
             auto top_layer = app->select_top_layer();
@@ -3282,15 +3264,18 @@ void show_gui(AppState* app) noexcept {
 // can't do much ig and not a big deal
 void load_fonts(AppState* app) noexcept {
     // TODO: fix log window icons
-    app->regular_font = HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
-    app->mono_font = HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15, {.useFullGlyphRange = true});
+    app->regular_font =
+        HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
+    app->mono_font =
+        HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15, {.useFullGlyphRange = true});
 }
 
 void post_init(AppState* app) noexcept {
     std::string ini = HelloImGui::IniSettingsLocation(*app->runner_params);
     Log(LogLevel::Debug, "Ini: %s", ini.c_str());
     HelloImGui::HelloImGuiIniSettings::LoadHelloImGuiMiscSettings(ini, app->runner_params);
-    Log(LogLevel::Debug, "Theme: %s", ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
+    Log(LogLevel::Debug, "Theme: %s",
+        ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
 
 #if !CPPHTTPLIB_OPENSSL_SUPPORT
     Log(LogLevel::Warning, "Compiled without OpenSSL support! HTTPS will not work!");
@@ -3319,7 +3304,6 @@ void register_tests(AppState* app) noexcept {
         ctx->KeyUp(ImGuiKey_ModCtrl);
         ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
         ctx->ItemClick("**/Delete");
-        size_t items = app->tests.size();
 
         IM_CHECK(app->tests.size() == 1); // only root is left
     };
@@ -3389,11 +3373,14 @@ void register_tests(AppState* app) noexcept {
         std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_idx;
 
         // test should be last
-        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(), ("**/##" + to_string(top_items[0])).c_str());
+        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(),
+                                 ("**/##" + to_string(top_items[0])).c_str());
 
-        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[1])).c_str(), ("**/##" + to_string(top_items[0])).c_str());
+        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[1])).c_str(),
+                                 ("**/##" + to_string(top_items[0])).c_str());
 
-        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(), ("**/##" + to_string(top_items[1])).c_str());
+        ctx->ItemDragOverAndHold(("**/##" + to_string(top_items[2])).c_str(),
+                                 ("**/##" + to_string(top_items[1])).c_str());
 
         ctx->ItemClick(("**/##" + to_string(top_items[0])).c_str(), ImGuiMouseButton_Right);
         ctx->ItemClick("**/Delete");
@@ -3402,7 +3389,7 @@ void register_tests(AppState* app) noexcept {
     };
 }
 
-int main(int argc, char* argv[]) {
+int main() {
     HelloImGui::RunnerParams runner_params;
     auto app = AppState(&runner_params);
 
@@ -3412,7 +3399,8 @@ int main(int argc, char* argv[]) {
     runner_params.imGuiWindowParams.showStatusBar = true;
     runner_params.imGuiWindowParams.rememberTheme = true;
 
-    runner_params.imGuiWindowParams.defaultImGuiWindowType = HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
+    runner_params.imGuiWindowParams.defaultImGuiWindowType =
+        HelloImGui::DefaultImGuiWindowType::ProvideFullScreenDockSpace;
 
     runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
