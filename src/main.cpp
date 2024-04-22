@@ -23,6 +23,7 @@
 
 #include "algorithm"
 #include "cmath"
+#include "cstdint"
 #include "fstream"
 #include "future"
 #include "iterator"
@@ -33,11 +34,9 @@
 #include "unordered_map"
 #include "utility"
 #include "variant"
-#include "algorithm"
-#include "cstdint"
 
-#include "textinputcombo.hpp"
 #include "json.hpp"
+#include "textinputcombo.hpp"
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -87,7 +86,7 @@ template <class... Ts> struct overloaded : Ts... {
             return visitee.property = this->new_property;                                          \
         }                                                                                          \
     };
-#define ARRAYSIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
+#define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
 
 using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings);
 
@@ -242,7 +241,9 @@ struct SaveState {
     }
 
     void save(const std::string& str) noexcept {
-        this->save(str.data(), str.length());
+        if (str.length() > 0) { // To avoid failing 0 size assertion in save
+            this->save(str.data(), str.length());
+        }
         this->save('\0');
     }
 
@@ -251,10 +252,12 @@ struct SaveState {
         while (*this->cur_load(length) != char(0)) {
             length++;
         }
-        str.resize(length);
-        this->load(str.data(), length);
+        if (length > 0) { // To avoid failing 0 size assertion in save
+            str.resize(length);
+            this->load(str.data(), length);
+        }
 
-        this->load_idx++; // skip over null terminator
+        this->load_idx++; // Skip over null terminator
     }
 
     template <class T> void save(const std::optional<T>& opt) noexcept {
@@ -958,7 +961,7 @@ bool show_client_settings(ClientSettings* set) noexcept {
     if (set->flags & CLIENT_COMPRESSION) {
         ImGui::SameLine();
         if (ImGui::BeginCombo("##compression_type", CompressionTypeLabels[set->compression])) {
-            for (size_t i = 0; i < ARRAYSIZE(CompressionTypeLabels); i++) {
+            for (size_t i = 0; i < ARRAY_SIZE(CompressionTypeLabels); i++) {
                 if (ImGui::Selectable(CompressionTypeLabels[i], i == set->compression)) {
                     changed = true;
                     set->compression = static_cast<CompressionType>(i);
@@ -1266,7 +1269,7 @@ struct AppState {
     }
 
     void editor_open_tab(size_t id) noexcept {
-        assert(this->test_results.contains(id));
+        assert(this->tests.contains(id));
 
         this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame =
             true;
@@ -2254,7 +2257,7 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##type", MPBDTypeLabels[elem->data.type])) {
-            for (size_t i = 0; i < ARRAYSIZE(MPBDTypeLabels); i++) {
+            for (size_t i = 0; i < ARRAY_SIZE(MPBDTypeLabels); i++) {
                 if (ImGui::Selectable(MPBDTypeLabels[i], i == elem->data.type)) {
                     elem->data.type = static_cast<MultiPartBodyDataType>(i);
 
@@ -2380,7 +2383,7 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
 
         if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo("Body Type", reinterpret_cast<int*>(&test.request.body_type),
-                             RequestBodyTypeLabels, ARRAYSIZE(RequestBodyTypeLabels))) {
+                             RequestBodyTypeLabels, ARRAY_SIZE(RequestBodyTypeLabels))) {
                 changed = true;
 
                 // TODO: convert between current body types
@@ -2450,8 +2453,9 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.headers, "##headers",
-                                             RequestHeadersLabels, ARRAYSIZE(RequestHeadersLabels));
+            changed =
+                changed | partial_dict(app, &test.request.headers, "##headers",
+                                       RequestHeadersLabels, ARRAY_SIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -2472,7 +2476,7 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Response")) {
             static ComboFilterState s{};
             ComboFilter("Status", &test.response.status, HTTPStatusLabels,
-                        ARRAYSIZE(HTTPStatusLabels), &s);
+                        ARRAY_SIZE(HTTPStatusLabels), &s);
             ImGui::Text("Select any of the tabs to edit test's expected response");
             ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();
@@ -2480,7 +2484,7 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Body")) {
             if (ImGui::Combo("Body Type", reinterpret_cast<int*>(&test.response.body_type),
-                             ResponseBodyTypeLabels, ARRAYSIZE(ResponseBodyTypeLabels))) {
+                             ResponseBodyTypeLabels, ARRAY_SIZE(ResponseBodyTypeLabels))) {
                 changed = true;
 
                 // TODO: convert between current body types
@@ -2532,7 +2536,7 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
             ImGui::PushFont(app->mono_font);
             changed =
                 changed | partial_dict(app, &test.response.headers, "##headers",
-                                       ResponseHeadersLabels, ARRAYSIZE(ResponseHeadersLabels));
+                                       ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -2709,7 +2713,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             changed = changed | ImGui::IsItemDeactivatedAfterEdit();
 
             changed = changed | ImGui::Combo("Type", reinterpret_cast<int*>(&test.type),
-                                             HTTPTypeLabels, ARRAYSIZE(HTTPTypeLabels));
+                                             HTTPTypeLabels, ARRAY_SIZE(HTTPTypeLabels));
 
             changed = changed | editor_test_request(app, tab, test);
             changed = changed | editor_test_response(app, tab, test);
