@@ -37,6 +37,7 @@
 
 #include "json.hpp"
 #include "textinputcombo.hpp"
+#include <cwctype>
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -2587,8 +2588,7 @@ ModalResult unsaved_changes(AppState*) noexcept {
 }
 
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept {
-    // no scrolling for popup
-    if (ImGui::BeginTable("headers", 2, TABLE_FLAGS & ~ImGuiTableFlags_ScrollY)) {
+    if (ImGui::BeginTable("headers", 2, TABLE_FLAGS)) {
         ImGui::TableSetupColumn("Key");
         ImGui::TableSetupColumn("Value");
         ImGui::TableHeadersRow();
@@ -2608,6 +2608,95 @@ void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexce
                 ImGui::InputText("##value", &const_cast<std::string&>(value),
                                  ImGuiInputTextFlags_ReadOnly);
             }
+            ImGui::PopID();
+        }
+        ImGui::PopFont();
+        ImGui::EndTable();
+    }
+}
+
+constexpr bool is_cookie_attribute(std::string key) noexcept {
+    std::for_each(key.begin(), key.end(), [](char& c) { c = static_cast<char>(std::tolower(c)); });
+    return key == "domain" || key == "expires" || key == "httponly" || key == "max-age" ||
+           key == "partitioned" || key == "path" || key == "samesite" || key == "secure";
+}
+
+void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept {
+    if (ImGui::BeginTable("cookies", 3, TABLE_FLAGS)) {
+        ImGui::TableSetupColumn(" ");
+        ImGui::TableSetupColumn("Key");
+        ImGui::TableSetupColumn("Value");
+        ImGui::TableHeadersRow();
+        ImGui::PushFont(app->mono_font);
+        for (const auto& [key, value] : headers) {
+            if (key != "Set-Cookie") {
+                continue;
+            }
+
+            ImGui::PushID(value.c_str());
+            bool open = false;
+            size_t search_idx = 0;
+            while (search_idx != std::string::npos) {
+                size_t key_val_split = value.find("=", search_idx);
+                size_t next_pair = value.find(";", search_idx);
+                std::string cookie_key, cookie_value;
+
+                if (key_val_split == std::string::npos ||
+                    (key_val_split > next_pair && next_pair != std::string::npos)) {
+                    // Single key without value, example:
+                    // A=b; Secure; HttpOnly; More=c
+                    cookie_key = value.substr(search_idx, next_pair - search_idx);
+                } else {
+                    cookie_key = value.substr(search_idx, key_val_split - search_idx);
+                    cookie_value = value.substr(key_val_split + 1, next_pair - (key_val_split + 1));
+                }
+
+                bool cookie_attribute = is_cookie_attribute(cookie_key);
+
+                // close when new cookie starts
+                if (open && !cookie_attribute) {
+                    open = false;
+                    ImGui::TreePop();
+                    ImGui::PopID();
+                }
+                if (open || !cookie_attribute) {
+                    ImGui::TableNextRow();
+
+                    ImGui::PushID(static_cast<int32_t>(search_idx));
+                    if (ImGui::TableNextColumn() && !cookie_attribute) {
+                        open = ImGui::TreeNodeEx("##tree_node", ImGuiTreeNodeFlags_SpanFullWidth);
+                    }
+                    if (ImGui::TableNextColumn()) {
+                        ImGui::SetNextItemWidth(-1);
+                        ImGui::InputText("##key", &cookie_key, ImGuiInputTextFlags_ReadOnly);
+                    }
+                    if (ImGui::TableNextColumn()) {
+                        ImGui::SetNextItemWidth(-1);
+                        ImGui::InputText("##value", &cookie_value, ImGuiInputTextFlags_ReadOnly);
+                    }
+
+                    // Pop id only for cookie attributes and not open cookies
+                    if (!open || cookie_attribute) {
+                        ImGui::PopID();
+                    }
+                }
+
+                if (next_pair == std::string::npos) {
+                    break;
+                }
+                search_idx = next_pair + 1;                  // Skip over semicolon
+                while (std::isspace(value.at(search_idx))) { // Skip over white spaces
+                    search_idx += 1;
+                }
+            }
+
+            // close last
+            if (open) {
+                open = false;
+                ImGui::TreePop();
+                ImGui::PopID();
+            }
+
             ImGui::PopID();
         }
         ImGui::PopFont();
@@ -2673,6 +2762,10 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
                             ImGui::PopFont();
                         }
 
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Cookies")) {
+                        show_httplib_cookies(app, http_result->headers);
                         ImGui::EndTabItem();
                     }
                     if (ImGui::BeginTabItem("Headers")) {
