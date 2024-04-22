@@ -2007,7 +2007,7 @@ struct AppState {
         save.save(*this);
         save.finish_save();
         Log(LogLevel::Info, "Saving to '%s': %zuB", this->filename->c_str(), save.original_size);
-        if (save.write(out)) {
+        if (!save.write(out)) {
             Log(LogLevel::Error, "Failed to save, likely size exeeds maximum");
         }
     }
