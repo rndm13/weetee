@@ -2639,40 +2639,49 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
             if (http_result.error() != httplib::Error::Success) {
                 ImGui::Text("Error: %s", to_string(http_result.error()).c_str());
             } else {
-                if (ImGui::TreeNode("Response")) {
+                if (ImGui::BeginTabBar("Response")) {
+                    if (ImGui::BeginTabItem("Body")) {
+                        ImGui::Text("%d - %s", http_result->status,
+                                    httplib::status_message(http_result->status));
 
-                    ImGui::Text("%d - %s", http_result->status,
-                                httplib::status_message(http_result->status));
-                    ImGui::SameLine();
-                    ImGui::Button("?");
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                        ImGui::SetTooltip("Expected: %s",
-                                          tr->original_test.response.status.c_str());
-                    }
-
-                    // TODO: add a diff like view
-                    ImGui::PushFont(app->mono_font);
-                    // is given readonly flag so const_cast is fine
-                    ImGui::InputTextMultiline("##response_body",
-                                              &const_cast<std::string&>(http_result->body),
-                                              ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
-
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                        std::string body = "*Multipart Data*";
-                        if (std::holds_alternative<std::string>(tr->original_test.response.body)) {
-                            body = std::get<std::string>(tr->original_test.response.body);
+                        ImGui::SameLine();
+                        ImGui::Button("?");
+                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                            ImGui::SetTooltip("Expected: %s",
+                                              tr->original_test.response.status.c_str());
                         }
-                        ImGui::SetTooltip(
-                            "Expected: %s\n%s",
-                            ResponseBodyTypeLabels[tr->original_test.response.body_type],
-                            body.c_str());
+
+                        {
+                            // TODO: add a diff like view
+                            ImGui::PushFont(app->mono_font);
+                            // is given readonly flag so const_cast is fine
+                            ImGui::InputTextMultiline(
+                                "##response_body", &const_cast<std::string&>(http_result->body),
+                                ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
+
+                            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                                std::string body = "*Multipart Data*";
+                                if (std::holds_alternative<std::string>(
+                                        tr->original_test.response.body)) {
+                                    body = std::get<std::string>(tr->original_test.response.body);
+                                }
+                                ImGui::SetTooltip(
+                                    "Expected: %s\n%s",
+                                    ResponseBodyTypeLabels[tr->original_test.response.body_type],
+                                    body.c_str());
+                            }
+                            ImGui::PopFont();
+                        }
+
+                        ImGui::EndTabItem();
                     }
-                    ImGui::PopFont();
+                    if (ImGui::BeginTabItem("Headers")) {
+                        // TODO: add expected headers in split window
+                        show_httplib_headers(app, http_result->headers);
 
-                    // TODO: add expected headers in split window
-                    show_httplib_headers(app, http_result->headers);
-
-                    ImGui::TreePop();
+                        ImGui::EndTabItem();
+                    }
+                    ImGui::EndTabBar();
                 }
             }
         } else {
