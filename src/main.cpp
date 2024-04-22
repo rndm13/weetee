@@ -44,7 +44,6 @@
 #endif
 
 // TODO: swagger file import/export
-// TODO: fix progress bar for individual tests
 // TODO: implement file sending
 // TODO: implement variables for groups with substitution
 
@@ -1505,6 +1504,7 @@ struct AppState {
 
     ImFont* regular_font;
     ImFont* mono_font;
+    ImFont* awesome_font;
     HelloImGui::RunnerParams* runner_params;
 
     bool tree_view_focused; // updated every frame
@@ -3088,6 +3088,7 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
                         ImGui::EndTabItem();
                     }
                     if (ImGui::BeginTabItem("Cookies")) {
+                        // TODO: add expected cookies in split window
                         show_httplib_cookies(app, http_result->headers);
                         ImGui::EndTabItem();
                     }
@@ -3696,8 +3697,9 @@ std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
     auto results_window =
         HelloImGui::DockableWindow("Results", "MainDockSpace", [app]() { testing_results(app); });
 
-    auto logs_window =
-        HelloImGui::DockableWindow("Logs", "LogDockSpace", []() { HelloImGui::LogGui(); });
+    auto logs_window = HelloImGui::DockableWindow("Logs", "LogDockSpace", [app]() {
+        HelloImGui::LogGui();
+    });
 
     return {tests_window, tab_editor_window, results_window, logs_window};
 }
@@ -3874,11 +3876,14 @@ void show_gui(AppState* app) noexcept {
 // program leaks those fonts
 // can't do much ig and not a big deal
 void load_fonts(AppState* app) noexcept {
-    // TODO: fix log window icons
     app->regular_font =
         HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
+    app->regular_font =
+        HelloImGui::MergeFontAwesomeToLastFont(15);
     app->mono_font =
         HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15, {.useFullGlyphRange = true});
+    app->awesome_font =
+        HelloImGui::LoadFont("fonts/fontawesome-webfont.ttf", 15, {.useFullGlyphRange = true});
 }
 
 void post_init(AppState* app) noexcept {
