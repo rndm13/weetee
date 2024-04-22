@@ -37,7 +37,6 @@
 
 #include "json.hpp"
 #include "textinputcombo.hpp"
-#include <cwctype>
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -696,12 +695,12 @@ using NestedTest = std::variant<Test, Group>;
 
 enum RequestBodyType : uint8_t {
     REQUEST_JSON,
-    REQUEST_RAW,
+    REQUEST_PLAIN,
     REQUEST_MULTIPART,
 };
 static const char* RequestBodyTypeLabels[] = {
     /* [REQUEST_JSON] = */ reinterpret_cast<const char*>("JSON"),
-    /* [REQUEST_RAW] = */ reinterpret_cast<const char*>("Raw"),
+    /* [REQUEST_RAW] = */ reinterpret_cast<const char*>("Plain Text"),
     /* [REQUEST_MULTIPART] = */ reinterpret_cast<const char*>("Multipart"),
 };
 
@@ -745,12 +744,12 @@ struct Request {
 enum ResponseBodyType : uint8_t {
     RESPONSE_JSON,
     RESPONSE_HTML,
-    RESPONSE_RAW,
+    RESPONSE_PLAIN,
 };
 static const char* ResponseBodyTypeLabels[] = {
     /* [RESPONSE_JSON] = */ reinterpret_cast<const char*>("JSON"),
     /* [RESPONSE_HTML] = */ reinterpret_cast<const char*>("HTML"),
-    /* [RESPONSE_RAW] = */ reinterpret_cast<const char*>("Raw"),
+    /* [RESPONSE_RAW] = */ reinterpret_cast<const char*>("Plain Text"),
 };
 
 using ResponseBody =
@@ -2391,7 +2390,7 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
                 // TODO: convert between current body types
                 switch (test.request.body_type) {
                 case REQUEST_JSON:
-                case REQUEST_RAW:
+                case REQUEST_PLAIN:
                     if (!std::holds_alternative<std::string>(test.request.body)) {
                         test.request.body = "";
                     }
@@ -2407,7 +2406,7 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
 
             switch (test.request.body_type) {
             case REQUEST_JSON:
-            case REQUEST_RAW:
+            case REQUEST_PLAIN:
                 ImGui::PushFont(app->mono_font);
                 changed = changed |
                           ImGui::InputTextMultiline(
@@ -2485,15 +2484,26 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem("Body")) {
-            if (ImGui::Combo("Body Type", reinterpret_cast<int*>(&test.response.body_type),
-                             ResponseBodyTypeLabels, ARRAY_SIZE(ResponseBodyTypeLabels))) {
+            bool body_type_changed = false;
+            if (ImGui::BeginCombo("Body Type", ResponseBodyTypeLabels[test.response.body_type])) {
+                for (size_t i = 0; i < ARRAY_SIZE(ResponseBodyTypeLabels); i++) {
+                    if (ImGui::Selectable(ResponseBodyTypeLabels[i],
+                                          i == test.response.body_type)) {
+                        body_type_changed = true;
+                        test.response.body_type = static_cast<ResponseBodyType>(i);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (body_type_changed) {
                 changed = true;
 
                 // TODO: convert between current body types
                 switch (test.response.body_type) {
                 case RESPONSE_JSON:
                 case RESPONSE_HTML:
-                case RESPONSE_RAW:
+                case RESPONSE_PLAIN:
                     if (!std::holds_alternative<std::string>(test.response.body)) {
                         test.response.body = "";
                     }
@@ -2504,7 +2514,7 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
             switch (test.response.body_type) {
             case RESPONSE_JSON:
             case RESPONSE_HTML:
-            case RESPONSE_RAW:
+            case RESPONSE_PLAIN:
                 ImGui::PushFont(app->mono_font);
                 changed = changed |
                           ImGui::InputTextMultiline(
@@ -2817,7 +2827,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
             if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); i++) {
-                    if (ImGui::Selectable(HTTPTypeLabels[test.type], i == test.type)) {
+                    if (ImGui::Selectable(HTTPTypeLabels[i], i == test.type)) {
                         changed = true;
                         test.type = static_cast<HTTPType>(i);
                     }
@@ -3035,7 +3045,7 @@ std::string test_content_type(const Test* test) noexcept {
     switch (test->request.body_type) {
     case REQUEST_JSON:
         return "application/json";
-    case REQUEST_RAW:
+    case REQUEST_PLAIN:
         return "text/plain";
     case REQUEST_MULTIPART:
         return "multipart/form-data";
@@ -3132,20 +3142,90 @@ bool status_match(const std::string& match, int status) noexcept {
     return true;
 }
 
+struct ContentType {
+    std::string type;
+    std::string name;
+
+    constexpr bool operator!=(const ContentType& other) noexcept {
+        if (other.type != this->type) {
+            return true;
+        }
+        return other.name == this->name;
+    }
+};
+ContentType parse_content_type(std::string input) noexcept {
+    size_t slash = input.find("/");
+    size_t end = input.find(";");
+
+    std::string type = input.substr(0, slash);
+    std::string name = input.substr(slash + 1, end - (slash + 1));
+
+    return {.type = type, .name = name};
+}
+
+const char* body_match(const Test* test, const httplib::Result& result) noexcept {
+    if (result->has_header("Content-Type")) {
+        ContentType to_match;
+        switch (test->response.body_type) {
+        case RESPONSE_JSON:
+            to_match = {.type = "application", .name = "json"};
+            break;
+        case RESPONSE_HTML:
+            to_match = {.type = "text", .name = "html"};
+            break;
+        case RESPONSE_PLAIN:
+            to_match = {.type = "text", .name = "plain"};
+            break;
+        }
+
+        ContentType content_type = parse_content_type(result->get_header_value("Content-Type"));
+        // printf("%s / %s = %s / %s\n", to_match.type.c_str(), to_match.name.c_str(),
+        // content_type.type.c_str(), content_type.name.c_str());
+
+        if (to_match != content_type) {
+            return "Unexpected Content-Type";
+        }
+
+        if (!std::visit(EmptyVisitor(), test->response.body)) {
+            if (test->response.body_type == RESPONSE_JSON) {
+                assert(std::holds_alternative<std::string>(test->response.body));
+                const char* err =
+                    json_validate(&std::get<std::string>(test->response.body), &result->body);
+                if (err) {
+                    return err;
+                }
+            } else {
+                assert(std::holds_alternative<std::string>(test->response.body));
+                if (std::get<std::string>(test->response.body) != result->body) {
+                    return "Unexpected body";
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 void test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result) noexcept {
     switch (http_result.error()) {
-    case httplib::Error::Success:
-
+    case httplib::Error::Success: {
         if (!status_match(test->response.status, http_result->status)) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = "Unexpected status";
             break;
         }
 
+        char const* err = body_match(test, http_result);
+        if (err) {
+            test_result->status.store(STATUS_ERROR);
+            test_result->verdict = err;
+            break;
+        }
+
         test_result->status.store(STATUS_OK);
         test_result->verdict = "Success";
-        break;
+    } break;
     case httplib::Error::Canceled:
         test_result->status.store(STATUS_CANCELLED);
         break;
