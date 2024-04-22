@@ -45,10 +45,8 @@
 
 // TODO: swagger file import/export
 // TODO: fix progress bar for individual tests
-// TODO: implement different request types sending
 // TODO: implement file sending
 // TODO: implement variables for groups with substitution
-// TODO: fix crash on undo/redo after file opens
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -215,7 +213,23 @@ struct SaveState {
         std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
     }
 
-    char* cur_load(size_t offset = 0) noexcept {
+    bool can_offset(size_t offset = 0) noexcept {
+        return this->load_idx + offset <= original_buffer.size();
+    }
+
+    // modifies index, should be called before load and then reset
+    template <class T = void> bool can_load(const char* ptr, size_t size = sizeof(T)) noexcept {
+        assert(ptr);
+        assert(size > 0);
+        if (!can_offset(size)) {
+            return false;
+        }
+
+        this->load_idx += size;
+        return true;
+    }
+
+    char* load_offset(size_t offset = 0) noexcept {
         assert(this->load_idx + offset <= original_buffer.size());
         return original_buffer.data() + this->load_idx + offset;
     }
@@ -223,7 +237,8 @@ struct SaveState {
     template <class T = void> void load(char* ptr, size_t size = sizeof(T)) noexcept {
         assert(ptr);
         assert(size > 0);
-        std::copy(this->cur_load(), this->cur_load(size), ptr);
+
+        std::copy(this->load_offset(), this->load_offset(size), ptr);
         this->load_idx += size;
     }
 
@@ -231,6 +246,12 @@ struct SaveState {
         requires(std::is_trivially_copyable<T>::value)
     void save(T trivial) noexcept {
         this->save<T>(reinterpret_cast<char*>(&trivial));
+    }
+
+    template <class T>
+        requires(std::is_trivially_copyable<T>::value)
+    bool can_load(const T& trivial) noexcept {
+        return this->can_load(reinterpret_cast<const char*>(&trivial), sizeof(T));
     }
 
     template <class T>
@@ -246,9 +267,22 @@ struct SaveState {
         this->save('\0');
     }
 
+    bool can_load(const std::string& str) noexcept {
+        size_t length = 0;
+        while (this->can_offset(length) && *this->load_offset(length) != char(0)) {
+            length++;
+        }
+        if (!this->can_offset(length)) {
+            return false;
+        }
+
+        this->load_idx += length + 1; // Skip over null terminator
+        return true;
+    }
+
     void load(std::string& str) noexcept {
         size_t length = 0;
-        while (*this->cur_load(length) != char(0)) {
+        while (*this->load_offset(length) != char(0)) {
             length++;
         }
 
@@ -267,6 +301,13 @@ struct SaveState {
         if (has_value) {
             this->save(opt.value());
         }
+    }
+
+    template <class T> bool can_load(const std::optional<T>& opt) noexcept {
+        bool has_value;
+        this->load(has_value);
+
+        return !has_value || this->can_load(opt.value());
     }
 
     template <class T> void load(std::optional<T>& opt) noexcept {
@@ -289,6 +330,24 @@ struct SaveState {
             this->save(k);
             this->save(v);
         }
+    }
+
+    template <class K, class V> bool can_load(const std::unordered_map<K, V>&) noexcept {
+        size_t size;
+        this->load(size);
+
+        for (size_t i = 0; i < size; i++) {
+            K k = {};
+            V v = {};
+            if (!this->can_load(k)) {
+                return false;
+            }
+            if (!this->can_load(v)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     template <class K, class V> void load(std::unordered_map<K, V>& map) noexcept {
@@ -314,6 +373,20 @@ struct SaveState {
         std::visit([this](const auto& s) { this->save(s); }, variant);
     }
 
+    template <class... T> bool can_load(const std::variant<T...>& variant) noexcept {
+        size_t index;
+        this->load(index);
+        if (index != std::variant_npos) {
+            return false;
+        }
+        if (!valid_variant_from_index<std::variant<T...>>(index)) {
+            return false;
+        }
+        auto var = variant_from_index<std::variant<T...>>(index);
+
+        return std::visit([this](const auto& s) { return this->can_load(s); }, var);
+    }
+
     template <class... T> void load(std::variant<T...>& variant) noexcept {
         size_t index;
         this->load(index);
@@ -332,6 +405,20 @@ struct SaveState {
         for (const auto& elem : vec) {
             this->save(elem);
         }
+    }
+
+    template <class Element> bool can_load(const std::vector<Element>& vec) noexcept {
+        size_t size;
+        this->load(size);
+
+        for (size_t i = 0; i < size; i++) {
+            Element elem = {};
+            if (!this->can_load(elem)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     template <class Element> void load(std::vector<Element>& vec) noexcept {
@@ -359,6 +446,24 @@ struct SaveState {
         this->save(element.data);
     }
 
+    template <class Data> bool can_load(const PartialDict<Data>& pd) noexcept {
+        return this->can_load(pd.elements);
+    }
+
+    template <class Data> bool can_load(const PartialDictElement<Data>& element) noexcept {
+        if (!this->can_load(element.enabled)) {
+            return false;
+        }
+        if (!this->can_load(element.key)) {
+            return false;
+        }
+        if (!this->can_load(element.data)) {
+            return false;
+        }
+
+        return true;
+    }
+
     template <class Data> void load(PartialDict<Data>& pd) noexcept { this->load(pd.elements); }
 
     template <class Data> void load(PartialDictElement<Data>& element) noexcept {
@@ -377,6 +482,13 @@ struct SaveState {
     // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
+    bool can_load(const T& any) noexcept {
+        return any.can_load(this);
+    }
+
+    // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
+    template <class T>
+        requires(!std::is_trivially_copyable<T>::value)
     void load(T& any) noexcept {
         any.load(this);
     }
@@ -388,24 +500,40 @@ struct SaveState {
 
     void reset_load() noexcept { this->load_idx = 0; }
 
-    void write(std::ostream& os) const noexcept {
+#define MAX_SAVE_SIZE 0x10000000
+    // Returns false when failed
+    bool write(std::ostream& os) const noexcept {
+        assert(os);
         assert(this->original_size > 0);
         assert(this->original_buffer.size() == this->original_size);
+
+        if (this->original_size > MAX_SAVE_SIZE) {
+            return false;
+        }
 
         os.write(reinterpret_cast<const char*>(&this->original_size), sizeof(size_t));
         os.write(this->original_buffer.data(), static_cast<int32_t>(this->original_buffer.size()));
         os.flush();
+
+        return true;
     }
 
-    void read(std::istream& is) noexcept {
+    // Returns false when failed
+    bool read(std::istream& is) noexcept {
+        assert(is);
         is.read(reinterpret_cast<char*>(&this->original_size), sizeof(size_t));
 
         assert(this->original_size > 0);
+        if (this->original_size > MAX_SAVE_SIZE) {
+            return false;
+        }
 
         this->original_buffer.reserve(this->original_size);
         this->original_buffer.resize(this->original_size);
 
         is.read(this->original_buffer.data(), static_cast<int32_t>(this->original_size));
+
+        return true;
     }
 };
 
@@ -500,6 +628,19 @@ struct MultiPartBodyElementData {
         save->save(this->data);
     }
 
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->type)) {
+            return false;
+        }
+        if (!save->can_load(this->data)) {
+            return false;
+        }
+
+        return true;
+    }
+
     void load(SaveState* save) noexcept {
         assert(save);
 
@@ -530,6 +671,16 @@ struct CookiesElementData {
         save->save(data);
     }
 
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(data)) {
+            return false;
+        }
+
+        return true;
+    }
+
     void load(SaveState* save) noexcept {
         assert(save);
 
@@ -552,9 +703,27 @@ struct ParametersElementData {
         return this->data != other.data;
     }
 
-    void save(SaveState* save) const noexcept { save->save(data); }
+    void save(SaveState* save) const noexcept {
+        assert(save);
 
-    void load(SaveState* save) noexcept { save->load(data); }
+        save->save(data);
+    }
+
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(data)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    void load(SaveState* save) noexcept {
+        assert(save);
+
+        save->load(data);
+    }
 };
 const char* ParametersElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
@@ -576,6 +745,16 @@ struct HeadersElementData {
         assert(save);
 
         save->save(data);
+    }
+
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(data)) {
+            return false;
+        }
+
+        return true;
     }
 
     void load(SaveState* save) noexcept {
@@ -723,6 +902,28 @@ struct Request {
         save->save(this->headers);
     }
 
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->body_type)) {
+            return false;
+        }
+        if (!save->can_load(this->body)) {
+            return false;
+        }
+        if (!save->can_load(this->cookies)) {
+            return false;
+        }
+        if (!save->can_load(this->parameters)) {
+            return false;
+        }
+        if (!save->can_load(this->headers)) {
+            return false;
+        }
+
+        return true;
+    }
+
     void load(SaveState* save) noexcept {
         assert(save);
 
@@ -770,6 +971,27 @@ struct Response {
         save->save(this->body);
         save->save(this->cookies);
         save->save(this->headers);
+    }
+
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->status)) {
+            return false;
+        }
+        if (!save->can_load(this->body_type)) {
+            return false;
+        }
+        if (!save->can_load(this->body)) {
+            return false;
+        }
+        if (!save->can_load(this->cookies)) {
+            return false;
+        }
+        if (!save->can_load(this->headers)) {
+            return false;
+        }
+        return true;
     }
 
     void load(SaveState* save) noexcept {
@@ -917,6 +1139,21 @@ struct ClientSettings {
 #endif
     }
 
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->flags)) {
+            return false;
+        }
+#if CPPHTTPLIB_ZLIB_SUPPORT || CPPHTTPLIB_BROTLI_SUPPORT
+        if (!save->can_load(this->compression)) {
+            return false;
+        }
+#endif
+
+        return true;
+    }
+
     void load(SaveState* save) noexcept {
         assert(save);
 
@@ -1016,6 +1253,36 @@ struct Test {
         save->save(this->cli_settings);
     }
 
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->id)) {
+            return false;
+        }
+        if (!save->can_load(this->parent_id)) {
+            return false;
+        }
+        if (!save->can_load(this->type)) {
+            return false;
+        }
+        if (!save->can_load(this->flags)) {
+            return false;
+        }
+        if (!save->can_load(this->endpoint)) {
+            return false;
+        }
+        if (!save->can_load(this->request)) {
+            return false;
+        }
+        if (!save->can_load(this->response)) {
+            return false;
+        }
+        if (!save->can_load(this->cli_settings)) {
+            return false;
+        }
+        return true;
+    }
+
     void load(SaveState* save) noexcept {
         assert(save);
 
@@ -1103,6 +1370,31 @@ struct Group {
         save->save(this->name);
         save->save(this->children_ids);
         save->save(this->cli_settings);
+    }
+
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->id)) {
+            return false;
+        }
+        if (!save->can_load(this->parent_id)) {
+            return false;
+        }
+        if (!save->can_load(this->flags)) {
+            return false;
+        }
+        if (!save->can_load(this->name)) {
+            return false;
+        }
+        if (!save->can_load(this->children_ids)) {
+            return false;
+        }
+        if (!save->can_load(this->cli_settings)) {
+            return false;
+        }
+
+        return true;
     }
 
     void load(SaveState* save) noexcept {
@@ -1259,6 +1551,19 @@ struct AppState {
 
         save->save(this->id_counter);
         save->save(this->tests);
+    }
+
+    bool can_load(SaveState* save) const noexcept {
+        assert(save);
+
+        if (!save->can_load(this->id_counter)) {
+            return false;
+        }
+        if (!save->can_load(this->tests)) {
+            return false;
+        }
+
+        return true;
     }
 
     void load(SaveState* save) noexcept {
@@ -1702,7 +2007,9 @@ struct AppState {
         save.save(*this);
         save.finish_save();
         Log(LogLevel::Info, "Saving to '%s': %zuB", this->filename->c_str(), save.original_size);
-        save.write(out);
+        if (save.write(out)) {
+            Log(LogLevel::Error, "Failed to save, likely size exeeds maximum");
+        }
     }
 
     void open_file() noexcept {
@@ -1715,10 +2022,17 @@ struct AppState {
         }
 
         SaveState save{};
-        save.read(in);
+        if (!save.read(in)) {
+            Log(LogLevel::Error, "Failed to read, likely file is invalid or size exeeds maximum");
+            return;
+        }
         Log(LogLevel::Info, "Loading from '%s': %zuB", this->filename->c_str(), save.original_size);
+        if (save.can_load(*this)) {
+            Log(LogLevel::Error, "Failed to load, likely file is invalid");
+            return;
+        }
+        save.reset_load();
         save.load(*this);
-
         this->post_open();
     }
 
@@ -3209,7 +3523,7 @@ const char* header_match(const Test* test, const httplib::Result& result) noexce
     httplib::Headers headers = test_headers(test);
     for (const auto& elem : test->response.cookies.elements) {
         if (elem.enabled) {
-            headers.emplace("Set-Cookie", elem.key+"="+elem.data.data);
+            headers.emplace("Set-Cookie", elem.key + "=" + elem.data.data);
         }
     }
 
