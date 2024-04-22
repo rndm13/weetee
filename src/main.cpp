@@ -252,7 +252,8 @@ struct SaveState {
         while (*this->cur_load(length) != char(0)) {
             length++;
         }
-        if (length > 0) { // To avoid failing 0 size assertion in save
+
+        if (length > 0) { // To avoid failing 0 size assertion in load
             str.resize(length);
             this->load(str.data(), length);
         }
@@ -2712,8 +2713,15 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::InputText("Endpoint", &test.endpoint);
             changed = changed | ImGui::IsItemDeactivatedAfterEdit();
 
-            changed = changed | ImGui::Combo("Type", reinterpret_cast<int*>(&test.type),
-                                             HTTPTypeLabels, ARRAY_SIZE(HTTPTypeLabels));
+            if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
+                for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); i++) {
+                    if (ImGui::Selectable(HTTPTypeLabels[test.type], i == test.type)) {
+                        changed = true;
+                        test.type = static_cast<HTTPType>(i);
+                    }
+                }
+                ImGui::EndCombo();
+            }
 
             changed = changed | editor_test_request(app, tab, test);
             changed = changed | editor_test_response(app, tab, test);
