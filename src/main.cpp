@@ -44,7 +44,6 @@
 #endif
 
 // TODO: swagger file import/export
-// TODO: test result analysis
 // TODO: fix progress bar for individual tests
 // TODO: implement different request types sending
 // TODO: implement file sending
@@ -3197,9 +3196,26 @@ const char* body_match(const Test* test, const httplib::Result& result) noexcept
             } else {
                 assert(std::holds_alternative<std::string>(test->response.body));
                 if (std::get<std::string>(test->response.body) != result->body) {
-                    return "Unexpected body";
+                    return "Unexpected Body";
                 }
             }
+        }
+    }
+
+    return nullptr;
+}
+
+const char* header_match(const Test* test, const httplib::Result& result) noexcept {
+    httplib::Headers headers = test_headers(test);
+    for (const auto& elem : test->response.cookies.elements) {
+        if (elem.enabled) {
+            headers.emplace("Set-Cookie", elem.key+"="+elem.data.data);
+        }
+    }
+
+    for (const auto& [key, value] : headers) {
+        if (!result->has_header(key) || !contains(result->get_header_value(value), value)) {
+            return "Unexpected Headers";
         }
     }
 
@@ -3212,11 +3228,18 @@ void test_analysis(AppState*, const Test* test, TestResult* test_result,
     case httplib::Error::Success: {
         if (!status_match(test->response.status, http_result->status)) {
             test_result->status.store(STATUS_ERROR);
-            test_result->verdict = "Unexpected status";
+            test_result->verdict = "Unexpected Status";
             break;
         }
 
         char const* err = body_match(test, http_result);
+        if (err) {
+            test_result->status.store(STATUS_ERROR);
+            test_result->verdict = err;
+            break;
+        }
+
+        err = header_match(test, http_result);
         if (err) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
