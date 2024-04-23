@@ -21,6 +21,12 @@
 #include "BS_thread_pool.hpp"
 #include "httplib.h"
 
+// TODO: Remove this
+#include "nlohmann/json.hpp"
+
+#include "json.hpp"
+#include "textinputcombo.hpp"
+
 #include "algorithm"
 #include "cmath"
 #include "cstdint"
@@ -34,13 +40,6 @@
 #include "unordered_map"
 #include "utility"
 #include "variant"
-
-// TODO: Remove this
-#include "nlohmann/json.hpp"
-
-#include "json.hpp"
-#include "textinputcombo.hpp"
-#include <utility>
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -191,6 +190,12 @@ template <typename Data> struct PartialDict {
     }
 
     constexpr bool empty() const noexcept { return this->elements.empty(); }
+};
+enum PartialDictFlags {
+    PARTIALDICT_NONE = 0,
+    PARTIALDICT_NO_DELETE = 1 << 0,
+    PARTIALDICT_NO_CREATE = 1 << 1,
+    PARTIALDICT_NO_ENABLE = 1 << 2,
 };
 
 struct SaveState {
@@ -899,6 +904,7 @@ struct Request {
 
     Cookies cookies;
     Parameters parameters;
+    Parameters url_parameters; // can only be added/removed when endpoint changes
     Headers headers;
 
     void save(SaveState* save) const noexcept {
@@ -907,6 +913,7 @@ struct Request {
         save->save(this->body_type);
         save->save(this->body);
         save->save(this->cookies);
+        save->save(this->url_parameters);
         save->save(this->parameters);
         save->save(this->headers);
     }
@@ -921,6 +928,9 @@ struct Request {
             return false;
         }
         if (!save->can_load(this->cookies)) {
+            return false;
+        }
+        if (!save->can_load(this->url_parameters)) {
             return false;
         }
         if (!save->can_load(this->parameters)) {
@@ -939,6 +949,7 @@ struct Request {
         save->load(this->body_type);
         save->load(this->body);
         save->load(this->cookies);
+        save->load(this->url_parameters);
         save->load(this->parameters);
         save->load(this->headers);
     }
@@ -965,7 +976,7 @@ using ResponseBody =
     std::variant<std::string>; // probably will need to add file responses so will keep it this way
 
 struct Response {
-    std::string status; // a string so user can get hints and write their own status code
+    std::string status = "2XX"; // a string so user can get hints and write their own status code
     ResponseBodyType body_type = RESPONSE_JSON;
     ResponseBody body = "";
 
@@ -1305,6 +1316,47 @@ struct Test {
         save->load(this->cli_settings);
     }
 };
+
+std::string request_endpoint(const Test* test) noexcept {
+    assert(test);
+
+    if (test->request.url_parameters.empty()) {
+        return test->endpoint;
+    }
+
+    std::string result;
+
+    size_t index = 0;
+    do {
+        size_t left_brace = test->endpoint.find("{", index);
+        if (left_brace == std::string::npos) {
+            result += test->endpoint.substr(index);
+            break;
+        }
+
+        size_t right_brace = test->endpoint.find("}", left_brace);
+        if (right_brace == std::string::npos) {
+            result = "Unmatched left brace";
+            break;
+        }
+
+        result += test->endpoint.substr(index, left_brace - index);
+        std::string name = test->endpoint.substr(left_brace + 1, right_brace - (left_brace + 1));
+
+        auto found = std::find_if(test->request.url_parameters.elements.begin(),
+                                  test->request.url_parameters.elements.end(),
+                                  [&name](const auto& elem) { return elem.key == name; });
+        if (found->data.data.empty()) {
+            result += "<empty>";
+        } else {
+            result += found->data.data;
+        }
+
+        index = right_brace + 1;
+    } while (index < test->endpoint.size());
+
+    return result;
+}
 
 enum TestResultStatus {
     STATUS_RUNNING,
@@ -1864,12 +1916,19 @@ struct AppState {
         auto& parent_group = std::get<Group>(*parent_test);
 
         // remove selected from old parent
-        auto& children_idx = parent_group.children_ids;
-        children_idx.erase(
-            std::remove_if(children_idx.begin(), children_idx.end(), [this](size_t idx) {
-                assert(this->tests.contains(idx));
-                return this->selected_tests.contains(idx) && !this->parent_selected(idx);
-            }));
+        for (auto test_id : this->selected_tests) {
+            if (this->parent_selected(test_id)) {
+                continue;
+            }
+
+            for (auto it = parent_group.children_ids.begin(); it != parent_group.children_ids.end();
+                 it++) {
+                if (*it == test_id) {
+                    parent_group.children_ids.erase(it);
+                    break;
+                }
+            }
+        }
 
         parent_group.flags |= GROUP_OPEN;
         auto id = ++this->id_counter;
@@ -2088,7 +2147,7 @@ struct AppState {
             return;
         }
         Log(LogLevel::Info, "Loading from '%s': %zuB", this->filename->c_str(), save.original_size);
-        if (save.can_load(*this)) {
+        if (save.can_load(*this) && save.load_idx == save.original_size - 1) {
             Log(LogLevel::Error, "Failed to load, likely file is invalid");
             return;
         }
@@ -2539,7 +2598,8 @@ void tree_view(AppState* app) noexcept {
 
 template <typename Data>
 bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem,
-                      const char** hints = nullptr, const size_t hint_count = 0) noexcept {
+                      int32_t flags, const char** hints = nullptr,
+                      const size_t hint_count = 0) noexcept {
     bool changed = false;
     auto select_only_this = [pd, elem]() {
         for (auto& e : pd->elements) {
@@ -2548,7 +2608,13 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         elem->selected = true;
     };
     if (ImGui::TableNextColumn()) {
+        if (flags & PARTIALDICT_NO_ENABLE) {
+            ImGui::BeginDisabled();
+        }
         changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
+        if (flags & PARTIALDICT_NO_ENABLE) {
+            ImGui::EndDisabled();
+        }
         ImGui::SameLine();
         if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
             if (ImGui::GetIO().KeyCtrl) {
@@ -2562,7 +2628,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 select_only_this();
             }
 
-            if (ImGui::MenuItem("Delete")) {
+            if (!(flags & PARTIALDICT_NO_DELETE) && ImGui::MenuItem("Delete")) {
                 changed = true;
 
                 for (auto& e : pd->elements) {
@@ -2693,13 +2759,16 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
 
 template <typename Data>
 bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
-                  const char** hints = nullptr, const size_t hint_count = 0) noexcept {
+                  int32_t flags = PARTIALDICT_NONE, const char** hints = nullptr,
+                  const size_t hint_count = 0) noexcept {
     using DataType = PartialDict<Data>::DataType;
 
     bool changed = false;
 
-    if (ImGui::BeginTable(label, 2 + DataType::field_count, TABLE_FLAGS, ImVec2(0, 300))) {
-        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 15.0f);
+    //              name and checkbox        additional
+    int32_t field_count = 2 + DataType::field_count;
+    if (ImGui::BeginTable(label, field_count, TABLE_FLAGS, ImVec2(0, 300))) {
+        ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 17.0f);
         ImGui::TableSetupColumn("Name");
         for (size_t i = 0; i < DataType::field_count; i++) {
             ImGui::TableSetupColumn(DataType::field_labels[i]);
@@ -2711,7 +2780,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
             auto* elem = &pd->elements[i];
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(i));
-            changed = partial_dict_row(app, pd, elem, hints, hint_count);
+            changed = partial_dict_row(app, pd, elem, flags, hints, hint_count);
             deletion |= elem->to_delete;
             ImGui::PopID();
         }
@@ -2723,21 +2792,24 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
                                               [](const auto& elem) { return elem.to_delete; }));
         }
 
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn(); // enabled, skip
-        if (ImGui::TableNextColumn()) {
-            ImGui::Text("Change this to add new elements");
+        if (!(flags & PARTIALDICT_NO_CREATE)) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn(); // enabled, skip
+            if (ImGui::TableNextColumn()) {
+                ImGui::Text("Change this to add new elements");
+            }
+
+            ImGui::TableNextRow();
+            ImGui::PushID(static_cast<int32_t>(pd->elements.size()));
+            if (partial_dict_row(app, pd, &pd->add_element, flags, hints, hint_count)) {
+                changed = true;
+
+                pd->elements.push_back(pd->add_element);
+                pd->add_element = {};
+            }
+            ImGui::PopID();
         }
 
-        ImGui::TableNextRow();
-        ImGui::PushID(static_cast<int32_t>(pd->elements.size()));
-        if (partial_dict_row(app, pd, &pd->add_element, hints, hint_count)) {
-            changed = true;
-
-            pd->elements.push_back(pd->add_element);
-            pd->add_element = {};
-        }
-        ImGui::PopID();
         ImGui::EndTable();
     }
 
@@ -2813,10 +2885,18 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
+        if (!test.request.url_parameters.empty() && ImGui::BeginTabItem("URL Parameters")) {
+            ImGui::PushFont(app->mono_font);
+            static constexpr int32_t flags =
+                PARTIALDICT_NO_DELETE | PARTIALDICT_NO_ENABLE | PARTIALDICT_NO_CREATE;
+            changed = changed |
+                      partial_dict(app, &test.request.url_parameters, "##url_parameters", flags);
+            ImGui::PopFont();
+            ImGui::EndTabItem();
+        }
         if (ImGui::BeginTabItem("Parameters")) {
-            ImGui::Text("TODO: add undeletable params from url");
             if (!std::visit(EmptyVisitor(), test.request.body)) {
-                ImGui::Text("If body is specified params non-link are disabled");
+                ImGui::Text("If body is specified non-link params are disabled");
             } else {
                 ImGui::PushFont(app->mono_font);
                 changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
@@ -2835,7 +2915,7 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
             changed =
-                changed | partial_dict(app, &test.request.headers, "##headers",
+                changed | partial_dict(app, &test.request.headers, "##headers", PARTIALDICT_NONE,
                                        RequestHeadersLabels, ARRAY_SIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
@@ -2926,7 +3006,7 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
             changed =
-                changed | partial_dict(app, &test.response.headers, "##headers",
+                changed | partial_dict(app, &test.response.headers, "##headers", PARTIALDICT_NONE,
                                        ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
@@ -3187,6 +3267,28 @@ enum EditorTabResult : uint8_t {
     TAB_CHANGED,
 };
 
+std::vector<std::string> parse_url_params(const std::string& endpoint) noexcept {
+    std::vector<std::string> result;
+    size_t index = 0;
+    do {
+        size_t left_brace = endpoint.find("{", index);
+        if (left_brace >= endpoint.size() - 1) { // Needs at least one character after
+            break;
+        }
+
+        size_t right_brace = endpoint.find("}", left_brace);
+        if (right_brace >= endpoint.size()) {
+            break;
+        }
+
+        result.push_back(endpoint.substr(left_brace + 1, right_brace - (left_brace + 1)));
+
+        index = right_brace + 1;
+    } while (index < endpoint.size());
+
+    return result;
+}
+
 EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     auto edit = &app->tests[tab.original_idx];
 
@@ -3203,8 +3305,36 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Endpoint", &test.endpoint);
-            changed = changed | ImGui::IsItemDeactivatedAfterEdit();
 
+            // Don't display tooltip while endpoint is being edited
+            if (!ImGui::IsItemActive() && !test.request.url_parameters.empty() &&
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("%s", request_endpoint(&test).c_str());
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                changed = true;
+                std::vector<std::string> param_names = parse_url_params(test.endpoint);
+
+                // add new params
+                for (const std::string& name : param_names) {
+                    auto param =
+                        std::find_if(test.request.url_parameters.elements.begin(),
+                                     test.request.url_parameters.elements.end(),
+                                     [&name](const auto& elem) { return elem.key == name; });
+                    if (param == test.request.url_parameters.elements.end()) {
+                        test.request.url_parameters.elements.push_back({.key = name});
+                    }
+                }
+
+                // remove old ones
+                std::erase_if(test.request.url_parameters.elements, [&param_names](
+                                                                        const auto& elem) {
+                    auto param =
+                        std::find_if(param_names.begin(), param_names.end(),
+                                     [&elem](const std::string& name) { return elem.key == name; });
+                    return param == param_names.end();
+                });
+            }
             if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); i++) {
                     if (ImGui::Selectable(HTTPTypeLabels[i], i == test.type)) {
@@ -3468,7 +3598,7 @@ ContentType request_content_type(RequestBodyType type) noexcept {
     return {};
 }
 
-httplib::Params test_params(const Test* test) noexcept {
+httplib::Params request_params(const Test* test) noexcept {
     httplib::Params result;
 
     for (const auto& param : test->request.parameters.elements) {
@@ -3482,7 +3612,7 @@ httplib::Params test_params(const Test* test) noexcept {
 }
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
-    const auto params = test_params(test);
+    const auto params = request_params(test);
     const auto headers = request_headers(test);
     const std::string content_type = to_string(request_content_type(test->request.body_type));
     auto progress = [app, test](size_t current, size_t total) -> bool {
@@ -3510,7 +3640,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
     httplib::Result result;
 
-    auto [host, dest] = split_endpoint(test->endpoint);
+    auto [host, dest] = split_endpoint(request_endpoint(test));
     httplib::Client cli(host);
 
     cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
