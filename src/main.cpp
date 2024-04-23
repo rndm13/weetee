@@ -49,6 +49,8 @@
 // TODO: Swagger file import/export
 // TODO: Implement file sending
 // TODO: Implement variables for groups with substitution
+// TODO: Fix can_load...
+// TODO: Move (not url) Params to Body
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -2146,11 +2148,13 @@ struct AppState {
             Log(LogLevel::Error, "Failed to read, likely file is invalid or size exeeds maximum");
             return;
         }
+
         Log(LogLevel::Info, "Loading from '%s': %zuB", this->filename->c_str(), save.original_size);
         if (save.can_load(*this) && save.load_idx == save.original_size - 1) {
             Log(LogLevel::Error, "Failed to load, likely file is invalid");
             return;
         }
+
         save.reset_load();
         save.load(*this);
         this->post_open();
@@ -3639,8 +3643,8 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     };
 
     httplib::Result result;
-
-    auto [host, dest] = split_endpoint(request_endpoint(test));
+    std::string endpoint = request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
+    auto [host, dest] = split_endpoint(endpoint);
     httplib::Client cli(host);
 
     cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
@@ -3651,18 +3655,26 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
         result = cli.Get(dest, params, headers, progress);
         break;
     case HTTP_POST:
-        // TODO: POST doesn't use body
-        result = cli.Post(dest, headers, params, progress);
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Post(dest, headers, body, content_type, progress);
+        } else {
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for POST yet");
+        }
         break;
     case HTTP_PUT:
-        // TODO: PUT doesn't use body
-        result = cli.Put(dest, headers, params, progress);
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Put(dest, headers, body, content_type, progress);
+        } else {
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PUT yet");
+        }
         break;
     case HTTP_PATCH:
         // TODO: PATCH doesn't use params
         if (std::holds_alternative<std::string>(test->request.body)) {
             std::string body = std::get<std::string>(test->request.body);
-            result = cli.Patch(dest, headers, body, "application/json", progress);
+            result = cli.Patch(dest, headers, body, content_type, progress);
         } else {
             // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PATCH yet");
         }
