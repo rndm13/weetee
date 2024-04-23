@@ -20,12 +20,12 @@
 #include "BS_thread_pool.hpp"
 #include "httplib.h"
 
-#include "utils.hpp"
-#include "json.hpp"
-#include "textinputcombo.hpp"
-#include "partial_dict.hpp"
 #include "http.hpp"
+#include "json.hpp"
+#include "partial_dict.hpp"
 #include "test.hpp"
+#include "textinputcombo.hpp"
+#include "utils.hpp"
 
 #include "algorithm"
 #include "cmath"
@@ -293,6 +293,64 @@ struct AppState {
         for (auto sel_id : this->selected_tests) {
             if (!this->parent_selected(sel_id)) {
                 result.push_back(sel_id);
+            }
+        }
+
+        return result;
+    }
+
+    struct SelectAnalysisResult {
+        bool group = false;
+        bool test = false;
+        bool same_parent = true;
+        bool selected_root = false;
+        size_t parent_id = -1ull;
+        size_t top_selected_count;
+    };
+
+    SelectAnalysisResult select_analysis() const noexcept {
+        SelectAnalysisResult result;
+        result.top_selected_count = this->selected_tests.size();
+
+        auto check_parent = [&result](size_t id) {
+            if (!result.same_parent || result.selected_root) {
+                return;
+            }
+
+            if (result.parent_id == -1ull) {
+                result.parent_id = id;
+            } else if (result.parent_id != id) {
+                result.same_parent = false;
+            }
+        };
+
+        for (auto test_id : this->selected_tests) {
+            if (this->parent_selected(test_id)) {
+                result.top_selected_count--;
+                continue;
+            }
+
+            assert(this->tests.contains(test_id));
+            const auto* selected = &this->tests.at(test_id);
+
+            switch (selected->index()) {
+            case TEST_VARIANT: {
+                assert(std::holds_alternative<Test>(*selected));
+                auto& selected_test = std::get<Test>(*selected);
+
+                result.test = true;
+
+                check_parent(selected_test.parent_id);
+            } break;
+            case GROUP_VARIANT: {
+                assert(std::holds_alternative<Group>(*selected));
+                auto& selected_group = std::get<Group>(*selected);
+
+                result.group = true;
+                result.selected_root |= selected_group.id == 0;
+
+                check_parent(selected_group.parent_id);
+            } break;
             }
         }
 
@@ -637,63 +695,6 @@ struct AppState {
     AppState& operator=(AppState&&) = delete;
 };
 
-struct SelectAnalysisResult {
-    bool group = false;
-    bool test = false;
-    bool same_parent = true;
-    bool selected_root = false;
-    size_t parent_id = -1ull;
-    size_t top_selected_count;
-};
-
-SelectAnalysisResult select_analysis(AppState* app) noexcept {
-    SelectAnalysisResult result;
-    result.top_selected_count = app->selected_tests.size();
-
-    auto check_parent = [&result](size_t id) {
-        if (!result.same_parent || result.selected_root) {
-            return;
-        }
-
-        if (result.parent_id == -1ull) {
-            result.parent_id = id;
-        } else if (result.parent_id != id) {
-            result.same_parent = false;
-        }
-    };
-
-    for (auto test_id : app->selected_tests) {
-        if (app->parent_selected(test_id)) {
-            result.top_selected_count--;
-            continue;
-        }
-
-        auto* selected = &app->tests[test_id];
-
-        switch (selected->index()) {
-        case TEST_VARIANT: {
-            assert(std::holds_alternative<Test>(*selected));
-            auto& selected_test = std::get<Test>(*selected);
-
-            result.test = true;
-
-            check_parent(selected_test.parent_id);
-        } break;
-        case GROUP_VARIANT: {
-            assert(std::holds_alternative<Group>(*selected));
-            auto& selected_group = std::get<Group>(*selected);
-
-            result.group = true;
-            result.selected_root |= selected_group.id == 0;
-
-            check_parent(selected_group.parent_id);
-        } break;
-        }
-    }
-
-    return result;
-}
-
 bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     bool changed = false; // this also indicates that analysis data is invalid
     size_t nested_test_id = std::visit(IDVisitor(), *nested_test);
@@ -706,7 +707,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
             app->select_with_children(nested_test_id);
         }
 
-        SelectAnalysisResult analysis = select_analysis(app);
+        auto analysis = app->select_analysis();
 
         if (ImGui::MenuItem("Edit", "Enter", false, analysis.top_selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
@@ -2099,7 +2100,8 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     };
 
     httplib::Result result;
-    std::string endpoint = request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
+    std::string endpoint =
+        request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
     auto [host, dest] = split_endpoint(endpoint);
     httplib::Client cli(host);
 
