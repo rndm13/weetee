@@ -75,6 +75,6 @@ target_link_libraries(weetee PRIVATE BS_thread_pool)
 # ==================
 
 add_subdirectory(src)
+target_link_libraries(weetee PRIVATE textinputcombo utils json save_state test http)
 
-target_link_libraries(weetee PRIVATE textinputcombo utils json)
 cotire(weetee)

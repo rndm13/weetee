@@ -1,8 +1,20 @@
-add_library(json STATIC json.hpp json.cpp)
-target_link_libraries(json PRIVATE nlohmann_json::nlohmann_json)
-
 add_library(utils STATIC utils.hpp utils.cpp)
-target_link_libraries(utils PRIVATE hello_imgui)
+target_link_libraries(utils PUBLIC hello_imgui)
+
+add_library(save_state save_state.hpp save_state.cpp)
+target_link_libraries(save_state PUBLIC utils hello_imgui portable_file_dialogs)
+
+add_library(json STATIC json.hpp json.cpp)
+target_link_libraries(json PUBLIC nlohmann_json::nlohmann_json utils)
 
 add_library(textinputcombo textinputcombo.hpp textinputcombo.cpp)
-target_link_libraries(textinputcombo PRIVATE hello_imgui)
+target_link_libraries(textinputcombo PUBLIC hello_imgui)
+
+add_library(partial_dict partial_dict.hpp partial_dict.cpp)
+target_link_libraries(partial_dict PUBLIC textinputcombo hello_imgui save_state)
+
+add_library(http http.hpp http.cpp)
+target_link_libraries(http PUBLIC textinputcombo hello_imgui save_state partial_dict)
+
+add_library(test test.hpp test.cpp)
+target_link_libraries(test PUBLIC textinputcombo hello_imgui save_state partial_dict http json)

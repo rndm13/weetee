@@ -1,12 +1,14 @@
 #pragma once
 
 #include "hello_imgui/hello_imgui_logger.h"
+
 #include "imgui.h"
 
 #include "cassert"
 #include "cmath"
 #include "future"
 #include "string"
+#include "variant"
 #include "vector"
 
 using HelloImGui::Log;
@@ -94,3 +96,28 @@ constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
 
 // Case insensitive string comparison
 bool contains(const std::string& haystack, const std::string& needle) noexcept;
+
+template <class Variant> constexpr bool valid_variant_from_index(size_t index) noexcept {
+    return index < std::variant_size_v<Variant>;
+}
+
+template <class Variant, size_t I = 0> constexpr Variant variant_from_index(size_t index) noexcept {
+    if constexpr (valid_variant_from_index<Variant>(I)) {
+        return index == 0 ? Variant{std::in_place_index<I>}
+                          : variant_from_index<Variant, I + 1>(index - 1);
+    }
+    assert(false && "Invalid variant index");
+}
+
+template <class... Args> struct variant_cast_proxy {
+    std::variant<Args...> v;
+
+    template <class... ToArgs> operator std::variant<ToArgs...>() const {
+        return std::visit([](auto&& arg) -> std::variant<ToArgs...> { return arg; }, v);
+    }
+};
+
+template <class... Args>
+auto variant_cast(const std::variant<Args...>& v) -> variant_cast_proxy<Args...> {
+    return {v};
+}
