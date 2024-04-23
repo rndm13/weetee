@@ -3042,7 +3042,7 @@ void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexce
 
                 bool cookie_attribute = is_cookie_attribute(cookie_key);
 
-                // close when new cookie starts
+                // Close when new cookie starts
                 if (open && !cookie_attribute) {
                     open = false;
                     ImGui::TreePop();
@@ -3101,7 +3101,7 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
     ModalResult result = MODAL_NONE;
     bool open = true;
     if (ImGui::BeginPopupModal("Test Result Details", &open)) {
-        if (ImGui::Button("Goto original test")) {
+        if (ImGui::Button("Goto original test", ImVec2(150, 50))) {
             if (app->tests.contains(tr->original_test.id)) {
                 app->editor_open_tab(tr->original_test.id);
             } else {
@@ -3713,7 +3713,8 @@ void testing_results(AppState* app) noexcept {
                                       SELECTABLE_FLAGS, ImVec2(0, 0))) {
                     if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
                         result.open = true;
-                    } else if (ImGui::GetIO().KeyCtrl) {
+                    }
+                    if (ImGui::GetIO().KeyCtrl) {
                         result.selected = !result.selected;
                     } else {
                         deselect_all();
@@ -3729,6 +3730,14 @@ void testing_results(AppState* app) noexcept {
 
                     if (ImGui::MenuItem("Details")) {
                         result.open = true;
+                    }
+
+                    if (ImGui::MenuItem("Goto original test")) {
+                        if (app->tests.contains(result.original_test.id)) {
+                            app->editor_open_tab(result.original_test.id);
+                        } else {
+                            Log(LogLevel::Error, "Original test is missing");
+                        }
                     }
 
                     if (ImGui::MenuItem("Stop")) {
