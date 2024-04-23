@@ -3341,6 +3341,52 @@ httplib::Headers test_headers(const Test* test) noexcept {
     return result;
 }
 
+struct ContentType {
+    std::string type;
+    std::string name;
+
+    constexpr bool operator!=(const ContentType& other) noexcept {
+        if (other.type != this->type) {
+            return true;
+        }
+        return other.name == this->name;
+    }
+};
+std::string to_string(const ContentType& cont) noexcept { return cont.type + '/' + cont.name; }
+ContentType parse_content_type(std::string input) noexcept {
+    size_t slash = input.find("/");
+    size_t end = input.find(";");
+
+    std::string type = input.substr(0, slash);
+    std::string name = input.substr(slash + 1, end - (slash + 1));
+
+    return {.type = type, .name = name};
+}
+ContentType response_content_type(ResponseBodyType type) noexcept {
+    switch (type) {
+    case RESPONSE_JSON:
+        return {.type = "application", .name = "json"};
+    case RESPONSE_HTML:
+        return {.type = "text", .name = "html"};
+    case RESPONSE_PLAIN:
+        return {.type = "text", .name = "plain"};
+    }
+    assert(false && "Unreachable");
+    return {};
+}
+ContentType request_content_type(RequestBodyType type) noexcept {
+    switch (type) {
+    case REQUEST_JSON:
+        return {.type = "application", .name = "json"};
+    case REQUEST_MULTIPART:
+        return {.type = "multipart", .name = "form-data"};
+    case REQUEST_PLAIN:
+        return {.type = "text", .name = "plain"};
+    }
+    assert(false && "Unreachable");
+    return {};
+}
+
 httplib::Params test_params(const Test* test) noexcept {
     httplib::Params result;
 
@@ -3354,26 +3400,11 @@ httplib::Params test_params(const Test* test) noexcept {
     return result;
 }
 
-std::string test_content_type(const Test* test) noexcept {
-    assert(test);
-    switch (test->request.body_type) {
-    case REQUEST_JSON:
-        return "application/json";
-    case REQUEST_PLAIN:
-        return "text/plain";
-    case REQUEST_MULTIPART:
-        return "multipart/form-data";
-    }
-    assert(false && "Unknown request body type");
-}
-
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto params = test_params(test);
     const auto headers = test_headers(test);
-    const std::string content_type = test_content_type(test);
+    const std::string content_type = to_string(request_content_type(test->request.body_type));
     auto progress = [app, test](size_t current, size_t total) -> bool {
-        // printf("Progress test_id: %zu, current: %zu, total: %zu\n", test->id, current, total);
-
         // missing
         if (!app->test_results.contains(test->id)) {
             return false;
@@ -3397,8 +3428,6 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     };
 
     httplib::Result result;
-    // Log(LogLevel::Debug, "Sending %s request to %s", HTTPTypeLabels[test->type],
-    // test->label().c_str());
 
     auto [host, dest] = split_endpoint(test->endpoint);
     httplib::Client cli(host);
@@ -3416,7 +3445,6 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
         break;
     case HTTP_PUT:
         // TODO: PUT doesn't use body
-        // TODO: something goes terribly wrong here
         result = cli.Put(dest, headers, params, progress);
         break;
     case HTTP_PATCH:
@@ -3428,18 +3456,15 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
             // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PATCH yet");
         }
         break;
-    case HTTP_DELETE:
-        // TODO: figure out content types
+    case HTTP_DELETE: {
         if (std::holds_alternative<std::string>(test->request.body)) {
             std::string body = std::get<std::string>(test->request.body);
-            result = cli.Delete(dest, headers, body, "application/json", progress);
+            result = cli.Delete(dest, headers, body, content_type, progress);
         } else {
             // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for DELETE yet");
         }
-        break;
+    } break;
     }
-    // Log(LogLevel::Debug, "Finished %s request for %s", HTTPTypeLabels[test->type],
-    // test->label().c_str());
     return result;
 }
 
@@ -3456,41 +3481,9 @@ bool status_match(const std::string& match, int status) noexcept {
     return true;
 }
 
-struct ContentType {
-    std::string type;
-    std::string name;
-
-    constexpr bool operator!=(const ContentType& other) noexcept {
-        if (other.type != this->type) {
-            return true;
-        }
-        return other.name == this->name;
-    }
-};
-ContentType parse_content_type(std::string input) noexcept {
-    size_t slash = input.find("/");
-    size_t end = input.find(";");
-
-    std::string type = input.substr(0, slash);
-    std::string name = input.substr(slash + 1, end - (slash + 1));
-
-    return {.type = type, .name = name};
-}
-
 const char* body_match(const Test* test, const httplib::Result& result) noexcept {
     if (result->has_header("Content-Type")) {
-        ContentType to_match;
-        switch (test->response.body_type) {
-        case RESPONSE_JSON:
-            to_match = {.type = "application", .name = "json"};
-            break;
-        case RESPONSE_HTML:
-            to_match = {.type = "text", .name = "html"};
-            break;
-        case RESPONSE_PLAIN:
-            to_match = {.type = "text", .name = "plain"};
-            break;
-        }
+        ContentType to_match = response_content_type(test->response.body_type);
 
         ContentType content_type = parse_content_type(result->get_header_value("Content-Type"));
         // printf("%s / %s = %s / %s\n", to_match.type.c_str(), to_match.name.c_str(),
@@ -3697,9 +3690,8 @@ std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
     auto results_window =
         HelloImGui::DockableWindow("Results", "MainDockSpace", [app]() { testing_results(app); });
 
-    auto logs_window = HelloImGui::DockableWindow("Logs", "LogDockSpace", [app]() {
-        HelloImGui::LogGui();
-    });
+    auto logs_window =
+        HelloImGui::DockableWindow("Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, results_window, logs_window};
 }
@@ -3878,8 +3870,7 @@ void show_gui(AppState* app) noexcept {
 void load_fonts(AppState* app) noexcept {
     app->regular_font =
         HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
-    app->regular_font =
-        HelloImGui::MergeFontAwesomeToLastFont(15);
+    app->regular_font = HelloImGui::MergeFontAwesomeToLastFont(15);
     app->mono_font =
         HelloImGui::LoadFont("fonts/MesloLGS NF Regular.ttf", 15, {.useFullGlyphRange = true});
     app->awesome_font =
