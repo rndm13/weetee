@@ -1,5 +1,6 @@
 #pragma once
 
+#include "algorithm"
 #include "cstdint"
 #include "utils.hpp"
 
@@ -186,3 +187,29 @@ static const char* HTTPStatusLabels[] = {
     reinterpret_cast<const char*>("510 Not Extended"),
     reinterpret_cast<const char*>("511 Network Authentication Required"),
 };
+
+constexpr bool is_cookie_attribute(std::string key) noexcept {
+    std::for_each(key.begin(), key.end(), [](char& c) { c = static_cast<char>(std::tolower(c)); });
+    return key == "domain" || key == "expires" || key == "httponly" || key == "max-age" ||
+           key == "partitioned" || key == "path" || key == "samesite" || key == "secure";
+}
+
+std::vector<std::string> parse_url_params(const std::string& endpoint) noexcept;
+
+std::pair<std::string, std::string> split_endpoint(std::string endpoint) noexcept;
+
+struct ContentType {
+    std::string type;
+    std::string name;
+
+    constexpr bool operator!=(const ContentType& other) noexcept {
+        if (other.type != this->type) {
+            return true;
+        }
+        return other.name == this->name;
+    }
+};
+std::string to_string(const ContentType& cont) noexcept;
+ContentType parse_content_type(std::string input) noexcept;
+
+bool status_match(const std::string& match, int status) noexcept;

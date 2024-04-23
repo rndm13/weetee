@@ -552,3 +552,215 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     : runner_params(_runner_params) {
     this->undo_history.reset_undo_history(this);
 }
+
+httplib::Result make_request(AppState* app, const Test* test) noexcept {
+    const auto params = request_params(test);
+    const auto headers = request_headers(test);
+    const std::string content_type = to_string(request_content_type(test->request.body_type));
+    auto progress = [app, test](size_t current, size_t total) -> bool {
+        // missing
+        if (!app->test_results.contains(test->id)) {
+            return false;
+        }
+
+        TestResult* result = &app->test_results.at(test->id);
+
+        // stopped
+        if (!result->running.load()) {
+            result->status.store(STATUS_CANCELLED);
+
+            return false;
+        }
+
+        result->progress_total = total;
+        result->progress_current = current;
+        result->verdict =
+            to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
+
+        return true;
+    };
+
+    httplib::Result result;
+    std::string endpoint =
+        request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
+    auto [host, dest] = split_endpoint(endpoint);
+    httplib::Client cli(host);
+
+    cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
+    cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
+
+    switch (test->type) {
+    case HTTP_GET:
+        result = cli.Get(dest, params, headers, progress);
+        break;
+    case HTTP_POST:
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Post(dest, headers, body, content_type, progress);
+        } else {
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for POST yet");
+        }
+        break;
+    case HTTP_PUT:
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Put(dest, headers, body, content_type, progress);
+        } else {
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PUT yet");
+        }
+        break;
+    case HTTP_PATCH:
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Patch(dest, headers, body, content_type, progress);
+        } else {
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PATCH yet");
+        }
+        break;
+    case HTTP_DELETE: {
+        if (std::holds_alternative<std::string>(test->request.body)) {
+            std::string body = std::get<std::string>(test->request.body);
+            result = cli.Delete(dest, headers, body, content_type, progress);
+        } else {
+            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for DELETE yet");
+        }
+    } break;
+    }
+    return result;
+}
+
+void run_test(AppState* app, const Test* test) noexcept {
+    httplib::Result result = make_request(app, test);
+    if (!app->test_results.contains(test->id)) {
+        return;
+    }
+
+    TestResult* test_result = &app->test_results.at(test->id);
+    test_result->running.store(false);
+    test_analysis(app, test, test_result, std::move(result));
+}
+
+void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
+    app->thr_pool.purge();
+    app->test_results.clear();
+    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
+        true;
+
+    for (Test test : *tests) {
+        app->test_results.try_emplace(test.id, test);
+
+        // add cli settings from parent to a copy
+        test.cli_settings = app->get_cli_settings(test.id);
+
+        app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
+    }
+}
+
+bool status_match(const std::string& match, int status) noexcept {
+    auto status_str = to_string(status);
+    for (size_t i = 0; i < std::min(match.size(), 3ul); i++) {
+        if (std::tolower(match[i]) == 'x') {
+            continue;
+        }
+        if (match[i] != status_str[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const char* body_match(const Test* test, const httplib::Result& result) noexcept {
+    if (result->has_header("Content-Type")) {
+        ContentType to_match = response_content_type(test->response.body_type);
+
+        ContentType content_type = parse_content_type(result->get_header_value("Content-Type"));
+        // printf("%s / %s = %s / %s\n", to_match.type.c_str(), to_match.name.c_str(),
+        // content_type.type.c_str(), content_type.name.c_str());
+
+        if (to_match != content_type) {
+            return "Unexpected Content-Type";
+        }
+
+        if (!std::visit(EmptyVisitor(), test->response.body)) {
+            if (test->response.body_type == RESPONSE_JSON) {
+                assert(std::holds_alternative<std::string>(test->response.body));
+                const char* err =
+                    json_validate(&std::get<std::string>(test->response.body), &result->body);
+                if (err) {
+                    return err;
+                }
+            } else {
+                assert(std::holds_alternative<std::string>(test->response.body));
+                if (std::get<std::string>(test->response.body) != result->body) {
+                    return "Unexpected Body";
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const char* header_match(const Test* test, const httplib::Result& result) noexcept {
+    httplib::Headers headers = response_headers(test);
+    for (const auto& elem : test->response.cookies.elements) {
+        if (elem.enabled) {
+            headers.emplace("Set-Cookie", elem.key + "=" + elem.data.data);
+        }
+    }
+
+    for (const auto& [key, value] : headers) {
+        bool found = false;
+        for (const auto& [match_key, match_value] : result->headers) {
+            if (key == match_key && contains(match_value, value)) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            return "Unexpected Headers";
+        }
+    }
+
+    return nullptr;
+}
+
+void test_analysis(AppState*, const Test* test, TestResult* test_result,
+                   httplib::Result&& http_result) noexcept {
+    switch (http_result.error()) {
+    case httplib::Error::Success: {
+        if (!status_match(test->response.status, http_result->status)) {
+            test_result->status.store(STATUS_ERROR);
+            test_result->verdict = "Unexpected Status";
+            break;
+        }
+
+        char const* err = body_match(test, http_result);
+        if (err) {
+            test_result->status.store(STATUS_ERROR);
+            test_result->verdict = err;
+            break;
+        }
+
+        err = header_match(test, http_result);
+        if (err) {
+            test_result->status.store(STATUS_ERROR);
+            test_result->verdict = err;
+            break;
+        }
+
+        test_result->status.store(STATUS_OK);
+        test_result->verdict = "Success";
+    } break;
+    case httplib::Error::Canceled:
+        test_result->status.store(STATUS_CANCELLED);
+        break;
+    default:
+        test_result->status.store(STATUS_ERROR);
+        test_result->verdict = to_string(http_result.error());
+        break;
+    }
+
+    test_result->http_result = std::forward<httplib::Result>(http_result);
+}

@@ -79,6 +79,6 @@ target_link_libraries(weetee PRIVATE
     utils textinputcombo
     app_state save_state test 
     json http
-    gui)
+    gui gui_tests)
 
 cotire(weetee)

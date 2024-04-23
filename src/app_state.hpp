@@ -7,9 +7,9 @@
 
 #include "BS_thread_pool.hpp"
 
+#include "save_state.hpp"
 #include "test.hpp"
 #include "utils.hpp"
-#include "save_state.hpp"
 
 #include "algorithm"
 #include "cmath"
@@ -164,3 +164,13 @@ struct AppState {
     AppState& operator=(const AppState&) = delete;
     AppState& operator=(AppState&&) = delete;
 };
+
+httplib::Result make_request(AppState* app, const Test* test) noexcept;
+void run_test(AppState* app, const Test* test) noexcept;
+void run_tests(AppState* app, const std::vector<Test>* tests) noexcept;
+
+bool status_match(const std::string& match, int status) noexcept;
+const char* body_match(const Test* test, const httplib::Result& result) noexcept;
+const char* header_match(const Test* test, const httplib::Result& result) noexcept;
+void test_analysis(AppState*, const Test* test, TestResult* test_result,
+                   httplib::Result&& http_result) noexcept;

@@ -305,3 +305,12 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 
     test->request.body_type = to_type;
 }
+
+httplib::Headers request_headers(const Test* test) noexcept;
+httplib::Headers response_headers(const Test* test) noexcept;
+
+ContentType response_content_type(ResponseBodyType type) noexcept;
+
+ContentType request_content_type(RequestBodyType type) noexcept;
+
+httplib::Params request_params(const Test* test) noexcept;

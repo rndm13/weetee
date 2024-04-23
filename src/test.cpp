@@ -199,9 +199,7 @@ void ClientSettings::load(SaveState* save) noexcept {
     save->load(this->flags);
 }
 
-std::string Test::label() const noexcept {
-    return this->endpoint + "##" + to_string(this->id);
-}
+std::string Test::label() const noexcept { return this->endpoint + "##" + to_string(this->id); }
 
 void Test::save(SaveState* save) const noexcept {
     assert(save);
@@ -259,54 +257,130 @@ void Test::load(SaveState* save) noexcept {
     save->load(this->cli_settings);
 }
 
-    std::string Group::label() const noexcept {
-        return this->name + "##" + to_string(this->id);
+std::string Group::label() const noexcept { return this->name + "##" + to_string(this->id); }
+
+void Group::save(SaveState* save) const noexcept {
+    assert(save);
+
+    save->save(this->id);
+    save->save(this->parent_id);
+    save->save(this->flags);
+    save->save(this->name);
+    save->save(this->children_ids);
+    save->save(this->cli_settings);
+}
+
+bool Group::can_load(SaveState* save) const noexcept {
+    assert(save);
+
+    if (!save->can_load(this->id)) {
+        return false;
+    }
+    if (!save->can_load(this->parent_id)) {
+        return false;
+    }
+    if (!save->can_load(this->flags)) {
+        return false;
+    }
+    if (!save->can_load(this->name)) {
+        return false;
+    }
+    if (!save->can_load(this->children_ids)) {
+        return false;
+    }
+    if (!save->can_load(this->cli_settings)) {
+        return false;
     }
 
-    void Group::save(SaveState* save) const noexcept {
-        assert(save);
+    return true;
+}
 
-        save->save(this->id);
-        save->save(this->parent_id);
-        save->save(this->flags);
-        save->save(this->name);
-        save->save(this->children_ids);
-        save->save(this->cli_settings);
+void Group::load(SaveState* save) noexcept {
+    assert(save);
+
+    save->load(this->id);
+    save->load(this->parent_id);
+    save->load(this->flags);
+    save->load(this->name);
+    save->load(this->children_ids);
+    save->load(this->cli_settings);
+}
+
+httplib::Headers request_headers(const Test* test) noexcept {
+    httplib::Headers result;
+
+    for (const auto& header : test->request.headers.elements) {
+        if (!header.enabled) {
+            continue;
+        }
+        result.emplace(header.key, header.data.data);
     }
 
-    bool Group::can_load(SaveState* save) const noexcept {
-        assert(save);
-
-        if (!save->can_load(this->id)) {
-            return false;
+    for (const auto& cookie : test->request.cookies.elements) {
+        if (!cookie.enabled) {
+            continue;
         }
-        if (!save->can_load(this->parent_id)) {
-            return false;
-        }
-        if (!save->can_load(this->flags)) {
-            return false;
-        }
-        if (!save->can_load(this->name)) {
-            return false;
-        }
-        if (!save->can_load(this->children_ids)) {
-            return false;
-        }
-        if (!save->can_load(this->cli_settings)) {
-            return false;
-        }
-
-        return true;
+        result.emplace("Cookie", cookie.key + "=" + cookie.data.data);
     }
 
-    void Group::load(SaveState* save) noexcept {
-        assert(save);
+    return result;
+}
 
-        save->load(this->id);
-        save->load(this->parent_id);
-        save->load(this->flags);
-        save->load(this->name);
-        save->load(this->children_ids);
-        save->load(this->cli_settings);
+httplib::Headers response_headers(const Test* test) noexcept {
+    httplib::Headers result;
+
+    for (const auto& header : test->response.headers.elements) {
+        if (!header.enabled) {
+            continue;
+        }
+        result.emplace(header.key, header.data.data);
     }
 
+    for (const auto& cookie : test->response.cookies.elements) {
+        if (!cookie.enabled) {
+            continue;
+        }
+        result.emplace("Set-Cookie", cookie.key + "=" + cookie.data.data);
+    }
+
+    return result;
+}
+
+ContentType response_content_type(ResponseBodyType type) noexcept {
+    switch (type) {
+    case RESPONSE_JSON:
+        return {.type = "application", .name = "json"};
+    case RESPONSE_HTML:
+        return {.type = "text", .name = "html"};
+    case RESPONSE_PLAIN:
+        return {.type = "text", .name = "plain"};
+    }
+    assert(false && "Unreachable");
+    return {};
+}
+
+ContentType request_content_type(RequestBodyType type) noexcept {
+    switch (type) {
+    case REQUEST_JSON:
+        return {.type = "application", .name = "json"};
+    case REQUEST_MULTIPART:
+        return {.type = "multipart", .name = "form-data"};
+    case REQUEST_PLAIN:
+        return {.type = "text", .name = "plain"};
+    }
+    assert(false && "Unreachable");
+    return {};
+}
+
+httplib::Params request_params(const Test* test) noexcept {
+    httplib::Params result;
+
+    for (const auto& param : test->request.parameters.elements) {
+        if (!param.enabled) {
+            continue;
+        }
+        result.emplace(param.key, param.data.data);
+    };
+
+    return result;
+}
