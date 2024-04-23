@@ -1,6 +1,4 @@
 #include "json.hpp"
-#include "../external/json/include/nlohmann/json.hpp"
-using json = nlohmann::json;
 
 const char* json_format(std::string* input) noexcept {
     try {

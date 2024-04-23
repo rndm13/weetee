@@ -35,8 +35,12 @@
 #include "utility"
 #include "variant"
 
+// TODO: Remove this
+#include "nlohmann/json.hpp"
+
 #include "json.hpp"
 #include "textinputcombo.hpp"
+#include <utility>
 
 #ifndef NDEBUG
 // show test id and parent id in tree view
@@ -188,17 +192,6 @@ template <typename Data> struct PartialDict {
 
     constexpr bool empty() const noexcept { return this->elements.empty(); }
 };
-
-template <class Variant> constexpr bool valid_variant_from_index(size_t index) noexcept {
-    return index < std::variant_size_v<Variant>;
-}
-template <class Variant, size_t I = 0> constexpr Variant variant_from_index(size_t index) noexcept {
-    if constexpr (valid_variant_from_index<Variant>(I)) {
-        return index == 0 ? Variant{std::in_place_index<I>}
-                          : variant_from_index<Variant, I + 1>(index - 1);
-    }
-    assert(false && "Invalid variant index");
-}
 
 struct SaveState {
     size_t original_size = {};
@@ -606,6 +599,7 @@ static const char* MPBDTypeLabels[] = {
 };
 
 using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
+
 struct MultiPartBodyElementData {
     MultiPartBodyDataType type;
     MultiPartBodyData data;
@@ -882,6 +876,22 @@ static const char* RequestBodyTypeLabels[] = {
 };
 
 using RequestBody = std::variant<std::string, MultiPartBody>;
+
+template <RequestBodyType type> constexpr size_t request_body_index() noexcept {
+    if constexpr (type == REQUEST_JSON) {
+        return 0; // string
+    }
+    if constexpr (type == REQUEST_PLAIN) {
+        return 0; // string
+    }
+    if constexpr (type == REQUEST_MULTIPART) {
+        return 1; // MultiPartBody
+    }
+}
+
+template <RequestBodyType type> constexpr auto request_body_inplace_index() noexcept {
+    return std::in_place_index<request_body_index<type>()>;
+}
 
 struct Request {
     RequestBodyType body_type = REQUEST_JSON;
@@ -1458,8 +1468,59 @@ bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id,
     return label_a > label_b;
 }
 
-// keys are ids and values are for separate for editing (must be saved to apply changes)
-// do not save
+// TODO: Move this to json library
+template <RequestBodyType to_type> void request_body_convert(Test* test) noexcept {
+    if (test->request.body.index() == request_body_index<to_type>()) {
+        // If it's the same type don't convert
+        return;
+    }
+
+    if constexpr (to_type == REQUEST_JSON || to_type == REQUEST_PLAIN) {
+        assert(std::holds_alternative<MultiPartBody>(test->request.body));
+        MultiPartBody mpb = std::get<MultiPartBody>(test->request.body);
+
+        std::unordered_multimap<std::string, MultiPartBodyData> map;
+        for (const auto& elem : mpb.elements) {
+            if (!elem.enabled) {
+                continue;
+            }
+            map.emplace(elem.key, elem.data.data);
+        }
+
+        nlohmann::json json = map;
+        test->request.body = json.dump(4);
+    }
+
+    if constexpr (to_type == REQUEST_MULTIPART) {
+        assert(std::holds_alternative<std::string>(test->request.body));
+        std::string str = std::get<std::string>(test->request.body);
+
+        MultiPartBody to_replace = {};
+        try {
+            nlohmann::json j = nlohmann::json::parse(str);
+            auto map = j.template get<std::unordered_multimap<std::string, MultiPartBodyData>>();
+
+            for (const auto& [key, value] : map) {
+                auto new_elem = MultiPartBodyElement{
+                    .key = key,
+                    .data =
+                        MultiPartBodyElementData{
+                            .type = static_cast<MultiPartBodyDataType>(value.index()),
+                            .data = value,
+                        },
+                };
+                to_replace.elements.push_back(new_elem);
+            }
+        } catch (std::exception& e) {
+            Log(LogLevel::Error, "Failed to convert request body type: %s", e.what());
+        }
+
+        test->request.body = to_replace;
+    }
+
+    test->request.body_type = to_type;
+}
+
 struct EditorTab {
     bool just_opened = true;
     size_t original_idx;
@@ -2696,23 +2757,29 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
         }
 
         if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
-            if (ImGui::Combo("Body Type", reinterpret_cast<int*>(&test.request.body_type),
-                             RequestBodyTypeLabels, ARRAY_SIZE(RequestBodyTypeLabels))) {
+            bool body_type_changed = false;
+            if (ImGui::BeginCombo("Body Type", RequestBodyTypeLabels[test.request.body_type])) {
+                for (size_t i = 0; i < ARRAY_SIZE(RequestBodyTypeLabels); i++) {
+                    if (ImGui::Selectable(RequestBodyTypeLabels[i], i == test.request.body_type)) {
+                        body_type_changed = true;
+                        test.request.body_type = static_cast<RequestBodyType>(i);
+                    }
+                }
+                ImGui::EndCombo();
+            }
+
+            if (body_type_changed) {
                 changed = true;
 
-                // TODO: convert between current body types
                 switch (test.request.body_type) {
                 case REQUEST_JSON:
-                case REQUEST_PLAIN:
-                    if (!std::holds_alternative<std::string>(test.request.body)) {
-                        test.request.body = "";
-                    }
+                    request_body_convert<REQUEST_JSON>(&test);
                     break;
-
+                case REQUEST_PLAIN:
+                    request_body_convert<REQUEST_PLAIN>(&test);
+                    break;
                 case REQUEST_MULTIPART:
-                    if (!std::holds_alternative<MultiPartBody>(test.request.body)) {
-                        test.request.body = MultiPartBody{};
-                    }
+                    request_body_convert<REQUEST_MULTIPART>(&test);
                     break;
                 }
             }
@@ -2812,7 +2879,6 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
             if (body_type_changed) {
                 changed = true;
 
-                // TODO: convert between current body types
                 switch (test.response.body_type) {
                 case RESPONSE_JSON:
                 case RESPONSE_HTML:
