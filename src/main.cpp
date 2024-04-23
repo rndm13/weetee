@@ -50,7 +50,6 @@
 // TODO: Implement file sending
 // TODO: Implement variables for groups with substitution
 // TODO: Fix can_load...
-// TODO: Move (not url) Params to Body
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -2828,7 +2827,6 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Request")) {
             ImGui::Text("Select any of the tabs to edit test's request");
-            ImGui::Text("TODO: add a summary of request here");
             ImGui::EndTabItem();
         }
 
@@ -2939,7 +2937,6 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
             ComboFilter("Status", &test.response.status, HTTPStatusLabels,
                         ARRAY_SIZE(HTTPStatusLabels), &s);
             ImGui::Text("Select any of the tabs to edit test's expected response");
-            ImGui::Text("TODO: add a summary of expected response here");
             ImGui::EndTabItem();
         }
 
@@ -3667,7 +3664,6 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
         }
         break;
     case HTTP_PATCH:
-        // TODO: PATCH doesn't use params
         if (std::holds_alternative<std::string>(test->request.body)) {
             std::string body = std::get<std::string>(test->request.body);
             result = cli.Patch(dest, headers, body, content_type, progress);
