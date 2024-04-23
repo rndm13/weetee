@@ -141,7 +141,7 @@ constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
                   static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
 }
 
-// case insensitive string comparison
+// Case insensitive string comparison
 bool contains(const std::string& haystack, const std::string& needle) noexcept {
     size_t need_idx = 0;
     for (char hay : haystack) {
@@ -3316,7 +3316,7 @@ std::pair<std::string, std::string> split_endpoint(std::string endpoint) {
     return {host, dest};
 }
 
-httplib::Headers test_headers(const Test* test) noexcept {
+httplib::Headers request_headers(const Test* test) noexcept {
     httplib::Headers result;
 
     for (const auto& header : test->request.headers.elements) {
@@ -3326,16 +3326,31 @@ httplib::Headers test_headers(const Test* test) noexcept {
         result.emplace(header.key, header.data.data);
     }
 
-    std::string cookie_string;
     for (const auto& cookie : test->request.cookies.elements) {
         if (!cookie.enabled) {
             continue;
         }
-        cookie_string += cookie.key + "=" + cookie.data.data + ";";
+        result.emplace("Cookie", cookie.key + "=" + cookie.data.data);
     }
-    if (!cookie_string.empty()) {
-        cookie_string.pop_back(); // remove last semicolon
-        result.emplace("Cookie", cookie_string);
+
+    return result;
+}
+
+httplib::Headers response_headers(const Test* test) noexcept {
+    httplib::Headers result;
+
+    for (const auto& header : test->response.headers.elements) {
+        if (!header.enabled) {
+            continue;
+        }
+        result.emplace(header.key, header.data.data);
+    }
+
+    for (const auto& cookie : test->response.cookies.elements) {
+        if (!cookie.enabled) {
+            continue;
+        }
+        result.emplace("Set-Cookie", cookie.key + "=" + cookie.data.data);
     }
 
     return result;
@@ -3402,7 +3417,7 @@ httplib::Params test_params(const Test* test) noexcept {
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto params = test_params(test);
-    const auto headers = test_headers(test);
+    const auto headers = request_headers(test);
     const std::string content_type = to_string(request_content_type(test->request.body_type));
     auto progress = [app, test](size_t current, size_t total) -> bool {
         // missing
@@ -3514,7 +3529,7 @@ const char* body_match(const Test* test, const httplib::Result& result) noexcept
 }
 
 const char* header_match(const Test* test, const httplib::Result& result) noexcept {
-    httplib::Headers headers = test_headers(test);
+    httplib::Headers headers = response_headers(test);
     for (const auto& elem : test->response.cookies.elements) {
         if (elem.enabled) {
             headers.emplace("Set-Cookie", elem.key + "=" + elem.data.data);
@@ -3522,7 +3537,15 @@ const char* header_match(const Test* test, const httplib::Result& result) noexce
     }
 
     for (const auto& [key, value] : headers) {
-        if (!result->has_header(key) || !contains(result->get_header_value(value), value)) {
+        bool found = false;
+        for (const auto& [match_key, match_value] : result->headers) {
+            if (key == match_key && contains(match_value, value)) {
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
             return "Unexpected Headers";
         }
     }
