@@ -24,6 +24,7 @@
 // TODO: Remove this
 #include "nlohmann/json.hpp"
 
+#include "utils.hpp"
 #include "json.hpp"
 #include "textinputcombo.hpp"
 
@@ -49,116 +50,11 @@
 // TODO: Swagger file import/export
 // TODO: Implement file sending
 // TODO: Implement variables for groups with substitution
+// TODO: add fuzz tests
 // TODO: Fix can_load...
-
-using HelloImGui::Log;
-using HelloImGui::LogLevel;
-
-using std::to_string;
-
-template <typename R> bool is_ready(std::future<R> const& f) noexcept {
-    assert(f.valid());
-    return f.wait_until(std::chrono::system_clock::time_point::min()) == std::future_status::ready;
-}
-
-template <class... Ts> struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-
-#define GETTER_VISITOR(property)                                                                   \
-    struct {                                                                                       \
-        constexpr const auto& operator()(const auto& visitee) const noexcept {                     \
-            return visitee.property;                                                               \
-        }                                                                                          \
-                                                                                                   \
-        auto& operator()(auto& visitee) const noexcept { return visitee.property; }                \
-    };
-
-#define COPY_GETTER_VISITOR(property)                                                              \
-    struct {                                                                                       \
-        constexpr auto operator()(const auto& visitee) const noexcept { return visitee.property; } \
-    };
-
-#define SETTER_VISITOR(property, type)                                                             \
-    struct {                                                                                       \
-        const type new_property;                                                                   \
-        type operator()(auto& visitee) const noexcept {                                            \
-            return visitee.property = this->new_property;                                          \
-        }                                                                                          \
-    };
-#define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
-
-using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings);
-
-using IDVisitor = COPY_GETTER_VISITOR(id);
-using SetIDVisitor = SETTER_VISITOR(id, size_t);
-
-using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id);
-using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t);
-
-using LabelVisitor = COPY_GETTER_VISITOR(label());
-using EmptyVisitor = COPY_GETTER_VISITOR(empty());
-
-template <class T>
-constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
-    if (a.size() != b.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < a.size(); i++) {
-        if (a[i] != b[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static constexpr ImGuiTableFlags TABLE_FLAGS =
-    ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV | ImGuiTableFlags_Hideable |
-    ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
-    ImGuiTableFlags_Resizable;
-
-static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS = ImGuiSelectableFlags_SpanAllColumns |
-                                                         ImGuiSelectableFlags_AllowOverlap |
-                                                         ImGuiSelectableFlags_AllowDoubleClick;
-
-static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
-    ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
-
-bool arrow(const char* label, ImGuiDir dir) noexcept {
-    assert(label);
-    ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_Border, 0x00000000);
-    ImGui::PushStyleColor(ImGuiCol_BorderShadow, 0x00000000);
-    bool result = ImGui::ArrowButton(label, dir);
-    ImGui::PopStyleColor(5);
-    return result;
-}
-
-void remove_arrow_offset() noexcept { ImGui::SetCursorPosX(ImGui::GetCursorPosX() - 8); }
-
-constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
-    return ImVec4(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f,
-                  static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
-}
-
-// Case insensitive string comparison
-bool contains(const std::string& haystack, const std::string& needle) noexcept {
-    size_t need_idx = 0;
-    for (char hay : haystack) {
-        if (std::tolower(hay) == std::tolower(needle[need_idx])) {
-            need_idx++;
-        }
-        if (need_idx >= needle.size()) {
-            return true;
-        }
-    }
-    return false;
-}
-
+// TODO: make dynamic tests work (and with keep alive connection)
+// TODO: add authentication
+// TODO: add move reordering
 template <typename Data> struct PartialDictElement {
     bool enabled = true;
 
@@ -2317,6 +2213,16 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                 app->editor_open_tab(id);
             }
 
+            if (ImGui::MenuItem("Sort", nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
+                changed = true;
+
+                assert(std::holds_alternative<Group>(*nested_test));
+                auto& selected_group = std::get<Group>(*nested_test);
+                selected_group.flags |= GROUP_OPEN;
+                app->sort(selected_group);
+            }
+
             if (ImGui::MenuItem("Add a new group", nullptr, false,
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
@@ -2561,11 +2467,6 @@ bool show_tree_view_test(AppState* app, NestedTest& test, float indentation = 0)
                     break;
                 }
             }
-        }
-
-        // changed could be that we have deleted this group too
-        if (changed && app->tests.contains(id)) {
-            app->sort(group);
         }
     } break;
     }
@@ -4208,6 +4109,8 @@ void register_tests(AppState* app) noexcept {
         ctx->ItemClick("**/Add a new group");
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
         ctx->ItemClick("**/Add a new group");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Sort");
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
 
         std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_ids;

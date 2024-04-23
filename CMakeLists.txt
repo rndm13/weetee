@@ -62,13 +62,6 @@ set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
 add_subdirectory(external/json)
 
-add_library(json STATIC src/json.hpp src/json.cpp)
-target_link_libraries(json PUBLIC nlohmann_json::nlohmann_json)
-target_link_libraries(weetee PRIVATE json)
-
-# target_precompile_headers(weetee INTERFACE ${NLOHMANN_JSON_INCLUDE_BUILD_DIR}/json.hpp)
-# target_link_libraries(weetee PRIVATE nlohmann_json::nlohmann_json)
-
 # Add Thread Pool
 # ===============
 
@@ -76,14 +69,12 @@ set(BS_thread_pool_SOURCE_DIR external/thread-pool/)
 add_library(BS_thread_pool INTERFACE)
 target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}/include)
 
-target_link_libraries(
-    weetee PRIVATE
-    BS_thread_pool)
+target_link_libraries(weetee PRIVATE BS_thread_pool)
 
-# Add textinputcombo
+# Add src
 # ==================
 
-add_library(textinputcombo src/textinputcombo.hpp src/textinputcombo.cpp)
-target_link_libraries(textinputcombo hello_imgui)
-target_link_libraries(weetee PRIVATE textinputcombo)
+add_subdirectory(src)
+
+target_link_libraries(weetee PRIVATE textinputcombo utils json)
 cotire(weetee)
