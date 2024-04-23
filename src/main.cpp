@@ -2899,13 +2899,9 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
             ImGui::EndTabItem();
         }
         if (ImGui::BeginTabItem("Parameters")) {
-            if (!std::visit(EmptyVisitor(), test.request.body)) {
-                ImGui::Text("If body is specified non-link params are disabled");
-            } else {
-                ImGui::PushFont(app->mono_font);
-                changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
-                ImGui::PopFont();
-            }
+            ImGui::PushFont(app->mono_font);
+            changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
+            ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
