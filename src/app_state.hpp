@@ -97,7 +97,7 @@ struct AppState {
     };
 
     SelectAnalysisResult select_analysis() const noexcept;
-    bool parent_disabled(const NestedTest* nt) noexcept;
+    bool parent_disabled(size_t id) noexcept;
     bool parent_selected(size_t id) const noexcept;
     ClientSettings get_cli_settings(size_t id) const noexcept;
     std::vector<size_t> select_top_layer() noexcept;

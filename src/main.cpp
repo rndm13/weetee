@@ -19,11 +19,11 @@
 
 #include "httplib.h"
 
+#include "app_state.hpp"
 #include "http.hpp"
 #include "json.hpp"
 #include "partial_dict.hpp"
 #include "test.hpp"
-#include "app_state.hpp"
 #include "textinputcombo.hpp"
 #include "utils.hpp"
 
@@ -45,9 +45,9 @@
 // TODO: add authentication
 // TODO: add move reordering
 
-bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
-    bool changed = false; // this also indicates that analysis data is invalid
-    size_t nested_test_id = std::visit(IDVisitor(), *nested_test);
+bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
+    assert(app->tests.contains(nested_test_id));
+    bool changed = false; // This also indicates that analysis data is invalid
 
     if (ImGui::BeginPopupContextItem()) {
         app->tree_view_focused = true;
@@ -106,6 +106,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                                 app->can_paste() && analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
+                NestedTest* nested_test = &app->tests.at(nested_test_id);
                 assert(std::holds_alternative<Group>(*nested_test));
                 auto& selected_group = std::get<Group>(*nested_test);
 
@@ -116,6 +117,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
+                NestedTest* nested_test = &app->tests.at(nested_test_id);
                 assert(std::holds_alternative<Group>(*nested_test));
                 auto& selected_group = std::get<Group>(*nested_test);
                 selected_group.flags |= GROUP_OPEN;
@@ -139,6 +141,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
+                NestedTest* nested_test = &app->tests.at(nested_test_id);
                 assert(std::holds_alternative<Group>(*nested_test));
                 auto& selected_group = std::get<Group>(*nested_test);
                 selected_group.flags |= GROUP_OPEN;
@@ -149,6 +152,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
+                NestedTest* nested_test = &app->tests.at(nested_test_id);
                 assert(std::holds_alternative<Group>(*nested_test));
                 auto& selected_group = std::get<Group>(*nested_test);
                 selected_group.flags |= GROUP_OPEN;
@@ -200,8 +204,7 @@ bool context_menu_tree_view(AppState* app, NestedTest* nested_test) noexcept {
     return changed;
 }
 
-bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcept {
-    const auto id = std::visit(IDVisitor(), test);
+bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept {
     bool item_is_selected = app->selected_tests.contains(id);
     if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
         if (ImGui::GetIO().KeyCtrl) {
@@ -219,8 +222,9 @@ bool tree_selectable(AppState* app, NestedTest& test, const char* label) noexcep
     return false;
 }
 
-bool show_tree_view_test(AppState* app, NestedTest& test, float indentation = 0) noexcept {
-    size_t id = std::visit(IDVisitor(), test);
+bool tree_view_show(AppState* app, NestedTest& nt, float indentation = 0) noexcept;
+bool tree_view_show(AppState* app, Test& test, float indentation = 0) noexcept {
+    size_t id = test.id;
     bool changed = false;
 
     if (app->filtered_tests.contains(id)) {
@@ -230,163 +234,177 @@ bool show_tree_view_test(AppState* app, NestedTest& test, float indentation = 0)
     ImGui::PushID(static_cast<int32_t>(id));
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
-    switch (test.index()) {
-    case TEST_VARIANT: {
-        auto& leaf = std::get<Test>(test);
-        const auto io = ImGui::GetIO();
 
-        ImGui::TableNextColumn(); // test
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-        http_type_button(leaf.type);
-        ImGui::SameLine();
-        ImGui::Text("%s", leaf.endpoint.c_str());
+    const auto io = ImGui::GetIO();
 
-        ImGui::TableNextColumn(); // spinner for running tests
+    ImGui::TableNextColumn(); // test
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+    http_type_button(test.type);
+    ImGui::SameLine();
+    ImGui::Text("%s", test.endpoint.c_str());
 
-        if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
-            ImSpinner::SpinnerIncDots("running", 5, 1);
-        }
+    ImGui::TableNextColumn(); // spinner for running tests
 
-        ImGui::TableNextColumn(); // enabled / disabled
+    if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
+        ImSpinner::SpinnerIncDots("running", 5, 1);
+    }
 
-        bool pd = app->parent_disabled(&test);
-        if (pd) {
-            ImGui::BeginDisabled();
-        }
+    ImGui::TableNextColumn(); // enabled / disabled
 
-        bool enabled = !(leaf.flags & TEST_DISABLED);
-        if (ImGui::Checkbox("##enabled", &enabled)) {
-            if (!enabled) {
-                leaf.flags |= TEST_DISABLED;
-            } else {
-                leaf.flags &= ~TEST_DISABLED;
-            }
+    bool pd = app->parent_disabled(id);
+    if (pd) {
+        ImGui::BeginDisabled();
+    }
 
-            app->undo_history.push_undo_history(app);
-        }
-
-        if (pd) {
-            ImGui::EndDisabled();
-        }
-
-        ImGui::TableNextColumn(); // selectable
-        const bool double_clicked =
-            tree_selectable(app, test, ("##" + to_string(leaf.id)).c_str()) &&
-            io.MouseDoubleClicked[0];
-        if (!changed && !app->selected_tests.contains(0) &&
-            ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
-            if (!app->selected_tests.contains(leaf.id)) {
-                app->selected_tests.clear();
-                app->select_with_children(leaf.id);
-            }
-
-            ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
-            ImGui::SetDragDropPayload("MOVE_SELECTED", &leaf.id, sizeof(size_t));
-            ImGui::EndDragDropSource();
-        }
-
-        if (!app->selected_tests.contains(leaf.id) && ImGui::BeginDragDropTarget()) {
-            if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
-                changed = true;
-
-                app->move(&std::get<Group>(app->tests[leaf.parent_id]));
-            }
-            ImGui::EndDragDropTarget();
-        }
-
-        changed = changed | context_menu_tree_view(app, &test);
-
-        if (!changed && double_clicked) {
-            app->editor_open_tab(leaf.id);
-        }
-    } break;
-    case GROUP_VARIANT: {
-        auto& group = std::get<Group>(test);
-
-        ImGui::TableNextColumn(); // test
-        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-        if (group.flags & GROUP_OPEN) {
-            arrow("down", ImGuiDir_Down);
+    bool enabled = !(test.flags & TEST_DISABLED);
+    if (ImGui::Checkbox("##enabled", &enabled)) {
+        if (!enabled) {
+            test.flags |= TEST_DISABLED;
         } else {
-            arrow("right", ImGuiDir_Right);
-        }
-        ImGui::SameLine();
-        remove_arrow_offset();
-        ImGui::Text("%s", group.name.c_str());
-
-        ImGui::TableNextColumn(); // spinner for running tests
-
-        if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
-            ImSpinner::SpinnerIncDots("running", 5, 1);
+            test.flags &= ~TEST_DISABLED;
         }
 
-        ImGui::TableNextColumn(); // enabled / disabled
+        app->undo_history.push_undo_history(app);
+    }
 
-        bool pd = app->parent_disabled(&test);
-        if (pd) {
-            ImGui::BeginDisabled();
+    if (pd) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::TableNextColumn(); // selectable
+    const bool double_clicked =
+        tree_view_selectable(app, id, ("##" + to_string(test.id)).c_str()) &&
+        io.MouseDoubleClicked[0];
+    if (!changed && !app->selected_tests.contains(0) &&
+        ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
+        if (!app->selected_tests.contains(test.id)) {
+            app->selected_tests.clear();
+            app->select_with_children(test.id);
         }
 
-        bool enabled = !(group.flags & GROUP_DISABLED);
-        if (ImGui::Checkbox("##enabled", &enabled)) {
-            if (!enabled) {
-                group.flags |= GROUP_DISABLED;
-            } else {
-                group.flags &= ~GROUP_DISABLED;
-            }
+        ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
+        ImGui::SetDragDropPayload("MOVE_SELECTED", &test.id, sizeof(size_t));
+        ImGui::EndDragDropSource();
+    }
 
-            app->undo_history.push_undo_history(app);
+    if (!app->selected_tests.contains(test.id) && ImGui::BeginDragDropTarget()) {
+        if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+            changed = true;
+
+            app->move(&std::get<Group>(app->tests[test.parent_id]));
         }
+        ImGui::EndDragDropTarget();
+    }
 
-        if (pd) {
-            ImGui::EndDisabled();
-        }
+    changed = changed | tree_view_context(app, id);
 
-        ImGui::TableNextColumn(); // selectable
-        const bool clicked = tree_selectable(app, test, ("##" + to_string(group.id)).c_str());
-        if (clicked) {
-            group.flags ^= GROUP_OPEN; // toggle
-        }
-
-        if (!changed && !app->selected_tests.contains(0) &&
-            ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
-            if (!app->selected_tests.contains(group.id)) {
-                app->selected_tests.clear();
-                app->select_with_children(group.id);
-            }
-
-            ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
-            ImGui::SetDragDropPayload("MOVE_SELECTED", nullptr, 0);
-            ImGui::EndDragDropSource();
-        }
-
-        if (!app->selected_tests.contains(group.id) && ImGui::BeginDragDropTarget()) {
-            if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
-                changed = true;
-
-                app->move(&group);
-            }
-            ImGui::EndDragDropTarget();
-        }
-
-        changed |= context_menu_tree_view(app, &test);
-
-        if (!changed && group.flags & GROUP_OPEN) {
-            for (size_t child_id : group.children_ids) {
-                assert(app->tests.contains(child_id));
-                changed =
-                    changed | show_tree_view_test(app, app->tests[child_id], indentation + 22);
-                if (changed) {
-                    break;
-                }
-            }
-        }
-    } break;
+    if (!changed && double_clicked) {
+        app->editor_open_tab(test.id);
     }
 
     ImGui::PopID();
 
     return changed;
+}
+
+bool tree_view_show(AppState* app, Group& group, float indentation = 0) noexcept {
+    size_t id = group.id;
+    bool changed = false;
+
+    if (app->filtered_tests.contains(id)) {
+        return changed;
+    }
+
+    ImGui::PushID(static_cast<int32_t>(id));
+
+    ImGui::TableNextRow(ImGuiTableRowFlags_None, 0);
+
+    ImGui::TableNextColumn(); // test
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+    if (group.flags & GROUP_OPEN) {
+        arrow("down", ImGuiDir_Down);
+    } else {
+        arrow("right", ImGuiDir_Right);
+    }
+    ImGui::SameLine();
+    remove_arrow_offset();
+    ImGui::Text("%s", group.name.c_str());
+
+    ImGui::TableNextColumn(); // spinner for running tests
+
+    if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
+        ImSpinner::SpinnerIncDots("running", 5, 1);
+    }
+
+    ImGui::TableNextColumn(); // enabled / disabled
+
+    bool pd = app->parent_disabled(id);
+    if (pd) {
+        ImGui::BeginDisabled();
+    }
+
+    bool enabled = !(group.flags & GROUP_DISABLED);
+    if (ImGui::Checkbox("##enabled", &enabled)) {
+        if (!enabled) {
+            group.flags |= GROUP_DISABLED;
+        } else {
+            group.flags &= ~GROUP_DISABLED;
+        }
+
+        app->undo_history.push_undo_history(app);
+    }
+
+    if (pd) {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::TableNextColumn(); // selectable
+    const bool clicked = tree_view_selectable(app, id, ("##" + to_string(group.id)).c_str());
+    if (clicked) {
+        group.flags ^= GROUP_OPEN; // toggle
+    }
+
+    if (!changed && !app->selected_tests.contains(0) &&
+        ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
+        if (!app->selected_tests.contains(group.id)) {
+            app->selected_tests.clear();
+            app->select_with_children(group.id);
+        }
+
+        ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
+        ImGui::SetDragDropPayload("MOVE_SELECTED", nullptr, 0);
+        ImGui::EndDragDropSource();
+    }
+
+    if (!app->selected_tests.contains(group.id) && ImGui::BeginDragDropTarget()) {
+        if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+            changed = true;
+
+            app->move(&group);
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    changed |= tree_view_context(app, id);
+
+    if (!changed && group.flags & GROUP_OPEN) {
+        for (size_t child_id : group.children_ids) {
+            assert(app->tests.contains(child_id));
+            changed = changed | tree_view_show(app, app->tests.at(child_id), indentation + 22);
+            if (changed) {
+                break;
+            }
+        }
+    }
+
+    ImGui::PopID();
+
+    return changed;
+}
+
+bool tree_view_show(AppState* app, NestedTest& nt, float indentation) noexcept {
+    return std::visit(
+        [app, indentation](auto& val) { return tree_view_show(app, val, indentation); }, nt);
 }
 
 void tree_view(AppState* app) noexcept {
@@ -402,7 +420,7 @@ void tree_view(AppState* app) noexcept {
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
         ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 0.0f);
-        changed = changed | show_tree_view_test(app, app->tests[0]);
+        changed = changed | tree_view_show(app, app->tests[0]);
         ImGui::EndTable();
     }
 

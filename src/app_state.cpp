@@ -222,15 +222,15 @@ AppState::SelectAnalysisResult AppState::select_analysis() const noexcept {
     return result;
 }
 
-bool AppState::parent_disabled(const NestedTest* nt) noexcept {
-    assert(nt);
-
+bool AppState::parent_disabled(size_t id) noexcept {
     // OPTIM: maybe add some cache for every test that clears every frame?
     // if performance becomes a problem
-    size_t id = std::visit(ParentIDVisitor(), *nt);
+    assert(this->tests.contains(id));
+    id = std::visit(ParentIDVisitor(), this->tests.at(id));
+
     while (id != -1ull) {
         assert(this->tests.contains(id));
-        nt = &this->tests.at(id);
+        NestedTest* nt = &this->tests.at(id);
 
         assert(std::holds_alternative<Group>(*nt));
         const Group& group = std::get<Group>(*nt);
