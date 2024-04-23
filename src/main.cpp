@@ -47,9 +47,9 @@
 // #define LABEL_SHOW_ID
 #endif
 
-// TODO: swagger file import/export
-// TODO: implement file sending
-// TODO: implement variables for groups with substitution
+// TODO: Swagger file import/export
+// TODO: Implement file sending
+// TODO: Implement variables for groups with substitution
 
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
@@ -3694,7 +3694,6 @@ void testing_results(AppState* app) noexcept {
         }
     };
 
-    // TODO: context menu
     if (ImGui::BeginTable("results", 3, TABLE_FLAGS)) {
         ImGui::TableSetupColumn("Test");
         ImGui::TableSetupColumn("Status");
@@ -3712,7 +3711,9 @@ void testing_results(AppState* app) noexcept {
 
                 if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
                                       SELECTABLE_FLAGS, ImVec2(0, 0))) {
-                    if (ImGui::GetIO().KeyCtrl) {
+                    if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
+                        result.open = true;
+                    } else if (ImGui::GetIO().KeyCtrl) {
                         result.selected = !result.selected;
                     } else {
                         deselect_all();
