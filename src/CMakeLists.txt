@@ -24,3 +24,10 @@ target_link_libraries(app_state PUBLIC
     hello_imgui textinputcombo
     save_state partial_dict test
     json http BS_thread_pool)
+
+add_library(gui gui.hpp gui.cpp)
+target_link_libraries(gui PUBLIC 
+    textinputcombo
+    hello_imgui portable_file_dialogs imspinner
+    save_state partial_dict test
+    json http BS_thread_pool)

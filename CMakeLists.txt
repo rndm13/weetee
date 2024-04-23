@@ -78,6 +78,7 @@ add_subdirectory(src)
 target_link_libraries(weetee PRIVATE 
     utils textinputcombo
     app_state save_state test 
-    json http)
+    json http
+    gui)
 
 cotire(weetee)
