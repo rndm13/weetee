@@ -121,3 +121,6 @@ template <class... Args>
 auto variant_cast(const std::variant<Args...>& v) -> variant_cast_proxy<Args...> {
     return {v};
 }
+
+std::string file_name(const std::string& path) noexcept;
+std::vector<std::string> split_string(const std::string& str, const std::string& separator) noexcept;

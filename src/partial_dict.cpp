@@ -9,6 +9,7 @@ void MultiPartBodyElementData::save(SaveState* save) const noexcept {
 
     save->save(this->type);
     save->save(this->data);
+    save->save(this->content_type);
 }
 
 bool MultiPartBodyElementData::can_load(SaveState* save) const noexcept {
@@ -20,6 +21,9 @@ bool MultiPartBodyElementData::can_load(SaveState* save) const noexcept {
     if (!save->can_load(this->data)) {
         return false;
     }
+    if (!save->can_load(this->content_type)) {
+        return false;
+    }
 
     return true;
 }
@@ -29,11 +33,13 @@ void MultiPartBodyElementData::load(SaveState* save) noexcept {
 
     save->load(this->type);
     save->load(this->data);
+    save->load(this->content_type);
 }
 
 const char* MultiPartBodyElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Type"),
     reinterpret_cast<const char*>("Data"),
+    reinterpret_cast<const char*>("Content-Type"),
 };
 
 bool CookiesElementData::operator!=(const CookiesElementData& other) const noexcept {

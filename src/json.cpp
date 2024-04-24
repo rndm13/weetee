@@ -25,7 +25,7 @@ const char* json_validate(const std::string* expected, const std::string* got) n
     }
 
     if (json_expected != json_got) {
-        return "Unexpected JSON";
+        return "Unexpected Response JSON";
     }
     
     return nullptr;

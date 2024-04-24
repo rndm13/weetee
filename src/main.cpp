@@ -1,11 +1,11 @@
-#include "hello_imgui/runner_params.h"
 #include "hello_imgui/internal/hello_imgui_ini_settings.h"
+#include "hello_imgui/runner_params.h"
 
 #include "immapp/immapp.h"
 
+#include "app_state.hpp"
 #include "gui.hpp"
 #include "gui_tests.hpp"
-#include "app_state.hpp"
 
 // TODO: Swagger file import/export (medium)
 // TODO: Implement variables for groups with substitution (hard)
@@ -14,6 +14,8 @@
 // TODO: make dynamic tests work (and with keep alive connection) (very hard)
 // TODO: add authentication (I have no idea)
 // TODO: add move reordering (very hard)
+// TODO: add proxies to client settings (easy)
+// TODO: add Content-Type to MultipartData (easy)
 
 void post_init(AppState* app) noexcept;
 

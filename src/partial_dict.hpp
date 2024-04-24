@@ -111,19 +111,18 @@ using MultiPartBodyData = std::variant<std::vector<std::string>, std::string>;
 struct MultiPartBodyElementData {
     MultiPartBodyDataType type;
     MultiPartBodyData data;
+    std::string content_type;
 
     // do not save
     std::optional<pfd::open_file> open_file;
 
-    static constexpr size_t field_count = 2;
+    static constexpr size_t field_count = 3;
     static const char* field_labels[field_count];
 
     bool operator==(const MultiPartBodyElementData& other) const noexcept;
 
     void save(SaveState* save) const noexcept;
-
     bool can_load(SaveState* save) const noexcept;
-
     void load(SaveState* save) noexcept;
 };
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;

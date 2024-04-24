@@ -456,6 +456,7 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
                     switch (elem->data.type) {
                     case MPBD_TEXT:
                         elem->data.data = "";
+                        elem->data.content_type = "text/plain";
                         if (elem->data.open_file.has_value()) {
                             elem->data.open_file->kill();
                             elem->data.open_file.reset();
@@ -463,6 +464,7 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
                         break;
                     case MPBD_FILES:
                         elem->data.data = std::vector<std::string>{};
+                        elem->data.content_type = "";
                         break;
                     }
                 }
@@ -475,7 +477,7 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
         case MPBD_TEXT:
             ImGui::SetNextItemWidth(-1);
             assert(std::holds_alternative<std::string>(elem->data.data));
-            changed = changed | ImGui::InputText("##text", &std::get<std::string>(elem->data.data));
+            changed |= ImGui::InputText("##text", &std::get<std::string>(elem->data.data));
             break;
         case MPBD_FILES:
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
@@ -489,7 +491,6 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
             }
 
             if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                // NOTE: could be slow to do this every frame
                 std::stringstream ss;
                 for (auto& file : files) {
                     ss << file << '\n';
@@ -498,12 +499,29 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
             }
 
             if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
-                elem->data.data = elem->data.open_file->result();
-                changed |= elem->data.open_file->result().size() > 0;
+                changed = true;
+                auto result_files = elem->data.open_file->result();
+                elem->data.data = result_files;
+
+                elem->data.content_type = "";
+                for (const auto& file : result_files) {
+                    std::string content_type =
+                        httplib::detail::find_content_type(file, {}, "text/plain");
+                    if (!elem->data.content_type.empty()) {
+                        elem->data.content_type += ", ";
+                    }
+                    elem->data.content_type += content_type;
+                }
+
                 elem->data.open_file = std::nullopt;
             }
             break;
         }
+    }
+
+    if (ImGui::TableNextColumn()) { // content-type
+        ImGui::SetNextItemWidth(-1);
+        changed |= ImGui::InputText("##content_type", &elem->data.content_type);
     }
     return changed;
 }
@@ -558,8 +576,8 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
                 // if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem()) {
                 //     if (ImGui::MenuItem("Format")) {
                 //         assert(std::holds_alternative<std::string>(test.request.body));
-                //         const char* error = json_format(&std::get<std::string>(test.request.body));
-                //         if (error) {
+                //         const char* error =
+                //         json_format(&std::get<std::string>(test.request.body)); if (error) {
                 //             Log(LogLevel::Error, "Failed to parse json: ", error);
                 //         }
                 //     }
@@ -671,8 +689,8 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
                 // if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem()) {
                 //     if (ImGui::MenuItem("Format")) {
                 //         assert(std::holds_alternative<std::string>(test.response.body));
-                //         const char* error = json_format(&std::get<std::string>(test.response.body));
-                //         if (error) {
+                //         const char* error =
+                //         json_format(&std::get<std::string>(test.response.body)); if (error) {
                 //             Log(LogLevel::Error, "Failed to parse json: ", error);
                 //         }
                 //     }

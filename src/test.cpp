@@ -354,17 +354,6 @@ httplib::Params request_params(const Test* test) noexcept {
     return result;
 }
 
-std::string file_name(const std::string& path) noexcept {
-    // TODO: fix for windows
-    size_t slash = path.rfind("/");
-    if (slash == std::string::npos) {
-        slash = 0;
-    } else {
-        slash += 1; // skip over it
-    }
-    return path.substr(slash);
-}
-
 RequestBodyResult request_body(const Test* test) noexcept {
     if (std::holds_alternative<std::string>(test->request.body)) {
         return {
@@ -386,22 +375,30 @@ RequestBodyResult request_body(const Test* test) noexcept {
                         .name = elem.key,
                         .content = str,
                         .filename = "",
-                        .content_type = "text/plain", // TODO: add Content-Type specification (easy)
+                        .content_type = elem.data.content_type,
                     };
                     form.push_back(data);
                 },
                 [&form, &elem](const std::vector<std::string>& files) {
-                    for (const auto& file : files) {
+                    std::vector<std::string> types = split_string(elem.data.content_type, ",");
+                    
+                    for (size_t file_idx = 0; file_idx < files.size(); file_idx += 1) {
+                        const auto& file = files.at(file_idx);
+
+                        std::string content_type = "text/plain";
+                        if (file_idx < types.size()) { // types could be smaller
+                            content_type = types[file_idx];
+                        }
+
                         std::ifstream in(file);
                         if (in) {
-                            std::stringstream ss;
-                            ss << in.rdbuf();
+                            std::string file_content;
+                            httplib::detail::read_file(file, file_content);
                             httplib::MultipartFormData data = {
                                 .name = elem.key,
-                                .content = ss.str(),
+                                .content = file_content,
                                 .filename = file_name(file),
-                                .content_type =
-                                    "text/plain", // TODO: add Content-Type specification (easy)
+                                .content_type = content_type,
                             };
                             form.push_back(data);
                         }
