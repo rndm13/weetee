@@ -103,6 +103,17 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->paste(&selected_group);
             }
 
+            if (ImGui::MenuItem("Sort", nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
+                changed = true;
+
+                NestedTest* nested_test = &app->tests.at(nested_test_id);
+                assert(std::holds_alternative<Group>(*nested_test));
+                auto& selected_group = std::get<Group>(*nested_test);
+                selected_group.flags |= GROUP_OPEN;
+                app->sort(selected_group);
+            }
+
             if (ImGui::MenuItem("Add a new test", nullptr, false,
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
@@ -125,17 +136,6 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 });
                 selected_group.children_ids.push_back(id);
                 app->editor_open_tab(id);
-            }
-
-            if (ImGui::MenuItem("Sort", nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
-                changed = true;
-
-                NestedTest* nested_test = &app->tests.at(nested_test_id);
-                assert(std::holds_alternative<Group>(*nested_test));
-                auto& selected_group = std::get<Group>(*nested_test);
-                selected_group.flags |= GROUP_OPEN;
-                app->sort(selected_group);
             }
 
             if (ImGui::MenuItem("Add a new group", nullptr, false,
@@ -551,21 +551,23 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
             case REQUEST_JSON:
             case REQUEST_PLAIN:
                 ImGui::PushFont(app->mono_font);
-                changed = changed |
-                          ImGui::InputTextMultiline(
-                              "##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
+                changed |= ImGui::InputTextMultiline(
+                    "##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
+
+                // TODO: This crashes when opened with response partial_dicts at the same time
+                // if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem()) {
+                //     if (ImGui::MenuItem("Format")) {
+                //         assert(std::holds_alternative<std::string>(test.request.body));
+                //         const char* error = json_format(&std::get<std::string>(test.request.body));
+                //         if (error) {
+                //             Log(LogLevel::Error, "Failed to parse json: ", error);
+                //         }
+                //     }
+                //     ImGui::EndPopup();
+                // }
+
                 ImGui::PopFont();
 
-                if (ImGui::BeginPopupContextItem()) {
-                    if (test.request.body_type == REQUEST_JSON && ImGui::MenuItem("Format")) {
-                        assert(std::holds_alternative<std::string>(test.request.body));
-                        const char* error = json_format(&std::get<std::string>(test.request.body));
-                        if (error) {
-                            Log(LogLevel::Error, "Failed to parse json: ", error);
-                        }
-                    }
-                    ImGui::EndPopup();
-                }
                 break;
 
             case REQUEST_MULTIPART:
@@ -661,21 +663,23 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
             case RESPONSE_HTML:
             case RESPONSE_PLAIN:
                 ImGui::PushFont(app->mono_font);
-                changed = changed |
-                          ImGui::InputTextMultiline(
-                              "##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
-                ImGui::PopFont();
 
-                if (ImGui::BeginPopupContextItem()) {
-                    if (test.response.body_type == RESPONSE_JSON && ImGui::MenuItem("Format")) {
-                        assert(std::holds_alternative<std::string>(test.response.body));
-                        const char* error = json_format(&std::get<std::string>(test.response.body));
-                        if (error) {
-                            Log(LogLevel::Error, "Failed to parse json: ", error);
-                        }
-                    }
-                    ImGui::EndPopup();
-                }
+                changed |= ImGui::InputTextMultiline(
+                    "##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
+
+                // TODO: This crashes when opened with request partial_dicts at the same time
+                // if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem()) {
+                //     if (ImGui::MenuItem("Format")) {
+                //         assert(std::holds_alternative<std::string>(test.response.body));
+                //         const char* error = json_format(&std::get<std::string>(test.response.body));
+                //         if (error) {
+                //             Log(LogLevel::Error, "Failed to parse json: ", error);
+                //         }
+                //     }
+                //     ImGui::EndPopup();
+                // }
+
+                ImGui::PopFont();
 
                 break;
             }

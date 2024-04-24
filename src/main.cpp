@@ -7,9 +7,7 @@
 #include "gui_tests.hpp"
 #include "app_state.hpp"
 
-// TODOOO: fix a crash when opening request parameters when response body is opened
 // TODO: Swagger file import/export (medium)
-// TODO: Implement file sending (medium)
 // TODO: Implement variables for groups with substitution (hard)
 // TODO: add fuzz tests (very very hard)
 // TODO: Fix can_load... (bullshit)
