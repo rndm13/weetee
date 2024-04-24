@@ -7,14 +7,15 @@
 #include "gui_tests.hpp"
 #include "app_state.hpp"
 
-// TODO: Swagger file import/export
-// TODO: Implement file sending
-// TODO: Implement variables for groups with substitution
-// TODO: add fuzz tests
-// TODO: Fix can_load...
-// TODO: make dynamic tests work (and with keep alive connection)
-// TODO: add authentication
-// TODO: add move reordering
+// TODOOO: fix a crash when opening request parameters when response body is opened
+// TODO: Swagger file import/export (medium)
+// TODO: Implement file sending (medium)
+// TODO: Implement variables for groups with substitution (hard)
+// TODO: add fuzz tests (very very hard)
+// TODO: Fix can_load... (bullshit)
+// TODO: make dynamic tests work (and with keep alive connection) (very hard)
+// TODO: add authentication (I have no idea)
+// TODO: add move reordering (very hard)
 
 void post_init(AppState* app) noexcept;
 

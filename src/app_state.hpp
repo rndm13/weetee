@@ -1,6 +1,5 @@
 #pragma once
 
-#include "hello_imgui/hello_imgui_logger.h"
 #include "hello_imgui/runner_params.h"
 
 #include "imgui.h"
@@ -9,16 +8,11 @@
 
 #include "save_state.hpp"
 #include "test.hpp"
-#include "utils.hpp"
 
-#include "algorithm"
 #include "cmath"
-#include "fstream"
-#include "iterator"
 #include "optional"
 #include "string"
 #include "unordered_map"
-#include "utility"
 #include "variant"
 
 struct EditorTab {

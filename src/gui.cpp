@@ -864,64 +864,107 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
 
         ImGui::Text("%s - %s", TestResultStatusLabels[tr->status.load()], tr->verdict.c_str());
 
-        if (tr->http_result && tr->http_result.value()) {
-            const auto& http_result = tr->http_result.value();
+        if (ImGui::BeginTabBar("test_details")) {
+            if (ImGui::BeginTabItem("Response")) {
+                if (tr->http_result && tr->http_result.value()) {
+                    const auto& http_result = tr->http_result.value();
 
-            if (http_result.error() != httplib::Error::Success) {
-                ImGui::Text("Error: %s", to_string(http_result.error()).c_str());
-            } else {
-                if (ImGui::BeginTabBar("Response")) {
-                    if (ImGui::BeginTabItem("Body")) {
-                        ImGui::Text("%d - %s", http_result->status,
-                                    httplib::status_message(http_result->status));
+                    if (http_result.error() != httplib::Error::Success) {
+                        ImGui::Text("Error: %s", to_string(http_result.error()).c_str());
+                    } else {
+                        if (ImGui::BeginTabBar("response_details")) {
+                            if (ImGui::BeginTabItem("Body")) {
+                                ImGui::Text("%d - %s", http_result->status,
+                                            httplib::status_message(http_result->status));
 
-                        ImGui::SameLine();
-                        ImGui::Button("?");
-                        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                            ImGui::SetTooltip("Expected: %s",
-                                              tr->original_test.response.status.c_str());
+                                ImGui::SameLine();
+                                ImGui::Button("?");
+                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                                    ImGui::SetTooltip("Expected: %s",
+                                                      tr->original_test.response.status.c_str());
+                                }
+
+                                {
+                                    // TODO: add a diff like view (very very hard)
+                                    ImGui::PushFont(app->mono_font);
+                                    // Is given readonly flag so const_cast is fine
+                                    ImGui::InputTextMultiline(
+                                        "##response_body",
+                                        &const_cast<std::string&>(http_result->body),
+                                        ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
+
+                                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                                        std::string body = "*Multipart Data*";
+                                        if (std::holds_alternative<std::string>(
+                                                tr->original_test.response.body)) {
+                                            body = std::get<std::string>(
+                                                tr->original_test.response.body);
+                                        }
+                                        ImGui::SetTooltip(
+                                            "Expected: %s\n%s",
+                                            ResponseBodyTypeLabels[tr->original_test.response
+                                                                       .body_type],
+                                            body.c_str());
+                                    }
+                                    ImGui::PopFont();
+                                }
+
+                                ImGui::EndTabItem();
+                            }
+                            if (ImGui::BeginTabItem("Cookies")) {
+                                // TODO: add expected cookies in split window (hard)
+                                show_httplib_cookies(app, http_result->headers);
+                                ImGui::EndTabItem();
+                            }
+                            if (ImGui::BeginTabItem("Headers")) {
+                                // TODO: add expected headers in split window (hard)
+                                show_httplib_headers(app, http_result->headers);
+
+                                ImGui::EndTabItem();
+                            }
+                            ImGui::EndTabBar();
                         }
+                    }
+                } else {
+                    ImGui::Text("No response");
+                }
+                ImGui::EndTabItem();
+            }
 
+            if (ImGui::BeginTabItem("Request")) {
+                ImGui::Text("Endpoint: ");
+                ImGui::SameLine();
+                ImGui::InputText("##request_endpoint", &const_cast<std::string&>(tr->req_endpoint),
+                                 ImGuiInputTextFlags_ReadOnly);
+
+                if (ImGui::BeginTabBar("request_details")) {
+                    if (ImGui::BeginTabItem("Body")) {
                         {
-                            // TODO: add a diff like view
                             ImGui::PushFont(app->mono_font);
-                            // is given readonly flag so const_cast is fine
+                            // Is given readonly flag so const_cast is fine
                             ImGui::InputTextMultiline(
-                                "##response_body", &const_cast<std::string&>(http_result->body),
+                                "##response_body", &const_cast<std::string&>(tr->req_body),
                                 ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
 
-                            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                                std::string body = "*Multipart Data*";
-                                if (std::holds_alternative<std::string>(
-                                        tr->original_test.response.body)) {
-                                    body = std::get<std::string>(tr->original_test.response.body);
-                                }
-                                ImGui::SetTooltip(
-                                    "Expected: %s\n%s",
-                                    ResponseBodyTypeLabels[tr->original_test.response.body_type],
-                                    body.c_str());
-                            }
                             ImGui::PopFont();
                         }
 
                         ImGui::EndTabItem();
                     }
                     if (ImGui::BeginTabItem("Cookies")) {
-                        // TODO: add expected cookies in split window
-                        show_httplib_cookies(app, http_result->headers);
+                        show_httplib_cookies(app, tr->req_headers);
                         ImGui::EndTabItem();
                     }
                     if (ImGui::BeginTabItem("Headers")) {
-                        // TODO: add expected headers in split window
-                        show_httplib_headers(app, http_result->headers);
+                        show_httplib_headers(app, tr->req_headers);
 
                         ImGui::EndTabItem();
                     }
                     ImGui::EndTabBar();
                 }
+                ImGui::EndTabItem();
             }
-        } else {
-            ImGui::Text("No response");
+            ImGui::EndTabBar();
         }
 
         ImGui::EndPopup();
@@ -1366,7 +1409,7 @@ void show_gui(AppState* app) noexcept {
 
     // SHORTCUTS
     //
-    // saving
+    // Saving
     if (io.KeyCtrl && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
         save_as_file_dialog(app);
     } else if (io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_S)) {
@@ -1375,7 +1418,7 @@ void show_gui(AppState* app) noexcept {
         open_file_dialog(app);
     }
 
-    // undo
+    // Undo
     if (app->undo_history.can_undo() && io.KeyCtrl && !io.KeyShift &&
         ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->undo();
@@ -1384,9 +1427,9 @@ void show_gui(AppState* app) noexcept {
         app->redo();
     }
 
-    // tree view
+    // Tree view
     if (app->selected_tests.size() > 0) {
-        // copy pasting
+        // Copy pasting
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
             app->copy();
         } else if (!app->selected_tests.contains(0) && io.KeyCtrl &&
@@ -1428,4 +1471,3 @@ void load_fonts(AppState* app) noexcept {
     app->awesome_font =
         HelloImGui::LoadFont("fonts/fontawesome-webfont.ttf", 15, {.useFullGlyphRange = true});
 }
-

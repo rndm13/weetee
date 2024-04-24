@@ -169,22 +169,28 @@ static const char* TestResultStatusLabels[] = {
 };
 
 struct TestResult {
-    // can be written and read from any thread
+    // Can be written and read from any thread
     std::atomic_bool running = true;
-    // main thread writes when stopping tests
+    // Main thread writes when stopping tests
     std::atomic<TestResultStatus> status = STATUS_RUNNING;
 
-    // written in draw thread
+    // Written in draw thread
     bool selected = true;
 
-    // open info in a modal
+    // Is info opened in a modal
     bool open;
 
     Test original_test;
     std::optional<httplib::Result> http_result;
 
-    // written only in test_run threads
+    // Written only in test_run threads
     std::string verdict = "0%";
+
+    // Request
+    std::string req_body;
+    std::string req_content_type;
+    std::string req_endpoint;
+    httplib::Headers req_headers;
 
     // progress
     size_t progress_total;
@@ -307,10 +313,17 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 }
 
 httplib::Headers request_headers(const Test* test) noexcept;
-httplib::Headers response_headers(const Test* test) noexcept;
 
-ContentType response_content_type(ResponseBodyType type) noexcept;
-
+// Prefer request_body output instead
 ContentType request_content_type(RequestBodyType type) noexcept;
-
 httplib::Params request_params(const Test* test) noexcept;
+
+struct RequestBodyResult {
+    std::string content_type;
+    std::string body;
+};
+
+RequestBodyResult request_body(const Test* test) noexcept;
+
+httplib::Headers response_headers(const Test* test) noexcept;
+ContentType response_content_type(ResponseBodyType type) noexcept;

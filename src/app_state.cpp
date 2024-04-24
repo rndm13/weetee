@@ -1,5 +1,12 @@
 #include "app_state.hpp"
 
+#include "hello_imgui/hello_imgui_logger.h"
+#include "utils.hpp"
+#include "algorithm"
+#include "fstream"
+#include "iterator"
+#include "utility"
+
 bool AppState::is_running_tests() const noexcept {
     for (const auto& [id, result] : this->test_results) {
         if (result.running.load()) {
@@ -553,109 +560,6 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     this->undo_history.reset_undo_history(this);
 }
 
-httplib::Result make_request(AppState* app, const Test* test) noexcept {
-    const auto params = request_params(test);
-    const auto headers = request_headers(test);
-    const std::string content_type = to_string(request_content_type(test->request.body_type));
-    auto progress = [app, test](size_t current, size_t total) -> bool {
-        // missing
-        if (!app->test_results.contains(test->id)) {
-            return false;
-        }
-
-        TestResult* result = &app->test_results.at(test->id);
-
-        // stopped
-        if (!result->running.load()) {
-            result->status.store(STATUS_CANCELLED);
-
-            return false;
-        }
-
-        result->progress_total = total;
-        result->progress_current = current;
-        result->verdict =
-            to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
-
-        return true;
-    };
-
-    httplib::Result result;
-    std::string endpoint =
-        request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
-    auto [host, dest] = split_endpoint(endpoint);
-    httplib::Client cli(host);
-
-    cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
-    cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
-
-    switch (test->type) {
-    case HTTP_GET:
-        result = cli.Get(dest, params, headers, progress);
-        break;
-    case HTTP_POST:
-        if (std::holds_alternative<std::string>(test->request.body)) {
-            std::string body = std::get<std::string>(test->request.body);
-            result = cli.Post(dest, headers, body, content_type, progress);
-        } else {
-            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for POST yet");
-        }
-        break;
-    case HTTP_PUT:
-        if (std::holds_alternative<std::string>(test->request.body)) {
-            std::string body = std::get<std::string>(test->request.body);
-            result = cli.Put(dest, headers, body, content_type, progress);
-        } else {
-            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PUT yet");
-        }
-        break;
-    case HTTP_PATCH:
-        if (std::holds_alternative<std::string>(test->request.body)) {
-            std::string body = std::get<std::string>(test->request.body);
-            result = cli.Patch(dest, headers, body, content_type, progress);
-        } else {
-            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for PATCH yet");
-        }
-        break;
-    case HTTP_DELETE: {
-        if (std::holds_alternative<std::string>(test->request.body)) {
-            std::string body = std::get<std::string>(test->request.body);
-            result = cli.Delete(dest, headers, body, content_type, progress);
-        } else {
-            // Log(LogLevel::Error, "TODO: Multi Part Body not implemented for DELETE yet");
-        }
-    } break;
-    }
-    return result;
-}
-
-void run_test(AppState* app, const Test* test) noexcept {
-    httplib::Result result = make_request(app, test);
-    if (!app->test_results.contains(test->id)) {
-        return;
-    }
-
-    TestResult* test_result = &app->test_results.at(test->id);
-    test_result->running.store(false);
-    test_analysis(app, test, test_result, std::move(result));
-}
-
-void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
-    app->thr_pool.purge();
-    app->test_results.clear();
-    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
-        true;
-
-    for (Test test : *tests) {
-        app->test_results.try_emplace(test.id, test);
-
-        // add cli settings from parent to a copy
-        test.cli_settings = app->get_cli_settings(test.id);
-
-        app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
-    }
-}
-
 bool status_match(const std::string& match, int status) noexcept {
     auto status_str = to_string(status);
     for (size_t i = 0; i < std::min(match.size(), 3ul); i++) {
@@ -763,4 +667,98 @@ void test_analysis(AppState*, const Test* test, TestResult* test_result,
     }
 
     test_result->http_result = std::forward<httplib::Result>(http_result);
+}
+
+httplib::Result make_request(AppState* app, const Test* test) noexcept {
+    const auto params = request_params(test);
+    const auto headers = request_headers(test);
+
+    const auto req_body = request_body(test);
+    std::string content_type = req_body.content_type;
+    std::string body = req_body.body;
+    std::string endpoint = request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
+    auto [host, dest] = split_endpoint(endpoint);
+
+    TestResult* test_result = &app->test_results.at(test->id);
+    test_result->req_body = body;
+    test_result->req_content_type = content_type;
+    test_result->req_endpoint = endpoint;
+
+    // NOTE: TODO: httplib probably adds it's own headers as well 
+    // so need to look for that as well
+    test_result->req_headers = headers;
+
+    auto progress = [app, test, test_result](size_t current, size_t total) -> bool {
+        // missing
+        if (!app->test_results.contains(test->id)) {
+            return false;
+        }
+
+        // stopped
+        if (!test_result->running.load()) {
+            test_result->status.store(STATUS_CANCELLED);
+
+            return false;
+        }
+
+        test_result->progress_total = total;
+        test_result->progress_current = current;
+        test_result->verdict =
+            to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
+
+        return true;
+    };
+
+    httplib::Result result;
+    httplib::Client cli(host);
+
+    cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
+    cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
+
+    switch (test->type) {
+    case HTTP_GET:
+        result = cli.Get(dest, headers, progress);
+        break;
+    case HTTP_POST:
+        result = cli.Post(dest, headers, body, content_type, progress);
+        break;
+    case HTTP_PUT:
+        result = cli.Put(dest, headers, body, content_type, progress);
+        break;
+    case HTTP_PATCH:
+        result = cli.Patch(dest, headers, body, content_type, progress);
+        break;
+    case HTTP_DELETE: {
+        result = cli.Delete(dest, headers, body, content_type, progress);
+    } break;
+    }
+
+    return result;
+}
+
+void run_test(AppState* app, const Test* test) noexcept {
+    httplib::Result result = make_request(app, test);
+    if (!app->test_results.contains(test->id)) {
+        return;
+    }
+
+    TestResult* test_result = &app->test_results.at(test->id);
+    test_result->running.store(false);
+    test_analysis(app, test, test_result, std::move(result));
+}
+
+void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
+    app->thr_pool.purge();
+    app->test_results.clear();
+    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
+        true;
+
+    for (Test test : *tests) {
+        app->test_results.try_emplace(test.id, test);
+
+        // add cli settings from parent to a copy
+        test.cli_settings = app->get_cli_settings(test.id);
+
+        app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
+    }
 }

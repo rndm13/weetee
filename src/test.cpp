@@ -1,4 +1,6 @@
 #include "test.hpp"
+#include "fstream"
+#include <sstream>
 
 #define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
     do {                                                                                           \
@@ -326,6 +328,100 @@ httplib::Headers request_headers(const Test* test) noexcept {
     return result;
 }
 
+ContentType request_content_type(RequestBodyType type) noexcept {
+    switch (type) {
+    case REQUEST_JSON:
+        return {.type = "application", .name = "json"};
+    case REQUEST_MULTIPART:
+        return {.type = "multipart", .name = "form-data"};
+    case REQUEST_PLAIN:
+        return {.type = "text", .name = "plain"};
+    }
+    assert(false && "Unreachable");
+    return {};
+}
+
+httplib::Params request_params(const Test* test) noexcept {
+    httplib::Params result;
+
+    for (const auto& param : test->request.parameters.elements) {
+        if (!param.enabled) {
+            continue;
+        }
+        result.emplace(param.key, param.data.data);
+    };
+
+    return result;
+}
+
+std::string file_name(const std::string& path) noexcept {
+    // TODO: fix for windows
+    size_t slash = path.rfind("/");
+    if (slash == std::string::npos) {
+        slash = 0;
+    } else {
+        slash += 1; // skip over it
+    }
+    return path.substr(slash);
+}
+
+RequestBodyResult request_body(const Test* test) noexcept {
+    if (std::holds_alternative<std::string>(test->request.body)) {
+        return {
+            .content_type = to_string(request_content_type(test->request.body_type)),
+            .body = std::get<std::string>(test->request.body),
+        };
+    }
+
+    // multi part body
+    std::holds_alternative<MultiPartBody>(test->request.body);
+    const auto& mp = std::get<MultiPartBody>(test->request.body);
+    httplib::MultipartFormDataItems form;
+
+    for (const auto& elem : mp.elements) {
+        std::visit(
+            overloaded{
+                [&form, &elem](const std::string& str) {
+                    httplib::MultipartFormData data = {
+                        .name = elem.key,
+                        .content = str,
+                        .filename = "",
+                        .content_type = "text/plain", // TODO: add Content-Type specification (easy)
+                    };
+                    form.push_back(data);
+                },
+                [&form, &elem](const std::vector<std::string>& files) {
+                    for (const auto& file : files) {
+                        std::ifstream in(file);
+                        if (in) {
+                            std::stringstream ss;
+                            ss << in.rdbuf();
+                            httplib::MultipartFormData data = {
+                                .name = elem.key,
+                                .content = ss.str(),
+                                .filename = file_name(file),
+                                .content_type =
+                                    "text/plain", // TODO: add Content-Type specification (easy)
+                            };
+                            form.push_back(data);
+                        }
+                    }
+                },
+            },
+            elem.data.data);
+    }
+
+    const auto& boundary = httplib::detail::make_multipart_data_boundary();
+    const auto& content_type =
+        httplib::detail::serialize_multipart_formdata_get_content_type(boundary);
+    const auto& body = httplib::detail::serialize_multipart_formdata(form, boundary);
+
+    return {
+        .content_type = content_type,
+        .body = body,
+    };
+}
+
 httplib::Headers response_headers(const Test* test) noexcept {
     httplib::Headers result;
 
@@ -357,30 +453,4 @@ ContentType response_content_type(ResponseBodyType type) noexcept {
     }
     assert(false && "Unreachable");
     return {};
-}
-
-ContentType request_content_type(RequestBodyType type) noexcept {
-    switch (type) {
-    case REQUEST_JSON:
-        return {.type = "application", .name = "json"};
-    case REQUEST_MULTIPART:
-        return {.type = "multipart", .name = "form-data"};
-    case REQUEST_PLAIN:
-        return {.type = "text", .name = "plain"};
-    }
-    assert(false && "Unreachable");
-    return {};
-}
-
-httplib::Params request_params(const Test* test) noexcept {
-    httplib::Params result;
-
-    for (const auto& param : test->request.parameters.elements) {
-        if (!param.enabled) {
-            continue;
-        }
-        result.emplace(param.key, param.data.data);
-    };
-
-    return result;
 }
