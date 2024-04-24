@@ -15,7 +15,6 @@
 // TODO: add authentication (I have no idea)
 // TODO: add move reordering (very hard)
 // TODO: add proxies to client settings (easy)
-// TODO: add Content-Type to MultipartData (easy)
 
 void post_init(AppState* app) noexcept;
 

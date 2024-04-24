@@ -1,11 +1,12 @@
 #include "app_state.hpp"
 
-#include "hello_imgui/hello_imgui_logger.h"
-#include "utils.hpp"
 #include "algorithm"
 #include "fstream"
+#include "hello_imgui/hello_imgui_logger.h"
+#include "http.hpp"
 #include "iterator"
 #include "utility"
+#include "utils.hpp"
 
 bool AppState::is_running_tests() const noexcept {
     for (const auto& [id, result] : this->test_results) {
@@ -676,7 +677,8 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto req_body = request_body(test);
     std::string content_type = req_body.content_type;
     std::string body = req_body.body;
-    std::string endpoint = request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
+    std::string endpoint =
+        request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
     auto [host, dest] = split_endpoint(endpoint);
 
     TestResult* test_result = &app->test_results.at(test->id);
@@ -684,7 +686,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     test_result->req_content_type = content_type;
     test_result->req_endpoint = endpoint;
 
-    // NOTE: TODO: httplib probably adds it's own headers as well 
+    // NOTE: TODO: httplib probably adds it's own headers as well
     // so need to look for that as well
     test_result->req_headers = headers;
 
@@ -731,6 +733,26 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     case HTTP_DELETE: {
         result = cli.Delete(dest, headers, body, content_type, progress);
     } break;
+    }
+
+    // Time to brute force library because request_headers_ is a private field!
+    for (const char* possible_header : RequestHeadersLabels) {
+        if (result.has_request_header(possible_header)) {
+            std::string header_value = result.get_request_header_value(possible_header);
+
+            auto [search_begin, search_end] = test_result->req_headers.equal_range(possible_header);
+            bool has_same_header_value = false;
+            for (auto it = search_begin; it != search_end; it++) {
+                if (it->second == header_value) {
+                    has_same_header_value = true;
+                    break;
+                } 
+            }
+
+            if (!has_same_header_value) {
+                test_result->req_headers.emplace_hint(search_begin, possible_header, header_value);
+            }
+        }
     }
 
     return result;

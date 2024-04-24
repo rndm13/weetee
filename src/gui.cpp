@@ -20,7 +20,6 @@
 
 #include "app_state.hpp"
 #include "http.hpp"
-#include "json.hpp"
 #include "partial_dict.hpp"
 #include "test.hpp"
 #include "textinputcombo.hpp"
@@ -954,6 +953,8 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
             }
 
             if (ImGui::BeginTabItem("Request")) {
+                const auto* headers = &tr->req_headers;
+
                 ImGui::Text("Endpoint: ");
                 ImGui::SameLine();
                 ImGui::InputText("##request_endpoint", &const_cast<std::string&>(tr->req_endpoint),
@@ -973,12 +974,14 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
 
                         ImGui::EndTabItem();
                     }
+
                     if (ImGui::BeginTabItem("Cookies")) {
-                        show_httplib_cookies(app, tr->req_headers);
+                        show_httplib_cookies(app, *headers);
                         ImGui::EndTabItem();
                     }
+
                     if (ImGui::BeginTabItem("Headers")) {
-                        show_httplib_headers(app, tr->req_headers);
+                        show_httplib_headers(app, *headers);
 
                         ImGui::EndTabItem();
                     }

@@ -1,5 +1,4 @@
 #include "utils.hpp"
-#include <httplib.h>
 
 bool arrow(const char* label, ImGuiDir dir) noexcept {
     assert(label);
