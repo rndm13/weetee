@@ -279,7 +279,8 @@ bool tree_view_show(AppState* app, Test& test, float indentation) noexcept {
         if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
             changed = true;
 
-            app->move(&std::get<Group>(app->tests[test.parent_id]));
+            assert(app->tests.contains(test.parent_id));
+            app->move(&std::get<Group>(app->tests.at(test.parent_id)));
         }
         ImGui::EndDragDropTarget();
     }

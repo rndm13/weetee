@@ -322,21 +322,12 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     auto& parent_group = std::get<Group>(*parent_test);
 
     // remove selected from old parent
-    for (auto test_id : this->selected_tests) {
-        if (this->parent_selected(test_id)) {
-            continue;
-        }
+    parent_group.children_ids.erase(
+        std::remove_if(parent_group.children_ids.begin(), parent_group.children_ids.end(),
+                       [&sel_tests = this->selected_tests](size_t child_id) {
+                           return sel_tests.contains(child_id);
+                       }));
 
-        for (auto it = parent_group.children_ids.begin(); it != parent_group.children_ids.end();
-             it++) {
-            if (*it == test_id) {
-                parent_group.children_ids.erase(it);
-                break;
-            }
-        }
-    }
-
-    parent_group.flags |= GROUP_OPEN;
     auto id = ++this->id_counter;
     auto new_group = Group{
         .parent_id = parent_group.id,
@@ -358,7 +349,10 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     std::for_each(this->selected_tests.begin(), this->selected_tests.end(),
                   [this, id](size_t test_id) {
                       assert(this->tests.contains(test_id));
-                      std::visit(SetParentIDVisitor(id), this->tests.at(test_id));
+
+                      if (!this->parent_selected(test_id)) {
+                          std::visit(SetParentIDVisitor(id), this->tests.at(test_id));
+                      }
                   });
 
     // Add new group to original parent's children
@@ -463,10 +457,13 @@ void AppState::move(Group* group) noexcept {
         }
 
         // Remove from old parent's children
-        size_t old_parent = std::visit(ParentIDVisitor(), this->tests[id]);
+        size_t old_parent = std::visit(ParentIDVisitor(), this->tests.at(id));
         assert(this->tests.contains(old_parent));
         assert(std::holds_alternative<Group>(this->tests.at(old_parent)));
-        std::erase(std::get<Group>(this->tests.at(old_parent)).children_ids, id);
+        Group& old_parent_group = std::get<Group>(this->tests.at(old_parent));
+
+        size_t count = std::erase(old_parent_group.children_ids, id);
+        assert(count == 1);
 
         // Set to new parent
         std::visit(SetParentIDVisitor(group->id), this->tests.at(id));
@@ -685,18 +682,15 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     test_result->req_body = body;
     test_result->req_content_type = content_type;
     test_result->req_endpoint = endpoint;
-
-    // NOTE: TODO: httplib probably adds it's own headers as well
-    // so need to look for that as well
     test_result->req_headers = headers;
 
     auto progress = [app, test, test_result](size_t current, size_t total) -> bool {
-        // missing
+        // Missing
         if (!app->test_results.contains(test->id)) {
             return false;
         }
 
-        // stopped
+        // Stopped
         if (!test_result->running.load()) {
             test_result->status.store(STATUS_CANCELLED);
 
@@ -746,7 +740,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
                 if (it->second == header_value) {
                     has_same_header_value = true;
                     break;
-                } 
+                }
             }
 
             if (!has_same_header_value) {
