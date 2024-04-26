@@ -188,4 +188,31 @@ void register_tests(AppState* app) noexcept {
 
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 0);
     };
+
+    ImGuiTest* tree_view__save_open = IM_REGISTER_TEST(e, "tree_view", "save_open");
+    tree_view__save_open->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new test");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
+
+        ctx->SetRef("");
+
+        app->filename = "/tmp/test.wt";
+        ctx->ItemClick("**/File");
+        ctx->ItemClick("**/Save");
+
+        tree_view__delete_all(ctx);
+
+        app->open_file();
+
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
+
+        tree_view__delete_all(ctx);
+    };
 }
