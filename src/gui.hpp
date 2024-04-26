@@ -55,13 +55,13 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 }
             }
 
-            if (ImGui::MenuItem("Enable")) {
+            if (!(flags & PARTIAL_DICT_NO_ENABLE) && ImGui::MenuItem("Enable")) {
                 for (auto& e : pd->elements) {
                     e.enabled = e.enabled || e.selected;
                 }
             }
 
-            if (ImGui::MenuItem("Disable")) {
+            if (!(flags & PARTIAL_DICT_NO_ENABLE) && ImGui::MenuItem("Disable")) {
                 for (auto& e : pd->elements) {
                     e.enabled = e.enabled && !e.selected;
                 }

@@ -128,7 +128,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                     .id = id,
                     .flags = TEST_NONE,
                     .type = HTTP_GET,
-                    .endpoint = "https://example.com",
+                    .endpoint = "example.com",
                     .request = {},
                     .response = {},
                     .cli_settings = {},
@@ -1049,6 +1049,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                     return param == param_names.end();
                 });
             }
+
             if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); i++) {
                     if (ImGui::Selectable(HTTPTypeLabels[i], i == test.type)) {

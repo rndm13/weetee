@@ -27,6 +27,13 @@ bool show_client_settings(ClientSettings* set) noexcept {
     }
 
     CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, "Follow Redirects");
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_PROXY, "Set proxy");
+    if (set->flags & CLIENT_PROXY) {
+        ImGui::InputText("Proxy Host", &set->proxy_host);
+        ImGui::InputInt("Proxy Port", &set->proxy_port);
+    }
+
     return changed;
 }
 #undef CHECKBOX_FLAG
@@ -183,12 +190,23 @@ void ClientSettings::save(SaveState* save) const noexcept {
     assert(save);
 
     save->save(this->flags);
+    // NOTE: can disable save when CLIENT_PROXY isn't set
+    save->save(this->proxy_host);
+    save->save(this->proxy_port);
 }
 
 bool ClientSettings::can_load(SaveState* save) const noexcept {
     assert(save);
 
     if (!save->can_load(this->flags)) {
+        return false;
+    }
+
+    if (!save->can_load(this->proxy_host)) {
+        return false;
+    }
+
+    if (!save->can_load(this->proxy_port)) {
         return false;
     }
 
@@ -199,6 +217,8 @@ void ClientSettings::load(SaveState* save) noexcept {
     assert(save);
 
     save->load(this->flags);
+    save->load(this->proxy_host);
+    save->load(this->proxy_port);
 }
 
 std::string Test::label() const noexcept { return this->endpoint + "##" + to_string(this->id); }

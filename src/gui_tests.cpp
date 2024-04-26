@@ -215,4 +215,57 @@ void register_tests(AppState* app) noexcept {
 
         tree_view__delete_all(ctx);
     };
+
+    // ImGuiTest* editor__test_params = IM_REGISTER_TEST(e, "editor", "test_params");
+    // editor__test_params->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
+    //     ctx->SetRef("Tests");
+
+    //     ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+    //     ctx->ItemClick("**/Add a new test");
+    //     IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 1);
+    //     ctx->SetRef("");
+
+    //     ctx->Yield();
+    //     IM_CHECK_NE(ctx->ItemInfo("Editor"), nullptr); // window
+
+    //     ctx->ItemOpen("/**/Type");
+    //     ctx->ItemClick("/**/Type/POST");
+
+    //     ctx->ItemInput("/**/Endpoint");
+    //     ctx->KeyCharsReplace("127.0.0.1:8000/api/param/{id}");
+
+    //     ctx->Yield();
+
+    //     ctx->SetRef("**/Request");
+
+    //     ctx->ItemOpen("/**/URL Parameters");
+    //     ctx->SetRef("/**/Request/URL Parameters");
+    //     ctx->ItemInput("/**/$$0/##data");
+    //     ctx->KeyCharsReplace("123");
+
+    //     ctx->SetRef("/**/Request");
+    //     ctx->ItemOpen("/**/Parameters");
+    //     ctx->SetRef("/**/Request/Parameters");
+
+    //     ctx->ItemInput("/**/$$0/##name");
+    //     ctx->KeyCharsReplace("key");
+    //     ctx->ItemInput("/**/$$0/##data");
+    //     ctx->KeyCharsReplace("value");
+
+    //     ctx->ItemClick("/**/$$0/##element", ImGuiMouseButton_Right);
+    //     ctx->ItemClick("/**/Disable");
+    //     IM_CHECK(!ctx->ItemIsChecked("/**/$$0/##enabled"));
+
+    //     ctx->ItemClick("/**/$$0/##element", ImGuiMouseButton_Right);
+    //     ctx->ItemClick("/**/Enable");
+    //     IM_CHECK(ctx->ItemIsChecked("/**/$$0/##enabled"));
+
+    //     ctx->ItemClick("/**/$$0/##element", ImGuiMouseButton_Right);
+    //     ctx->ItemClick("/**/Delete");
+
+    //     ctx->TabClose("/**/example.com");
+
+    //     ctx->SetRef("Tests");
+    //     tree_view__delete_all(ctx);
+    // };
 }

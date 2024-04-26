@@ -710,6 +710,9 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
     cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
     cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
+    if (test->cli_settings->flags & CLIENT_PROXY) {
+        cli.set_proxy(test->cli_settings->proxy_host, test->cli_settings->proxy_port);
+    }
 
     switch (test->type) {
     case HTTP_GET:
@@ -724,9 +727,9 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     case HTTP_PATCH:
         result = cli.Patch(dest, headers, body, content_type, progress);
         break;
-    case HTTP_DELETE: {
+    case HTTP_DELETE:
         result = cli.Delete(dest, headers, body, content_type, progress);
-    } break;
+        break;
     }
 
     // Time to brute force library because request_headers_ is a private field!

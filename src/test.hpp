@@ -3,6 +3,7 @@
 #include "hello_imgui/hello_imgui_logger.h"
 
 #include "imgui.h"
+#include "imgui_stdlib.h"
 
 #include "httplib.h"
 
@@ -110,10 +111,13 @@ enum ClientSettingsFlags : uint8_t {
     CLIENT_KEEP_ALIVE = 1 << 1,
     CLIENT_COMPRESSION = 1 << 2,
     CLIENT_FOLLOW_REDIRECTS = 1 << 3,
+    CLIENT_PROXY = 1 << 4,
 };
 
 struct ClientSettings {
     uint8_t flags = CLIENT_NONE;
+    std::string proxy_host;
+    int proxy_port;
 
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;
