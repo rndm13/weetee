@@ -118,9 +118,8 @@ void register_tests(AppState* app) noexcept {
         IM_CHECK(app->tests.size() == 1); // only root is left
     };
 
-
-    ImGuiTest* tree_view__group = IM_REGISTER_TEST(e, "tree_view", "group");
-    tree_view__group->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
+    ImGuiTest* tree_view__group_selected = IM_REGISTER_TEST(e, "tree_view", "group_selected");
+    tree_view__group_selected->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
         ctx->SetRef("Tests");
 
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
@@ -150,5 +149,43 @@ void register_tests(AppState* app) noexcept {
             IM_CHECK(root_group.children_ids.size() == 1); // only one item in root
             IM_CHECK(std::get<Group>(app->tests.at(root_group.children_ids.at(0))).children_ids.size() == 1); // only one item in root child
         }
+
+        tree_view__delete_all(ctx);
+    };
+
+    ImGuiTest* tree_view__undo_redo = IM_REGISTER_TEST(e, "tree_view", "undo_redo");
+    tree_view__undo_redo->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new test");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
+
+        ctx->SetRef("");
+
+        ctx->ItemClick("**/Edit");
+        ctx->ItemClick("**/Undo");
+
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 2);
+
+        ctx->ItemClick("**/Edit");
+        ctx->ItemClick("**/Redo");
+
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
+
+        ctx->ItemClick("**/Edit");
+        ctx->ItemClick("**/Undo");
+
+        ctx->ItemClick("**/Edit");
+        ctx->ItemClick("**/Undo");
+
+        ctx->ItemClick("**/Edit");
+        ctx->ItemClick("**/Undo");
+
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 0);
     };
 }
