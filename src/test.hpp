@@ -105,7 +105,37 @@ struct Response {
     }
 };
 
-enum ClientSettingsFlags : uint8_t {
+struct AuthBasic {
+    std::string name;
+    std::string password;
+
+    void save(SaveState* save) const noexcept;
+    bool can_load(SaveState* save) const noexcept;
+    void load(SaveState* save) noexcept;
+};
+
+struct AuthBearerToken {
+    std::string token;
+
+    void save(SaveState* save) const noexcept;
+    bool can_load(SaveState* save) const noexcept;
+    void load(SaveState* save) noexcept;
+};
+
+using AuthVariant = std::variant<std::monostate, AuthBasic, AuthBearerToken>;
+
+enum AuthType : uint8_t {
+    AUTH_NONE = 0,
+    AUTH_BASIC = 1,
+    AUTH_BEARER_TOKEN = 2,
+};
+static const char* AuthTypeLabels[] = {
+    reinterpret_cast<const char*>("None"),
+    reinterpret_cast<const char*>("Basic"),
+    reinterpret_cast<const char*>("Bearer Token"),
+};
+
+enum ClientSettingsFlags : uint16_t {
     CLIENT_NONE = 0,
     CLIENT_DYNAMIC = 1 << 0,
     CLIENT_KEEP_ALIVE = 1 << 1,
@@ -115,9 +145,11 @@ enum ClientSettingsFlags : uint8_t {
 };
 
 struct ClientSettings {
-    uint8_t flags = CLIENT_NONE;
+    uint16_t flags = CLIENT_NONE;
+    AuthVariant auth;
     std::string proxy_host;
     int proxy_port;
+    AuthVariant proxy_auth;
 
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;

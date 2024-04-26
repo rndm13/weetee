@@ -70,10 +70,12 @@ struct SaveState {
     }
 
     void save(const std::string& str) noexcept;
-
     bool can_load(const std::string& str) noexcept;
-
     void load(std::string& str) noexcept;
+
+    void save(const std::monostate&) noexcept {}
+    bool can_load(const std::monostate&) noexcept { return true; }
+    void load(std::monostate&) noexcept {}
 
     template <class T> void save(const std::optional<T>& opt) noexcept {
         bool has_value = opt.has_value();

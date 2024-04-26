@@ -5,6 +5,7 @@
 #include "hello_imgui/hello_imgui_logger.h"
 #include "http.hpp"
 #include "iterator"
+#include "test.hpp"
 #include "utility"
 #include "utils.hpp"
 
@@ -710,8 +711,26 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
     cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
     cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
+
+    std::visit(overloaded{
+                   [&cli](std::monostate) {},
+                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password); },
+                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token); },
+               },
+               test->cli_settings->auth);
+
     if (test->cli_settings->flags & CLIENT_PROXY) {
         cli.set_proxy(test->cli_settings->proxy_host, test->cli_settings->proxy_port);
+        std::visit(overloaded{
+                       [&cli](std::monostate) {},
+                       [&cli](const AuthBasic& auth) {
+                           cli.set_proxy_basic_auth(auth.name, auth.password);
+                       },
+                       [&cli](const AuthBearerToken& auth) {
+                           cli.set_proxy_bearer_token_auth(auth.token);
+                       },
+                   },
+                   test->cli_settings->proxy_auth);
     }
 
     switch (test->type) {

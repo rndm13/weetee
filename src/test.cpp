@@ -1,6 +1,6 @@
 #include "test.hpp"
 #include "fstream"
-#include "json.hpp"
+#include "imgui.h"
 
 #define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
     do {                                                                                           \
@@ -15,6 +15,40 @@
         }                                                                                          \
     } while (0);
 
+#define COMBO_VARIANT(label, variant, changed, variant_labels, variant_type)                       \
+    do {                                                                                           \
+        size_t type = (variant).index();                                                           \
+        if (ImGui::BeginCombo((label), (variant_labels)[type])) {                                  \
+            for (size_t i = 0; i < ARRAY_SIZE((variant_labels)); i++) {                            \
+                if (ImGui::Selectable((variant_labels)[i], i == type)) {                           \
+                    (changed) = true;                                                              \
+                    type = static_cast<size_t>(i);                                                 \
+                    (variant) = variant_from_index<variant_type>(type);                            \
+                }                                                                                  \
+            }                                                                                      \
+            ImGui::EndCombo();                                                                     \
+        }                                                                                          \
+    } while (0);
+
+bool show_auth(std::string label, AuthVariant* auth) noexcept {
+    bool changed = false;
+    COMBO_VARIANT(label.c_str(), *auth, changed, AuthTypeLabels, AuthVariant);
+    std::visit(overloaded{
+                   [&changed, &label](std::monostate) {},
+                   [&changed, &label](AuthBasic& basic) {
+                       changed |= ImGui::InputText((label + " Name").c_str(), &basic.name);
+                       changed |= ImGui::InputText((label + " Password").c_str(), &basic.password,
+                                                   ImGuiInputTextFlags_Password);
+                   },
+                   [&changed, &label](AuthBearerToken& token) {
+                       changed |= ImGui::InputText((label + " Token").c_str(), &token.token);
+                   },
+               },
+               *auth);
+
+    return changed;
+}
+
 bool show_client_settings(ClientSettings* set) noexcept {
     assert(set);
 
@@ -27,16 +61,20 @@ bool show_client_settings(ClientSettings* set) noexcept {
     }
 
     CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, "Follow Redirects");
+    changed |= show_auth("Authentication", &set->auth);
 
     CHECKBOX_FLAG(set->flags, changed, CLIENT_PROXY, "Set proxy");
     if (set->flags & CLIENT_PROXY) {
-        ImGui::InputText("Proxy Host", &set->proxy_host);
-        ImGui::InputInt("Proxy Port", &set->proxy_port);
+        changed |= ImGui::InputText("Proxy Host", &set->proxy_host);
+        changed |= ImGui::InputInt("Proxy Port", &set->proxy_port);
+        changed |= show_auth("Proxy Authentication", &set->proxy_auth);
     }
 
     return changed;
 }
+
 #undef CHECKBOX_FLAG
+#undef COMBO_MASK
 
 std::string request_endpoint(const Test* test) noexcept {
     assert(test);
@@ -186,19 +224,75 @@ void Response::load(SaveState* save) noexcept {
     save->load(this->headers);
 }
 
+void AuthBasic::save(SaveState* save) const noexcept {
+    assert(save);
+
+    save->save(this->name);
+    save->save(this->password);
+}
+
+bool AuthBasic::can_load(SaveState* save) const noexcept {
+    assert(save);
+
+    if (!save->can_load(this->name)) {
+        return false;
+    }
+
+    if (!save->can_load(this->password)) {
+        return false;
+    }
+
+    return true;
+}
+
+void AuthBasic::load(SaveState* save) noexcept {
+    assert(save);
+
+    save->load(this->name);
+    save->load(this->password);
+}
+
+void AuthBearerToken::save(SaveState* save) const noexcept {
+    assert(save);
+
+    save->save(this->token);
+}
+
+bool AuthBearerToken::can_load(SaveState* save) const noexcept {
+    assert(save);
+
+    if (!save->can_load(this->token)) {
+        return false;
+    }
+
+    return true;
+}
+
+void AuthBearerToken::load(SaveState* save) noexcept {
+    assert(save);
+
+    save->load(this->token);
+}
+
 void ClientSettings::save(SaveState* save) const noexcept {
     assert(save);
 
     save->save(this->flags);
     // NOTE: can disable save when CLIENT_PROXY isn't set
+    save->save(this->auth);
     save->save(this->proxy_host);
     save->save(this->proxy_port);
+    save->save(this->proxy_auth);
 }
 
 bool ClientSettings::can_load(SaveState* save) const noexcept {
     assert(save);
 
     if (!save->can_load(this->flags)) {
+        return false;
+    }
+
+    if (!save->can_load(this->auth)) {
         return false;
     }
 
@@ -210,6 +304,10 @@ bool ClientSettings::can_load(SaveState* save) const noexcept {
         return false;
     }
 
+    if (!save->can_load(this->proxy_auth)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -217,8 +315,10 @@ void ClientSettings::load(SaveState* save) noexcept {
     assert(save);
 
     save->load(this->flags);
+    save->load(this->auth);
     save->load(this->proxy_host);
     save->load(this->proxy_port);
+    save->load(this->proxy_auth);
 }
 
 std::string Test::label() const noexcept { return this->endpoint + "##" + to_string(this->id); }
@@ -388,44 +488,44 @@ RequestBodyResult request_body(const Test* test) noexcept {
     httplib::MultipartFormDataItems form;
 
     for (const auto& elem : mp.elements) {
-        std::visit(
-            overloaded{
-                [&form, &elem](const std::string& str) {
-                    httplib::MultipartFormData data = {
-                        .name = elem.key,
-                        .content = str,
-                        .filename = "",
-                        .content_type = elem.data.content_type,
-                    };
-                    form.push_back(data);
-                },
-                [&form, &elem](const std::vector<std::string>& files) {
-                    std::vector<std::string> types = split_string(elem.data.content_type, ",");
-                    
-                    for (size_t file_idx = 0; file_idx < files.size(); file_idx += 1) {
-                        const auto& file = files.at(file_idx);
+        std::visit(overloaded{
+                       [&form, &elem](const std::string& str) {
+                           httplib::MultipartFormData data = {
+                               .name = elem.key,
+                               .content = str,
+                               .filename = "",
+                               .content_type = elem.data.content_type,
+                           };
+                           form.push_back(data);
+                       },
+                       [&form, &elem](const std::vector<std::string>& files) {
+                           std::vector<std::string> types =
+                               split_string(elem.data.content_type, ",");
 
-                        std::string content_type = "text/plain";
-                        if (file_idx < types.size()) { // types could be smaller
-                            content_type = types[file_idx];
-                        }
+                           for (size_t file_idx = 0; file_idx < files.size(); file_idx += 1) {
+                               const auto& file = files.at(file_idx);
 
-                        std::ifstream in(file);
-                        if (in) {
-                            std::string file_content;
-                            httplib::detail::read_file(file, file_content);
-                            httplib::MultipartFormData data = {
-                                .name = elem.key,
-                                .content = file_content,
-                                .filename = file_name(file),
-                                .content_type = content_type,
-                            };
-                            form.push_back(data);
-                        }
-                    }
-                },
-            },
-            elem.data.data);
+                               std::string content_type = "text/plain";
+                               if (file_idx < types.size()) { // types could be smaller
+                                   content_type = types[file_idx];
+                               }
+
+                               std::ifstream in(file);
+                               if (in) {
+                                   std::string file_content;
+                                   httplib::detail::read_file(file, file_content);
+                                   httplib::MultipartFormData data = {
+                                       .name = elem.key,
+                                       .content = file_content,
+                                       .filename = file_name(file),
+                                       .content_type = content_type,
+                                   };
+                                   form.push_back(data);
+                               }
+                           }
+                       },
+                   },
+                   elem.data.data);
     }
 
     const auto& boundary = httplib::detail::make_multipart_data_boundary();
