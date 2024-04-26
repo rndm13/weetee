@@ -21,21 +21,28 @@ void register_tests(AppState* app) noexcept {
     ImGuiTestEngine* e = HelloImGui::GetImGuiTestEngine();
     const char* root_selectable = "**/##0";
 
-    auto delete_all = [app](ImGuiTestContext* ctx) {
-        std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_ids;
+    auto tree_view__select_all = [app](ImGuiTestContext* ctx) -> std::vector<size_t> {
+        std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_ids;
         ctx->KeyDown(ImGuiKey_ModCtrl);
-        for (size_t id : top_groups) {
+        for (size_t id : top_items) {
             ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
         }
         ctx->KeyUp(ImGuiKey_ModCtrl);
-        ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
+        // IM_CHECK(app->selected_tests.size() == app->tests.size() - 1); // selected everything except root
+
+        return top_items;
+    };
+
+    auto tree_view__delete_all = [app, tree_view__select_all](ImGuiTestContext* ctx) {
+        std::vector<size_t> top_items = tree_view__select_all(ctx);
+        ctx->ItemClick(("**/##" + to_string(top_items[0])).c_str(), ImGuiMouseButton_Right);
         ctx->ItemClick("**/Delete");
 
         IM_CHECK(app->tests.size() == 1); // only root is left
     };
 
     ImGuiTest* tree_view__basic_context = IM_REGISTER_TEST(e, "tree_view", "basic_context");
-    tree_view__basic_context->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+    tree_view__basic_context->TestFunc = [app, root_selectable, tree_view__delete_all](ImGuiTestContext* ctx) {
         ctx->SetRef("Tests");
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
         ctx->ItemClick("**/Add a new test");
@@ -46,11 +53,11 @@ void register_tests(AppState* app) noexcept {
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
         ctx->ItemClick("**/Paste");
 
-        delete_all(ctx);
+        tree_view__delete_all(ctx);
     };
 
     ImGuiTest* tree_view__copy_paste = IM_REGISTER_TEST(e, "tree_view", "copy_paste");
-    tree_view__copy_paste->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+    tree_view__copy_paste->TestFunc = [app, root_selectable, tree_view__delete_all](ImGuiTestContext* ctx) {
         ctx->SetRef("Tests");
         for (size_t i = 0; i < 5; i++) {
             ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
@@ -59,11 +66,11 @@ void register_tests(AppState* app) noexcept {
             ctx->ItemClick("**/Paste");
         }
 
-        delete_all(ctx);
+        tree_view__delete_all(ctx);
     };
 
     ImGuiTest* tree_view__ungroup = IM_REGISTER_TEST(e, "tree_view", "ungroup");
-    tree_view__ungroup->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+    tree_view__ungroup->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
         ctx->SetRef("Tests");
         for (size_t i = 0; i < 3; i++) {
             ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
@@ -73,19 +80,14 @@ void register_tests(AppState* app) noexcept {
         }
 
         while (app->tests.size() > 1) {
-            std::vector<size_t> top_groups = std::get<Group>(app->tests[0]).children_ids;
-            ctx->KeyDown(ImGuiKey_ModCtrl);
-            for (size_t id : top_groups) {
-                ctx->ItemClick(("**/##" + to_string(id)).c_str(), ImGuiMouseButton_Left);
-            }
-            ctx->KeyUp(ImGuiKey_ModCtrl);
-            ctx->ItemClick(("**/##" + to_string(top_groups[0])).c_str(), ImGuiMouseButton_Right);
+            std::vector<size_t> top_items = tree_view__select_all(ctx);
+            ctx->ItemClick(("**/##" + to_string(top_items[0])).c_str(), ImGuiMouseButton_Right);
             ctx->ItemClick("**/Ungroup");
         }
     };
 
     ImGuiTest* tree_view__moving = IM_REGISTER_TEST(e, "tree_view", "moving");
-    tree_view__moving->TestFunc = [app, root_selectable, delete_all](ImGuiTestContext* ctx) {
+    tree_view__moving->TestFunc = [app, root_selectable, tree_view__delete_all](ImGuiTestContext* ctx) {
         ctx->SetRef("Tests");
 
         ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
@@ -114,5 +116,39 @@ void register_tests(AppState* app) noexcept {
         ctx->ItemClick("**/Delete");
 
         IM_CHECK(app->tests.size() == 1); // only root is left
+    };
+
+
+    ImGuiTest* tree_view__group = IM_REGISTER_TEST(e, "tree_view", "group");
+    tree_view__group->TestFunc = [app, root_selectable, tree_view__select_all, tree_view__delete_all](ImGuiTestContext* ctx) {
+        ctx->SetRef("Tests");
+
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new test");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
+        ctx->ItemClick("**/Add a new group");
+        IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
+
+        auto& root_group = std::get<Group>(app->tests.at(0));
+
+        {
+            auto top_items = tree_view__select_all(ctx);
+            
+            ctx->ItemClick(("**/##" + to_string(top_items[0])).c_str(), ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Group Selected");
+
+            IM_CHECK(root_group.children_ids.size() == 1); // only one item in root
+        }
+
+        {
+            auto top_items = tree_view__select_all(ctx);
+            
+            ctx->ItemClick(("**/##" + to_string(top_items[0])).c_str(), ImGuiMouseButton_Right);
+            ctx->ItemClick("**/Group Selected");
+            IM_CHECK(root_group.children_ids.size() == 1); // only one item in root
+            IM_CHECK(std::get<Group>(app->tests.at(root_group.children_ids.at(0))).children_ids.size() == 1); // only one item in root child
+        }
     };
 }

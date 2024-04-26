@@ -322,11 +322,11 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     auto& parent_group = std::get<Group>(*parent_test);
 
     // remove selected from old parent
-    parent_group.children_ids.erase(
-        std::remove_if(parent_group.children_ids.begin(), parent_group.children_ids.end(),
-                       [&sel_tests = this->selected_tests](size_t child_id) {
-                           return sel_tests.contains(child_id);
-                       }));
+    size_t count = std::erase_if(parent_group.children_ids,
+                                 [&sel_tests = this->selected_tests](size_t child_id) {
+                                     return sel_tests.contains(child_id);
+                                 });
+    assert(count >= 1);
 
     auto id = ++this->id_counter;
     auto new_group = Group{

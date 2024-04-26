@@ -9,12 +9,12 @@
 
 // TODO: Swagger file import/export (medium)
 // TODO: Implement variables for groups with substitution (hard)
-// TODO: add fuzz tests (very very hard)
+// TODO: Add fuzz tests (very very hard)
 // TODO: Fix can_load... (bullshit)
-// TODO: make dynamic tests work (and with keep alive connection) (very hard)
-// TODO: add authentication (I have no idea)
-// TODO: add move reordering (very hard)
-// TODO: add proxies to client settings (easy)
+// TODO: Make dynamic tests work (and with keep alive connection) (very hard)
+// TODO: Add authentication (I have no idea)
+// TODO: Add move reordering (very hard)
+// TODO: Add proxies to client settings (easy)
 
 void post_init(AppState* app) noexcept;
 
@@ -64,6 +64,6 @@ void post_init(AppState* app) noexcept {
     Log(LogLevel::Warning, "Compiled without Brotli support! Brotli compression will not work!");
 #endif
 
-    // NOTE: you have to do this in show_gui instead because imgui is stupid
+    // NOTE: You have to do this in show_gui instead because imgui is stupid
     // ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }
