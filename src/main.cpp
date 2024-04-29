@@ -8,11 +8,13 @@
 #include "gui_tests.hpp"
 
 // TODO: Swagger file import/export (medium)
-// TODO: Add fuzz tests (very very hard)
 //
 //
 // TODO: Make dynamic tests work (and with keep alive connection) (very hard)
 // TODO: Add move reordering (very hard)
+//
+//
+// TODO: Add fuzz tests (very very hard)
 //
 // 
 // TODO: Fix can_load... (bullshit)

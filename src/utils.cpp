@@ -28,8 +28,11 @@ bool contains(const std::string& haystack, const std::string& needle) noexcept {
 }
 
 std::string file_name(const std::string& path) noexcept {
-    // TODO: fix for windows
+#if !WIN32
     size_t slash = path.rfind("/");
+#else
+    size_t slash = path.rfind("\\");
+#endif
     if (slash == std::string::npos) {
         slash = 0;
     } else {

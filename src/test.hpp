@@ -92,8 +92,7 @@ static const char* ResponseBodyTypeLabels[] = {
     /* [RESPONSE_OTHER] = */ reinterpret_cast<const char*>("Other"),
 };
 
-// probably will need to add file responses so will keep it this way
-// TODO: add expected response file type (medium)
+// I'm too lazy to change it...
 using ResponseBody = std::variant<std::string>; 
 
 struct Response {
