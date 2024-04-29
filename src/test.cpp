@@ -390,6 +390,7 @@ void Group::save(SaveState* save) const noexcept {
     save->save(this->name);
     save->save(this->children_ids);
     save->save(this->cli_settings);
+    save->save(this->variables);
 }
 
 bool Group::can_load(SaveState* save) const noexcept {
@@ -413,6 +414,9 @@ bool Group::can_load(SaveState* save) const noexcept {
     if (!save->can_load(this->cli_settings)) {
         return false;
     }
+    if (!save->can_load(this->variables)) {
+        return false;
+    }
 
     return true;
 }
@@ -426,6 +430,7 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->name);
     save->load(this->children_ids);
     save->load(this->cli_settings);
+    save->load(this->variables);
 }
 
 httplib::Headers request_headers(const Test* test) noexcept {

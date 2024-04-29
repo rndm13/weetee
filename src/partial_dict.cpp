@@ -131,3 +131,29 @@ void HeadersElementData::load(SaveState* save) noexcept {
 const char* HeadersElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
 };
+
+void VariablesElementData::save(SaveState* save) const noexcept {
+    assert(save);
+
+    save->save(data);
+}
+
+bool VariablesElementData::can_load(SaveState* save) const noexcept {
+    assert(save);
+
+    if (!save->can_load(data)) {
+        return false;
+    }
+
+    return true;
+}
+
+void VariablesElementData::load(SaveState* save) noexcept {
+    assert(save);
+
+    save->load(data);
+}
+
+const char* VariablesElementData::field_labels[field_count] = {
+    reinterpret_cast<const char*>("Data"),
+};

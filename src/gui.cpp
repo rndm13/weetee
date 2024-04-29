@@ -34,6 +34,15 @@
 #include "utility"
 #include "variant"
 
+bool hint(const char* format, auto... args) noexcept {
+    bool result = ImGui::Button("?");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip(format, args...);
+    }
+    return result;
+}
+
+
 bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     assert(app->tests.contains(nested_test_id));
     bool changed = false; // This also indicates that analysis data is invalid
@@ -437,6 +446,14 @@ bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem) noex
 }
 
 bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
+    }
+    return changed;
+}
+
+bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         changed = changed | ImGui::InputText("##data", &elem->data.data);
@@ -900,11 +917,7 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
                                             httplib::status_message(http_result->status));
 
                                 ImGui::SameLine();
-                                ImGui::Button("?");
-                                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                                    ImGui::SetTooltip("Expected: %s",
-                                                      tr->original_test.response.status.c_str());
-                                }
+                                hint("Expected: %s", tr->original_test.response.status.c_str());
 
                                 {
                                     // TODO: add a diff like view (very very hard)
@@ -1124,6 +1137,9 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
+
+            ImGui::Text("Variables");
+            partial_dict(app, &group.variables, "variables");
 
             ImGui::Text("Client Settings");
             ImGui::Separator();

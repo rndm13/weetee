@@ -178,3 +178,18 @@ struct HeadersElementData {
 };
 using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
+
+struct VariablesElementData {
+    std::string data;
+
+    static constexpr size_t field_count = 1;
+    static const char* field_labels[field_count];
+
+    bool operator!=(const VariablesElementData& other) const noexcept;
+
+    void save(SaveState* save) const noexcept;
+    bool can_load(SaveState* save) const noexcept;
+    void load(SaveState* save) noexcept;
+};
+using Variables = PartialDict<VariablesElementData>;
+using VariablesElement = Variables::ElementType;

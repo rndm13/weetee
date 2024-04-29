@@ -91,6 +91,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
 bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem) noexcept;
 bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem) noexcept;
 bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem) noexcept;
+bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem) noexcept;
 bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem) noexcept;
 
 template <typename Data>

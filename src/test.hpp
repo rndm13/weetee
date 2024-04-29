@@ -250,6 +250,7 @@ struct Group {
     std::optional<ClientSettings> cli_settings;
 
     std::vector<size_t> children_ids;
+    Variables variables;
 
     std::string label() const noexcept;
 
