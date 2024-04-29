@@ -8,6 +8,7 @@
 #include "test.hpp"
 #include "utility"
 #include "utils.hpp"
+#include <variant>
 
 bool AppState::is_running_tests() const noexcept {
     for (const auto& [id, result] : this->test_results) {
@@ -330,20 +331,19 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     assert(count >= 1);
 
     auto id = ++this->id_counter;
-    auto new_group = Group{
-        .parent_id = parent_group.id,
-        .id = id,
-        .flags = GROUP_OPEN,
-        .name = "New group",
-        .cli_settings = {},
-        .children_ids = {},
-    };
+    auto new_group = Group{.parent_id = parent_group.id,
+                           .id = id,
+                           .flags = GROUP_OPEN,
+                           .name = "New group",
+                           .cli_settings = {},
+                           .children_ids = {},
+                           .variables = {}};
 
     // Copy selected to new group
     std::copy_if(this->selected_tests.begin(), this->selected_tests.end(),
-                 std::back_inserter(new_group.children_ids), [this](size_t id) {
-                     assert(this->tests.contains(id));
-                     return !this->parent_selected(id);
+                 std::back_inserter(new_group.children_ids), [this](size_t selected_id) {
+                     assert(this->tests.contains(selected_id));
+                     return !this->parent_selected(selected_id);
                  });
 
     // Set selected parent id to new group's id
@@ -604,8 +604,8 @@ const char* body_match(const Test* test, const httplib::Result& result) noexcept
     return nullptr;
 }
 
-const char* header_match(const Test* test, const httplib::Result& result) noexcept {
-    httplib::Headers headers = response_headers(test);
+const char* header_match(const Variables* vars, const Test* test, const httplib::Result& result) noexcept {
+    httplib::Headers headers = response_headers(vars, test);
     for (const auto& elem : test->response.cookies.elements) {
         if (elem.enabled) {
             headers.emplace("Set-Cookie", elem.key + "=" + elem.data.data);
@@ -629,7 +629,7 @@ const char* header_match(const Test* test, const httplib::Result& result) noexce
     return nullptr;
 }
 
-void test_analysis(AppState*, const Test* test, TestResult* test_result,
+void test_analysis(AppState* app, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result) noexcept {
     switch (http_result.error()) {
     case httplib::Error::Success: {
@@ -646,7 +646,7 @@ void test_analysis(AppState*, const Test* test, TestResult* test_result,
             break;
         }
 
-        err = header_match(test, http_result);
+        err = header_match(app->variables(), test, http_result);
         if (err) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
@@ -669,14 +669,15 @@ void test_analysis(AppState*, const Test* test, TestResult* test_result,
 }
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
-    const auto params = request_params(test);
-    const auto headers = request_headers(test);
+    const auto params = request_params(app->variables(), test);
+    const auto headers = request_headers(app->variables(), test);
 
-    const auto req_body = request_body(test);
+    const auto req_body = request_body(app->variables(), test);
     std::string content_type = req_body.content_type;
     std::string body = req_body.body;
-    
-    auto [host, dest] = split_endpoint(request_endpoint(test));
+
+    auto [host, dest] = split_endpoint(request_endpoint(app->variables(), test));
+
     std::string params_dest = httplib::append_query_params(dest, params);
 
     TestResult* test_result = &app->test_results.at(test->id);
@@ -714,10 +715,8 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
     std::visit(overloaded{
                    [&cli](std::monostate) {},
-                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password);
-                   },
-                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token);
-                   },
+                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password); },
+                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token); },
                },
                test->cli_settings->auth);
 
@@ -801,4 +800,13 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
 
         app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
     }
+}
+
+const Variables* AppState::variables() const noexcept {
+    assert(this->tests.contains(0));
+    auto& root = this->tests.at(0);
+    assert(std::holds_alternative<Group>(root));
+    auto& root_group = std::get<Group>(root);
+    assert(root_group.variables.has_value());
+    return &root_group.variables.value();
 }

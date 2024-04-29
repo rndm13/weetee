@@ -10,11 +10,10 @@
 #include "nlohmann/json.hpp"
 
 #include "http.hpp"
-#include "json.hpp"
 #include "partial_dict.hpp"
 #include "utils.hpp"
+#include "json.hpp"
 
-#include "algorithm"
 #include "cmath"
 #include "cstdint"
 #include "optional"
@@ -187,7 +186,7 @@ struct Test {
     void load(SaveState* save) noexcept;
 };
 
-std::string request_endpoint(const Test* test) noexcept;
+std::string request_endpoint(const Variables* vars, const Test* test) noexcept;
 
 enum TestResultStatus {
     STATUS_RUNNING,
@@ -250,7 +249,7 @@ struct Group {
     std::optional<ClientSettings> cli_settings;
 
     std::vector<size_t> children_ids;
-    Variables variables;
+    std::optional<Variables> variables;
 
     std::string label() const noexcept;
 
@@ -349,18 +348,19 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
     test->request.body_type = to_type;
 }
 
-httplib::Headers request_headers(const Test* test) noexcept;
+std::string replace_variables(const Variables* vars, std::string target) noexcept;
 
 // Prefer request_body output instead
 ContentType request_content_type(RequestBodyType type) noexcept;
-httplib::Params request_params(const Test* test) noexcept;
+httplib::Headers request_headers(const Variables* vars, const Test* test) noexcept;
+httplib::Params request_params(const Variables* vars, const Test* test) noexcept;
 
 struct RequestBodyResult {
     std::string content_type;
     std::string body;
 };
 
-RequestBodyResult request_body(const Test* test) noexcept;
+RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept;
 
-httplib::Headers response_headers(const Test* test) noexcept;
+httplib::Headers response_headers(const Variables* vars, const Test* test) noexcept;
 ContentType response_content_type(ResponseBodyType type) noexcept;

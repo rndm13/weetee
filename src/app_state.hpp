@@ -34,6 +34,7 @@ struct AppState {
                 .name = "root",
                 .cli_settings = ClientSettings{},
                 .children_ids = {},
+                .variables = Variables{},
             },
         },
     };
@@ -89,6 +90,8 @@ struct AppState {
         size_t parent_id = -1ull;
         size_t top_selected_count;
     };
+
+    const Variables* variables() const noexcept;
 
     SelectAnalysisResult select_analysis() const noexcept;
     bool parent_disabled(size_t id) noexcept;

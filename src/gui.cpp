@@ -34,14 +34,17 @@
 #include "utility"
 #include "variant"
 
-bool hint(const char* format, auto... args) noexcept {
-    bool result = ImGui::Button("?");
+template <class... Args> void tooltip(const char* format, Args... args) noexcept {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip(format, args...);
     }
-    return result;
 }
 
+template <class... Args> bool hint(const char* format, Args... args) noexcept {
+    bool result = ImGui::Button("?");
+    tooltip(format, args...);
+    return result;
+}
 
 bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     assert(app->tests.contains(nested_test_id));
@@ -429,7 +432,34 @@ void tree_view(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
-bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(app->variables(), elem->data.data).c_str());
+    }
+    return changed;
+}
+
+bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(app->variables(), elem->data.data).c_str());
+    }
+    return changed;
+}
+
+bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem) noexcept {
+    bool changed = false;
+    if (ImGui::TableNextColumn()) {
+        changed = changed | ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(app->variables(), elem->data.data).c_str());
+    }
+    return changed;
+}
+
+bool partial_dict_data_row(AppState* app, Variables*, VariablesElement* elem) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         changed = changed | ImGui::InputText("##data", &elem->data.data);
@@ -437,32 +467,9 @@ bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem) noexcept {
     return changed;
 }
 
-bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* elem) noexcept {
     bool changed = false;
-    if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
-    }
-    return changed;
-}
 
-bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem) noexcept {
-    bool changed = false;
-    if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
-    }
-    return changed;
-}
-
-bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem) noexcept {
-    bool changed = false;
-    if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
-    }
-    return changed;
-}
-
-bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem) noexcept {
-    bool changed = false;
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
         if (ImGui::BeginCombo("##type", MPBDTypeLabels[elem->data.type])) {
@@ -489,13 +496,16 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
             ImGui::EndCombo();
         }
     }
+
     if (ImGui::TableNextColumn()) { // body
         switch (elem->data.type) {
-        case MPBD_TEXT:
+        case MPBD_TEXT: {
             ImGui::SetNextItemWidth(-1);
             assert(std::holds_alternative<std::string>(elem->data.data));
-            changed |= ImGui::InputText("##text", &std::get<std::string>(elem->data.data));
-            break;
+            auto str = &std::get<std::string>(elem->data.data);
+            changed |= ImGui::InputText("##text", str);
+            tooltip("%s", replace_variables(app->variables(), *str).c_str());
+        } break;
         case MPBD_FILES:
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
             auto& files = std::get<std::vector<std::string>>(elem->data.data);
@@ -539,6 +549,7 @@ bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem
     if (ImGui::TableNextColumn()) { // content-type
         ImGui::SetNextItemWidth(-1);
         changed |= ImGui::InputText("##content_type", &elem->data.content_type);
+        tooltip("%s", replace_variables(app->variables(), elem->data.content_type).c_str());
     }
     return changed;
 }
@@ -584,10 +595,11 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
 
             switch (test.request.body_type) {
             case REQUEST_JSON:
-            case REQUEST_PLAIN:
+            case REQUEST_PLAIN: {
                 ImGui::PushFont(app->mono_font);
-                changed |= ImGui::InputTextMultiline(
-                    "##body", &std::get<std::string>(test.request.body), ImVec2(0, 300));
+                std::string* body = &std::get<std::string>(test.request.body);
+                changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
+                tooltip("%s", replace_variables(app->variables(), *body).c_str());
 
                 // TODO: This crashes when opened with response partial_dicts at the same time
                 // if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem()) {
@@ -602,8 +614,7 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
                 // }
 
                 ImGui::PopFont();
-
-                break;
+            } break;
 
             case REQUEST_MULTIPART:
                 auto& mpb = std::get<MultiPartBody>(test.request.body);
@@ -699,8 +710,9 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
             case RESPONSE_PLAIN:
                 ImGui::PushFont(app->mono_font);
 
-                changed |= ImGui::InputTextMultiline(
-                    "##body", &std::get<std::string>(test.response.body), ImVec2(0, 300));
+                std::string* body = &std::get<std::string>(test.response.body);
+                changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
+                tooltip("%s", replace_variables(app->variables(), *body).c_str());
 
                 // TODO: This crashes when opened with request partial_dicts at the same time
                 // if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem()) {
@@ -1034,10 +1046,11 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::InputText("Endpoint", &test.endpoint);
 
             // Don't display tooltip while endpoint is being edited
-            if (!ImGui::IsItemActive() && !test.request.url_parameters.empty() &&
+            if (!ImGui::IsItemActive() &&
                 ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("%s", request_endpoint(&test).c_str());
+                ImGui::SetTooltip("%s", request_endpoint(app->variables(), &test).c_str());
             }
+
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 changed = true;
                 std::vector<std::string> param_names = parse_url_params(test.endpoint);
@@ -1137,9 +1150,15 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
+            tooltip("%s", replace_variables(app->variables(), group.name).c_str());
 
-            ImGui::Text("Variables");
-            partial_dict(app, &group.variables, "variables");
+            if (group.variables.has_value()) {
+                ImGui::Text("Variables");
+                ImGui::SameLine();
+                hint("To use a variable, write it's name anywhere incapsulated in <>\nexample: "
+                     "<host>/api/test/");
+                partial_dict(app, &group.variables.value(), "variables");
+            }
 
             ImGui::Text("Client Settings");
             ImGui::Separator();

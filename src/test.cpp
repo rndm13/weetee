@@ -1,6 +1,8 @@
 #include "test.hpp"
 #include "fstream"
 #include "imgui.h"
+#include "partial_dict.hpp"
+#include <algorithm>
 
 #define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
     do {                                                                                           \
@@ -76,43 +78,50 @@ bool show_client_settings(ClientSettings* set) noexcept {
 #undef CHECKBOX_FLAG
 #undef COMBO_MASK
 
-std::string request_endpoint(const Test* test) noexcept {
-    assert(test);
-
-    if (test->request.url_parameters.empty()) {
-        return test->endpoint;
-    }
-
-    std::string result;
+std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
+                                                            char end) noexcept {
+    std::vector<std::pair<size_t, size_t>> result;
 
     size_t index = 0;
     do {
-        size_t left_brace = test->endpoint.find("{", index);
-        if (left_brace == std::string::npos) {
-            result += test->endpoint.substr(index);
+        size_t left_brace = str.find(begin, index);
+        size_t right_brace = str.find(end, left_brace);
+        if (left_brace == std::string::npos || right_brace == std::string::npos) {
             break;
         }
 
-        size_t right_brace = test->endpoint.find("}", left_brace);
-        if (right_brace == std::string::npos) {
-            result = "Unmatched left brace";
-            break;
-        }
-
-        result += test->endpoint.substr(index, left_brace - index);
-        std::string name = test->endpoint.substr(left_brace + 1, right_brace - (left_brace + 1));
-
-        auto found = std::find_if(test->request.url_parameters.elements.begin(),
-                                  test->request.url_parameters.elements.end(),
-                                  [&name](const auto& elem) { return elem.key == name; });
-        if (found->data.data.empty()) {
-            result += "<empty>";
-        } else {
-            result += found->data.data;
-        }
-
+        result.emplace_back(left_brace, right_brace - left_brace);
         index = right_brace + 1;
-    } while (index < test->endpoint.size());
+    } while (index < str.size());
+
+    return result;
+}
+
+std::string request_endpoint(const Variables* vars, const Test* test) noexcept {
+    assert(test);
+
+    std::string result = replace_variables(vars, test->endpoint);
+
+    if (test->request.url_parameters.empty()) {
+        return result;
+    }
+
+    std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
+    std::for_each(
+        params_idx.rbegin(), params_idx.rend(),
+        [&result, vars, &params = test->request.url_parameters](std::pair<size_t, size_t> range) {
+            auto [begin, size] = range;
+
+            std::string name = result.substr(begin + 1, size - 1);
+
+            auto found = std::find_if(
+                params.elements.begin(), params.elements.end(),
+                [&name](const auto& elem) { return elem.enabled && elem.key == name; });
+
+            if (found != params.elements.end()) {
+                result.replace(begin, size + 1, replace_variables(vars, found->data.data));
+            }
+        });
 
     return result;
 }
@@ -433,26 +442,6 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->variables);
 }
 
-httplib::Headers request_headers(const Test* test) noexcept {
-    httplib::Headers result;
-
-    for (const auto& header : test->request.headers.elements) {
-        if (!header.enabled) {
-            continue;
-        }
-        result.emplace(header.key, header.data.data);
-    }
-
-    for (const auto& cookie : test->request.cookies.elements) {
-        if (!cookie.enabled) {
-            continue;
-        }
-        result.emplace("Cookie", cookie.key + "=" + cookie.data.data);
-    }
-
-    return result;
-}
-
 ContentType request_content_type(RequestBodyType type) noexcept {
     switch (type) {
     case REQUEST_JSON:
@@ -466,24 +455,47 @@ ContentType request_content_type(RequestBodyType type) noexcept {
     return {};
 }
 
-httplib::Params request_params(const Test* test) noexcept {
+httplib::Headers request_headers(const Variables* vars, const Test* test) noexcept {
+    httplib::Headers result;
+
+    for (const auto& header : test->request.headers.elements) {
+        if (!header.enabled) {
+            continue;
+        }
+        result.emplace(replace_variables(vars, header.key),
+                       replace_variables(vars, header.data.data));
+    }
+
+    for (const auto& cookie : test->request.cookies.elements) {
+        if (!cookie.enabled) {
+            continue;
+        }
+        result.emplace("Cookie", replace_variables(vars, cookie.key) + "=" +
+                                     replace_variables(vars, cookie.data.data));
+    }
+
+    return result;
+}
+
+httplib::Params request_params(const Variables* vars, const Test* test) noexcept {
     httplib::Params result;
 
     for (const auto& param : test->request.parameters.elements) {
         if (!param.enabled) {
             continue;
         }
-        result.emplace(param.key, param.data.data);
+        result.emplace(replace_variables(vars, param.key),
+                       replace_variables(vars, param.data.data));
     };
 
     return result;
 }
 
-RequestBodyResult request_body(const Test* test) noexcept {
+RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept {
     if (std::holds_alternative<std::string>(test->request.body)) {
         return {
             .content_type = to_string(request_content_type(test->request.body_type)),
-            .body = std::get<std::string>(test->request.body),
+            .body = replace_variables(vars, std::get<std::string>(test->request.body)),
         };
     }
 
@@ -494,18 +506,18 @@ RequestBodyResult request_body(const Test* test) noexcept {
 
     for (const auto& elem : mp.elements) {
         std::visit(overloaded{
-                       [&form, &elem](const std::string& str) {
+                       [&form, &elem, vars](const std::string& str) {
                            httplib::MultipartFormData data = {
                                .name = elem.key,
-                               .content = str,
+                               .content = replace_variables(vars, str),
                                .filename = "",
-                               .content_type = elem.data.content_type,
+                               .content_type = replace_variables(vars, elem.data.content_type),
                            };
                            form.push_back(data);
                        },
-                       [&form, &elem](const std::vector<std::string>& files) {
+                       [&form, &elem, vars](const std::vector<std::string>& files) {
                            std::vector<std::string> types =
-                               split_string(elem.data.content_type, ",");
+                               split_string(replace_variables(vars, elem.data.content_type), ",");
 
                            for (size_t file_idx = 0; file_idx < files.size(); file_idx += 1) {
                                const auto& file = files.at(file_idx);
@@ -544,26 +556,6 @@ RequestBodyResult request_body(const Test* test) noexcept {
     };
 }
 
-httplib::Headers response_headers(const Test* test) noexcept {
-    httplib::Headers result;
-
-    for (const auto& header : test->response.headers.elements) {
-        if (!header.enabled) {
-            continue;
-        }
-        result.emplace(header.key, header.data.data);
-    }
-
-    for (const auto& cookie : test->response.cookies.elements) {
-        if (!cookie.enabled) {
-            continue;
-        }
-        result.emplace("Set-Cookie", cookie.key + "=" + cookie.data.data);
-    }
-
-    return result;
-}
-
 ContentType response_content_type(ResponseBodyType type) noexcept {
     switch (type) {
     case RESPONSE_JSON:
@@ -575,4 +567,45 @@ ContentType response_content_type(ResponseBodyType type) noexcept {
     }
     assert(false && "Unreachable");
     return {};
+}
+
+httplib::Headers response_headers(const Variables* vars, const Test* test) noexcept {
+    httplib::Headers result;
+
+    for (const auto& header : test->response.headers.elements) {
+        if (!header.enabled) {
+            continue;
+        }
+        result.emplace(header.key, replace_variables(vars, header.data.data));
+    }
+
+    for (const auto& cookie : test->response.cookies.elements) {
+        if (!cookie.enabled) {
+            continue;
+        }
+        result.emplace("Set-Cookie", replace_variables(vars, cookie.key + "=" + cookie.data.data));
+    }
+
+    return result;
+}
+
+std::string replace_variables(const Variables* vars, std::string target) noexcept {
+    std::string result = target;
+    std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '<', '>');
+    std::for_each(params_idx.rbegin(), params_idx.rend(),
+                  [&result, vars](std::pair<size_t, size_t> range) {
+                      auto [begin, size] = range;
+
+                      std::string name = result.substr(begin + 1, size - 1);
+
+                      auto found = std::find_if(
+                          vars->elements.begin(), vars->elements.end(),
+                          [&name](const auto& elem) { return elem.enabled && elem.key == name; });
+
+                      if (found != vars->elements.end()) {
+                          result.replace(begin, size + 1, found->data.data);
+                      }
+                  });
+
+    return result;
 }
