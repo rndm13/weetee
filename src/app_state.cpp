@@ -573,8 +573,12 @@ bool status_match(const std::string& match, int status) noexcept {
 }
 
 const char* body_match(const Test* test, const httplib::Result& result) noexcept {
+    if (test->response.body_type == RESPONSE_ANY) {
+        return nullptr; // skip checks
+    }
+
     if (result->has_header("Content-Type")) {
-        ContentType to_match = response_content_type(test->response.body_type);
+        ContentType to_match = response_content_type(&test->response);
 
         ContentType content_type = parse_content_type(result->get_header_value("Content-Type"));
         // printf("%s / %s = %s / %s\n", to_match.type.c_str(), to_match.name.c_str(),

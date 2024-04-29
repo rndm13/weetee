@@ -10,9 +10,9 @@
 #include "nlohmann/json.hpp"
 
 #include "http.hpp"
+#include "json.hpp"
 #include "partial_dict.hpp"
 #include "utils.hpp"
-#include "json.hpp"
 
 #include "cmath"
 #include "cstdint"
@@ -26,11 +26,13 @@ enum RequestBodyType : uint8_t {
     REQUEST_JSON,
     REQUEST_PLAIN,
     REQUEST_MULTIPART,
+    REQUEST_OTHER,
 };
 static const char* RequestBodyTypeLabels[] = {
     /* [REQUEST_JSON] = */ reinterpret_cast<const char*>("JSON"),
     /* [REQUEST_RAW] = */ reinterpret_cast<const char*>("Plain Text"),
     /* [REQUEST_MULTIPART] = */ reinterpret_cast<const char*>("Multipart"),
+    /* [REQUEST_OTHER] = */ reinterpret_cast<const char*>("Other"),
 };
 
 using RequestBody = std::variant<std::string, MultiPartBody>;
@@ -40,6 +42,9 @@ template <RequestBodyType type> constexpr size_t request_body_index() noexcept {
         return 0; // string
     }
     if constexpr (type == REQUEST_PLAIN) {
+        return 0; // string
+    }
+    if constexpr (type == REQUEST_OTHER) {
         return 0; // string
     }
     if constexpr (type == REQUEST_MULTIPART) {
@@ -53,6 +58,7 @@ template <RequestBodyType type> constexpr auto request_body_inplace_index() noex
 
 struct Request {
     RequestBodyType body_type = REQUEST_JSON;
+    std::string other_content_type;
     RequestBody body = "";
 
     Cookies cookies;
@@ -72,23 +78,29 @@ struct Request {
 };
 
 enum ResponseBodyType : uint8_t {
+    RESPONSE_ANY,
     RESPONSE_JSON,
     RESPONSE_HTML,
     RESPONSE_PLAIN,
+    RESPONSE_OTHER,
 };
 static const char* ResponseBodyTypeLabels[] = {
+    /* [RESPONSE_ANY] = */ reinterpret_cast<const char*>("Any"),
     /* [RESPONSE_JSON] = */ reinterpret_cast<const char*>("JSON"),
     /* [RESPONSE_HTML] = */ reinterpret_cast<const char*>("HTML"),
     /* [RESPONSE_RAW] = */ reinterpret_cast<const char*>("Plain Text"),
+    /* [RESPONSE_OTHER] = */ reinterpret_cast<const char*>("Other"),
 };
 
-using ResponseBody =
-    std::variant<std::string>; // probably will need to add file responses so will keep it this way
+// probably will need to add file responses so will keep it this way
+// TODO: add expected response file type (medium)
+using ResponseBody = std::variant<std::string>; 
 
 struct Response {
     std::string status = "2XX"; // a string so user can get hints and write their own status code
-    ResponseBodyType body_type = RESPONSE_JSON;
-    ResponseBody body = "";
+    ResponseBodyType body_type = RESPONSE_ANY;
+    std::string other_content_type;
+    ResponseBody body = std::string{};
 
     Cookies cookies;
     Headers headers;
@@ -351,7 +363,7 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 std::string replace_variables(const Variables* vars, std::string target) noexcept;
 
 // Prefer request_body output instead
-ContentType request_content_type(RequestBodyType type) noexcept;
+ContentType request_content_type(const Request* request) noexcept;
 httplib::Headers request_headers(const Variables* vars, const Test* test) noexcept;
 httplib::Params request_params(const Variables* vars, const Test* test) noexcept;
 
@@ -363,4 +375,4 @@ struct RequestBodyResult {
 RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept;
 
 httplib::Headers response_headers(const Variables* vars, const Test* test) noexcept;
-ContentType response_content_type(ResponseBodyType type) noexcept;
+ContentType response_content_type(const Response* response) noexcept;

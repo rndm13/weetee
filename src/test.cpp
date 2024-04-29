@@ -1,5 +1,6 @@
 #include "test.hpp"
 #include "fstream"
+#include "http.hpp"
 #include "imgui.h"
 #include "partial_dict.hpp"
 #include <algorithm>
@@ -442,14 +443,16 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->variables);
 }
 
-ContentType request_content_type(RequestBodyType type) noexcept {
-    switch (type) {
+ContentType request_content_type(const Request* request) noexcept {
+    switch (request->body_type) {
     case REQUEST_JSON:
         return {.type = "application", .name = "json"};
     case REQUEST_MULTIPART:
         return {.type = "multipart", .name = "form-data"};
     case REQUEST_PLAIN:
         return {.type = "text", .name = "plain"};
+    case REQUEST_OTHER:
+        return parse_content_type(request->other_content_type);
     }
     assert(false && "Unreachable");
     return {};
@@ -494,7 +497,7 @@ httplib::Params request_params(const Variables* vars, const Test* test) noexcept
 RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept {
     if (std::holds_alternative<std::string>(test->request.body)) {
         return {
-            .content_type = to_string(request_content_type(test->request.body_type)),
+            .content_type = to_string(request_content_type(&test->request)),
             .body = replace_variables(vars, std::get<std::string>(test->request.body)),
         };
     }
@@ -556,14 +559,18 @@ RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept
     };
 }
 
-ContentType response_content_type(ResponseBodyType type) noexcept {
-    switch (type) {
+ContentType response_content_type(const Response* response) noexcept {
+    switch (response->body_type) {
+    case RESPONSE_ANY:
+        return {.type = "", .name = ""};
     case RESPONSE_JSON:
         return {.type = "application", .name = "json"};
     case RESPONSE_HTML:
         return {.type = "text", .name = "html"};
     case RESPONSE_PLAIN:
         return {.type = "text", .name = "plain"};
+    case RESPONSE_OTHER:
+        return parse_content_type(response->other_content_type);
     }
     assert(false && "Unreachable");
     return {};
@@ -583,7 +590,8 @@ httplib::Headers response_headers(const Variables* vars, const Test* test) noexc
         if (!cookie.enabled) {
             continue;
         }
-        result.emplace("Set-Cookie", replace_variables(vars, cookie.key + "=" + cookie.data.data));
+        result.emplace("Set-Cookie", replace_variables(vars, cookie.key) + "=" +
+                                         replace_variables(vars, cookie.data.data));
     }
 
     return result;

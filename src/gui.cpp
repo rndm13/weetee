@@ -590,12 +590,21 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
                 case REQUEST_MULTIPART:
                     request_body_convert<REQUEST_MULTIPART>(&test);
                     break;
+                case REQUEST_OTHER:
+                    request_body_convert<REQUEST_OTHER>(&test);
+                    break;
                 }
+            }
+
+            if (test.request.body_type == REQUEST_OTHER) {
+                ImGui::InputText("Content-Type", &test.request.other_content_type);
             }
 
             switch (test.request.body_type) {
             case REQUEST_JSON:
-            case REQUEST_PLAIN: {
+            case REQUEST_PLAIN:
+            case REQUEST_OTHER:
+                {
                 ImGui::PushFont(app->mono_font);
                 std::string* body = &std::get<std::string>(test.request.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
@@ -694,9 +703,11 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
                 changed = true;
 
                 switch (test.response.body_type) {
+                case RESPONSE_ANY:
                 case RESPONSE_JSON:
                 case RESPONSE_HTML:
                 case RESPONSE_PLAIN:
+                case RESPONSE_OTHER:
                     if (!std::holds_alternative<std::string>(test.response.body)) {
                         test.response.body = "";
                     }
@@ -704,10 +715,16 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
                 }
             }
 
+            if (test.response.body_type == RESPONSE_OTHER) {
+                ImGui::InputText("Content-Type", &test.response.other_content_type);
+            }
+
             switch (test.response.body_type) {
+            case RESPONSE_ANY:
             case RESPONSE_JSON:
             case RESPONSE_HTML:
             case RESPONSE_PLAIN:
+            case RESPONSE_OTHER:
                 ImGui::PushFont(app->mono_font);
 
                 std::string* body = &std::get<std::string>(test.response.body);
