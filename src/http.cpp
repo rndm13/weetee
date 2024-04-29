@@ -38,6 +38,7 @@ std::pair<std::string, std::string> split_endpoint(std::string endpoint) noexcep
     } else {
         semicolon += 3;
     }
+
     size_t slash = endpoint.find("/", semicolon);
     if (slash == std::string::npos) {
         return {endpoint, "/"};

@@ -675,14 +675,14 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     const auto req_body = request_body(test);
     std::string content_type = req_body.content_type;
     std::string body = req_body.body;
-    std::string endpoint =
-        request_endpoint(test) + "?" + httplib::detail::params_to_query_str(params);
-    auto [host, dest] = split_endpoint(endpoint);
+    
+    auto [host, dest] = split_endpoint(request_endpoint(test));
+    std::string params_dest = httplib::append_query_params(dest, params);
 
     TestResult* test_result = &app->test_results.at(test->id);
     test_result->req_body = body;
     test_result->req_content_type = content_type;
-    test_result->req_endpoint = endpoint;
+    test_result->req_endpoint = host + params_dest;
     test_result->req_headers = headers;
 
     auto progress = [app, test, test_result](size_t current, size_t total) -> bool {
@@ -714,8 +714,10 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
     std::visit(overloaded{
                    [&cli](std::monostate) {},
-                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password); },
-                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token); },
+                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password);
+                   },
+                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token);
+                   },
                },
                test->cli_settings->auth);
 
@@ -735,19 +737,19 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 
     switch (test->type) {
     case HTTP_GET:
-        result = cli.Get(dest, headers, progress);
+        result = cli.Get(params_dest, headers, progress);
         break;
     case HTTP_POST:
-        result = cli.Post(dest, headers, body, content_type, progress);
+        result = cli.Post(params_dest, headers, body, content_type, progress);
         break;
     case HTTP_PUT:
-        result = cli.Put(dest, headers, body, content_type, progress);
+        result = cli.Put(params_dest, headers, body, content_type, progress);
         break;
     case HTTP_PATCH:
-        result = cli.Patch(dest, headers, body, content_type, progress);
+        result = cli.Patch(params_dest, headers, body, content_type, progress);
         break;
     case HTTP_DELETE:
-        result = cli.Delete(dest, headers, body, content_type, progress);
+        result = cli.Delete(params_dest, headers, body, content_type, progress);
         break;
     }
 

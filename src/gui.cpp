@@ -128,7 +128,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                     .id = id,
                     .flags = TEST_NONE,
                     .type = HTTP_GET,
-                    .endpoint = "example.com",
+                    .endpoint = "https://example.com",
                     .request = {},
                     .response = {},
                     .cli_settings = {},

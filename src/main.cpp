@@ -12,7 +12,6 @@
 // TODO: Add fuzz tests (very very hard)
 // TODO: Fix can_load... (bullshit)
 // TODO: Make dynamic tests work (and with keep alive connection) (very hard)
-// TODO: Add authentication (I have no idea)
 // TODO: Add move reordering (very hard)
 
 void post_init(AppState* app) noexcept;
