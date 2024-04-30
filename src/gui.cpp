@@ -503,7 +503,13 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
             ImGui::SetNextItemWidth(-1);
             assert(std::holds_alternative<std::string>(elem->data.data));
             auto str = &std::get<std::string>(elem->data.data);
-            changed |= ImGui::InputText("##text", str);
+
+            if (ImGui::InputText("##text", str)) {
+                changed = true;
+
+                elem->data.resolve_content_type();
+            }
+
             tooltip("%s", replace_variables(app->variables(), *str).c_str());
         } break;
         case MPBD_FILES:
@@ -527,19 +533,10 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
 
             if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
                 changed = true;
+
                 auto result_files = elem->data.open_file->result();
                 elem->data.data = result_files;
-
-                elem->data.content_type = "";
-                for (const auto& file : result_files) {
-                    std::string content_type =
-                        httplib::detail::find_content_type(file, {}, "text/plain");
-                    if (!elem->data.content_type.empty()) {
-                        elem->data.content_type += ", ";
-                    }
-                    elem->data.content_type += content_type;
-                }
-
+                elem->data.resolve_content_type();
                 elem->data.open_file = std::nullopt;
             }
             break;

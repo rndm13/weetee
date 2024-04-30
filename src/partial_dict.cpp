@@ -1,5 +1,8 @@
 #include "partial_dict.hpp"
 
+// only include it for find_content_type
+#include "httplib.h"
+
 bool MultiPartBodyElementData::operator==(const MultiPartBodyElementData& other) const noexcept {
     return this->type != other.type && this->data != other.data;
 }
@@ -34,6 +37,24 @@ void MultiPartBodyElementData::load(SaveState* save) noexcept {
     save->load(this->type);
     save->load(this->data);
     save->load(this->content_type);
+}
+
+void MultiPartBodyElementData::resolve_content_type() noexcept {
+    std::visit(overloaded{
+                   [this](const std::string& str) { this->content_type = "text/plain"; },
+                   [this](const std::vector<std::string>& files) {
+                       this->content_type = "";
+                       for (const auto& file : files) {
+                           std::string file_content_type =
+                               httplib::detail::find_content_type(file, {}, "text/plain");
+                           if (!this->content_type.empty()) {
+                               this->content_type += ", ";
+                           }
+                           this->content_type += file_content_type;
+                       }
+                   },
+               },
+               this->data);
 }
 
 const char* MultiPartBodyElementData::field_labels[field_count] = {

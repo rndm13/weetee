@@ -124,6 +124,8 @@ struct MultiPartBodyElementData {
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;
     void load(SaveState* save) noexcept;
+
+    void resolve_content_type() noexcept;
 };
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;
 using MultiPartBodyElement = MultiPartBody::ElementType;
@@ -137,9 +139,7 @@ struct CookiesElementData {
     bool operator!=(const CookiesElementData& other) const noexcept;
 
     void save(SaveState* save) const noexcept;
-
     bool can_load(SaveState* save) const noexcept;
-
     void load(SaveState* save) noexcept;
 };
 using Cookies = PartialDict<CookiesElementData>;
@@ -154,9 +154,7 @@ struct ParametersElementData {
     bool operator!=(const ParametersElementData& other) const noexcept;
 
     void save(SaveState* save) const noexcept;
-
     bool can_load(SaveState* save) const noexcept;
-
     void load(SaveState* save) noexcept;
 };
 using Parameters = PartialDict<ParametersElementData>;
@@ -171,9 +169,7 @@ struct HeadersElementData {
     bool operator!=(const HeadersElementData& other) const noexcept;
 
     void save(SaveState* save) const noexcept;
-
     bool can_load(SaveState* save) const noexcept;
-
     void load(SaveState* save) noexcept;
 };
 using Headers = PartialDict<HeadersElementData>;
