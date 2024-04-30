@@ -24,19 +24,11 @@ struct EditorTab {
 struct AppState {
     // save
     size_t id_counter = 0;
+
+    static const Group root_initial;
+
     std::unordered_map<size_t, NestedTest> tests = {
-        {
-            0,
-            Group{
-                .parent_id = static_cast<size_t>(-1),
-                .id = 0,
-                .flags = GROUP_NONE,
-                .name = "root",
-                .cli_settings = ClientSettings{},
-                .children_ids = {},
-                .variables = Variables{},
-            },
-        },
+        {0, root_initial},
     };
     std::string tree_view_filter;
     std::unordered_set<size_t> filtered_tests = {};
@@ -53,6 +45,7 @@ struct AppState {
     // don't save
 
     std::optional<pfd::open_file> open_file_dialog;
+    std::optional<pfd::open_file> open_swagger_file_dialog;
     std::optional<pfd::save_file> save_file_dialog;
     std::optional<std::string> filename;
 
@@ -64,7 +57,13 @@ struct AppState {
     HelloImGui::RunnerParams* runner_params;
 
     bool tree_view_focused; // updated every frame
+    
+    constexpr Group* root_group() noexcept {
+        assert(this->tests.contains(0));
+        assert(std::holds_alternative<Group>(this->tests[0]));
 
+        return &std::get<Group>(this->tests[0]);
+    }
     bool is_running_tests() const noexcept;
     void stop_test(TestResult& result) noexcept;
     void stop_test(size_t id) noexcept;
@@ -137,11 +136,11 @@ struct AppState {
 
     void copy() noexcept;
     void cut() noexcept;
+
     constexpr bool can_paste() const noexcept { return this->clipboard.original_size > 0; }
     void paste(Group* group) noexcept;
 
     void move(Group* group) noexcept;
-
     void sort(Group& group) noexcept;
 
     // Returns true when the value should be filtered *OUT*
@@ -152,6 +151,9 @@ struct AppState {
     void save_file() noexcept;
     void open_file() noexcept;
     void post_open() noexcept;
+
+    void import_swagger_servers(const nlohmann::json&) noexcept;
+    void import_swagger(const std::string& filename) noexcept;
 
     AppState(HelloImGui::RunnerParams* _runner_params) noexcept;
 

@@ -597,11 +597,15 @@ httplib::Headers response_headers(const Variables* vars, const Test* test) noexc
     return result;
 }
 
-std::string replace_variables(const Variables* vars, std::string target) noexcept {
+std::string replace_variables(const Variables* vars, const std::string& target,
+                              size_t recursion) noexcept {
     std::string result = target;
+    if (recursion > REPLACE_VARIABLES_MAX_NEST) {
+        return result;
+    }
     std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '<', '>');
     std::for_each(params_idx.rbegin(), params_idx.rend(),
-                  [&result, vars](std::pair<size_t, size_t> range) {
+                  [&result, vars, recursion](std::pair<size_t, size_t> range) {
                       auto [begin, size] = range;
 
                       std::string name = result.substr(begin + 1, size - 1);
@@ -611,7 +615,7 @@ std::string replace_variables(const Variables* vars, std::string target) noexcep
                           [&name](const auto& elem) { return elem.enabled && elem.key == name; });
 
                       if (found != vars->elements.end()) {
-                          result.replace(begin, size + 1, found->data.data);
+                          result.replace(begin, size + 1, replace_variables(vars, found->data.data, recursion + 1));
                       }
                   });
 

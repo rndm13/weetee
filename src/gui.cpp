@@ -1394,6 +1394,10 @@ void open_file_dialog(AppState* app) noexcept {
     app->open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
 }
 
+void open_swagger_file_dialog(AppState* app) noexcept {
+    app->open_swagger_file_dialog = pfd::open_file("Open Swagger JSON File", ".", {"All Files", "*.json"}, pfd::opt::none);
+}
+
 void show_menus(AppState* app) noexcept {
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Save As", "Ctrl + Shift + S")) {
@@ -1402,6 +1406,8 @@ void show_menus(AppState* app) noexcept {
             save_file_dialog(app);
         } else if (ImGui::MenuItem("Open", "Ctrl + O")) {
             open_file_dialog(app);
+        } else if (ImGui::MenuItem("Import Swagger JSON")) {
+            open_swagger_file_dialog(app);
         }
         ImGui::EndMenu();
     }
@@ -1460,7 +1466,7 @@ void show_gui(AppState* app) noexcept {
         app->selected_tests.clear();
     }
 
-    // saving
+    // Opening
     if (app->open_file_dialog.has_value() && app->open_file_dialog->ready()) {
         auto result = app->open_file_dialog->result();
 
@@ -1473,6 +1479,7 @@ void show_gui(AppState* app) noexcept {
         app->open_file_dialog = std::nullopt;
     }
 
+    // Saving
     if (app->save_file_dialog.has_value() && app->save_file_dialog->ready()) {
         if (app->save_file_dialog->result().size() > 0) {
             app->filename = app->save_file_dialog->result();
@@ -1482,6 +1489,19 @@ void show_gui(AppState* app) noexcept {
 
         app->save_file_dialog = std::nullopt;
     }
+
+    // Importing
+    if (app->open_swagger_file_dialog.has_value() && app->open_swagger_file_dialog->ready()) {
+        auto result = app->open_swagger_file_dialog->result();
+
+        if (result.size() > 0) {
+            Log(LogLevel::Debug, "filename: %s", result[0].c_str());
+            app->import_swagger(result[0]);
+        }
+
+        app->open_swagger_file_dialog = std::nullopt;
+    }
+
 
     // SHORTCUTS
     //

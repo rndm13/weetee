@@ -19,7 +19,9 @@ target_link_libraries(http PUBLIC hello_imgui save_state partial_dict)
 add_library(test test.hpp test.cpp)
 target_link_libraries(test PUBLIC hello_imgui save_state partial_dict http json)
 
-add_library(app_state app_state.hpp app_state.cpp)
+add_library(app_state app_state.hpp)
+target_sources(app_state PUBLIC app_state.cpp app_state_swagger.cpp)
+
 target_link_libraries(app_state PUBLIC 
     hello_imgui textinputcombo
     save_state partial_dict test

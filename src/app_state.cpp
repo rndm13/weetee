@@ -10,6 +10,16 @@
 #include "utils.hpp"
 #include <variant>
 
+const Group AppState::root_initial = Group{
+    .parent_id = static_cast<size_t>(-1),
+    .id = 0,
+    .flags = GROUP_NONE,
+    .name = "root",
+    .cli_settings = ClientSettings{},
+    .children_ids = {},
+    .variables = Variables{},
+};
+
 bool AppState::is_running_tests() const noexcept {
     for (const auto& [id, result] : this->test_results) {
         if (result.running.load()) {

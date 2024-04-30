@@ -307,7 +307,6 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id);
 
-// TODO: add content type 
 template <RequestBodyType to_type> void request_body_convert(Test* test) noexcept {
     if (test->request.body.index() == request_body_index<to_type>()) {
         // If it's the same type don't convert
@@ -361,7 +360,8 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
     test->request.body_type = to_type;
 }
 
-std::string replace_variables(const Variables* vars, std::string target) noexcept;
+static constexpr size_t REPLACE_VARIABLES_MAX_NEST = 10;
+std::string replace_variables(const Variables* vars, const std::string& target, size_t recursion = 0) noexcept;
 
 // Prefer request_body output instead
 ContentType request_content_type(const Request* request) noexcept;
