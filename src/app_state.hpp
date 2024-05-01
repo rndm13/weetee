@@ -58,7 +58,7 @@ struct AppState {
     HelloImGui::RunnerParams* runner_params;
 
     bool tree_view_focused; // updated every frame
-    
+
     constexpr Group* root_group() noexcept {
         assert(this->tests.contains(0));
         assert(std::holds_alternative<Group>(this->tests[0]));
@@ -171,7 +171,9 @@ void run_test(AppState* app, const Test* test, const VariablesMap& vars) noexcep
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept;
 
 bool status_match(const std::string& match, int status) noexcept;
-const char* body_match(const VariablesMap& vars, const Test* test, const httplib::Result& result) noexcept;
-const char* header_match(const VariablesMap&, const Test* test, const httplib::Result& result) noexcept;
+const char* body_match(const VariablesMap& vars, const Test* test,
+                       const httplib::Result& result) noexcept;
+const char* header_match(const VariablesMap&, const Test* test,
+                         const httplib::Result& result) noexcept;
 void test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept;

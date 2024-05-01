@@ -321,6 +321,18 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->variables);
 }
 
+RequestBodyType request_body_type(const std::string& str) noexcept {
+    if (str == "application/json") {
+        return REQUEST_JSON;
+    } else if (str == "text/plain") {
+        return REQUEST_PLAIN;
+    } else if (str == "multipart/form-data") {
+        return REQUEST_MULTIPART;
+    } 
+
+    return REQUEST_OTHER;
+}
+
 ContentType request_content_type(const Request* request) noexcept {
     switch (request->body_type) {
     case REQUEST_JSON:

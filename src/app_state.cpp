@@ -18,7 +18,7 @@ const Group AppState::root_initial = Group{
     .name = "root",
     .cli_settings = ClientSettings{},
     .children_ids = {},
-    .variables = Variables{},
+    .variables = {},
 };
 
 bool AppState::is_running_tests() const noexcept {
@@ -611,6 +611,8 @@ const char* body_match(const VariablesMap& vars, const Test* test,
         return nullptr; // Skip checks
     }
 
+    // TODO: add wildcards to content-type matching (easy)
+
     if (result->has_header("Content-Type")) {
         ContentType to_match = response_content_type(&test->response);
 
@@ -623,14 +625,16 @@ const char* body_match(const VariablesMap& vars, const Test* test,
         if (!std::visit(EmptyVisitor(), test->response.body)) {
             if (test->response.body_type == RESPONSE_JSON) {
                 assert(std::holds_alternative<std::string>(test->response.body));
-                const char* err =
-                    json_validate(replace_variables(vars, std::get<std::string>(test->response.body)), result->body);
+                const char* err = json_validate(
+                    replace_variables(vars, std::get<std::string>(test->response.body)),
+                    result->body);
                 if (err) {
                     return err;
                 }
             } else {
                 assert(std::holds_alternative<std::string>(test->response.body));
-                if (replace_variables(vars, std::get<std::string>(test->response.body)) != result->body) {
+                if (replace_variables(vars, std::get<std::string>(test->response.body)) !=
+                    result->body) {
                     return "Unexpected Response Body";
                 }
             }
@@ -640,6 +644,7 @@ const char* body_match(const VariablesMap& vars, const Test* test,
     return nullptr;
 }
 
+// TODO: add wildcards to header matching (easy)
 const char* header_match(const VariablesMap& vars, const Test* test,
                          const httplib::Result& result) noexcept {
     httplib::Headers headers = response_headers(vars, test);
@@ -837,6 +842,8 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
         // add cli settings from parent to a copy
         test.cli_settings = app->get_cli_settings(test.id);
 
-        app->thr_pool.detach_task([app, test = std::move(test), vars = app->variables(test.id)]() { return run_test(app, &test, vars); });
+        app->thr_pool.detach_task([app, test = std::move(test), vars = app->variables(test.id)]() {
+            return run_test(app, &test, vars);
+        });
     }
 }

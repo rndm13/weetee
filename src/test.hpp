@@ -53,6 +53,8 @@ template <RequestBodyType type> constexpr auto request_body_inplace_index() noex
     return std::in_place_index<request_body_index<type>()>;
 }
 
+RequestBodyType request_body_type(const std::string& str) noexcept;
+
 struct Request {
     RequestBodyType body_type = REQUEST_JSON;
     std::string other_content_type;
