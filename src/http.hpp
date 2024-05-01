@@ -121,6 +121,7 @@ static ImVec4 HTTPTypeColor[] = {
 };
 
 bool http_type_button(HTTPType type) noexcept;
+HTTPType http_type_from_label(std::string) noexcept;
 
 static const char* HTTPStatusLabels[] = {
     reinterpret_cast<const char*>("100 Continue"),

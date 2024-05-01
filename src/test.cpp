@@ -458,6 +458,27 @@ ContentType request_content_type(const Request* request) noexcept {
     return {};
 }
 
+void test_resolve_url_params(Test* test) noexcept {
+    std::vector<std::string> param_names = parse_url_params(test->endpoint);
+
+    // add new params
+    for (const std::string& name : param_names) {
+        auto param = std::find_if(test->request.url_parameters.elements.begin(),
+                                  test->request.url_parameters.elements.end(),
+                                  [&name](const auto& elem) { return elem.key == name; });
+        if (param == test->request.url_parameters.elements.end()) {
+            test->request.url_parameters.elements.push_back({.key = name});
+        }
+    }
+
+    // remove old ones
+    std::erase_if(test->request.url_parameters.elements, [&param_names](const auto& elem) {
+        auto param = std::find_if(param_names.begin(), param_names.end(),
+                                  [&elem](const std::string& name) { return elem.key == name; });
+        return param == param_names.end();
+    });
+}
+
 httplib::Headers request_headers(const Variables* vars, const Test* test) noexcept {
     httplib::Headers result;
 
@@ -615,7 +636,8 @@ std::string replace_variables(const Variables* vars, const std::string& target,
                           [&name](const auto& elem) { return elem.enabled && elem.key == name; });
 
                       if (found != vars->elements.end()) {
-                          result.replace(begin, size + 1, replace_variables(vars, found->data.data, recursion + 1));
+                          result.replace(begin, size + 1,
+                                         replace_variables(vars, found->data.data, recursion + 1));
                       }
                   });
 

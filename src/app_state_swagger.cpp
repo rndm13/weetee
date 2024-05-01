@@ -1,4 +1,5 @@
 #include "app_state.hpp"
+#include "http.hpp"
 #include "nlohmann/json.hpp"
 
 using nljson = nlohmann::json;
@@ -51,6 +52,7 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
         for (auto it = vars.begin(); it != vars.end(); it++) {
             std::string key = it.key();
             const nljson& value = it.value();
+
             // NOTE: Missing enum and description
             if (value.contains("default")) {
                 root->variables->elements.push_back(VariablesElement{
@@ -62,6 +64,53 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
     }
 
     // NOTE: Missing description
+}
+
+void AppState::import_swagger_paths(const nljson& paths) noexcept {
+    for (auto path = paths.begin(); path != paths.end(); path++) {
+        std::string endpoint = "<url>" + path.key();
+
+        auto group_id = ++this->id_counter;
+        auto new_group = Group{
+            .parent_id = 0,
+            .id = group_id,
+            .flags = GROUP_OPEN,
+            .name = endpoint,
+            .cli_settings = {},
+            .children_ids = {},
+            .variables = {},
+        };
+
+        auto operations = path.value();
+        for (auto op = operations.begin(); op != operations.end(); op++) {
+            HTTPType type = http_type_from_label(op.key());
+            if (type == static_cast<HTTPType>(-1)) {
+                continue; // Skip over unknown
+            }
+
+            auto test_id = ++this->id_counter;
+            auto new_test = Test{
+                .parent_id = group_id,
+                .id = test_id,
+                .flags = TEST_NONE,
+
+                .type = type,
+                .endpoint = endpoint,
+
+                .request = {},
+                .response = {},
+
+                .cli_settings = {},
+            };
+            test_resolve_url_params(&new_test);
+
+            new_group.children_ids.push_back(test_id);
+            this->tests.emplace(test_id, new_test);
+        }
+
+        this->root_group()->children_ids.push_back(group_id);
+        this->tests.emplace(group_id, new_group);
+    }
 }
 
 void AppState::import_swagger(const std::string& swagger_file) noexcept {
@@ -92,10 +141,17 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
                 root->name = swagger["info"]["title"];
             }
         }
+
         if (swagger.contains("servers")) {
             import_swagger_servers(swagger["servers"]);
         } else {
             Log(LogLevel::Warning, "Failed to import swagger servers");
+        }
+
+        if (swagger.contains("paths")) {
+            import_swagger_paths(swagger["paths"]);
+        } else {
+            Log(LogLevel::Warning, "Failed to import swagger paths");
         }
     } catch (nljson::parse_error& pe) {
         Log(LogLevel::Error, "Failed to parse file %s: %s", swagger_file.c_str(), pe.what());

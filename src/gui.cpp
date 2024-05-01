@@ -1067,27 +1067,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 changed = true;
-                std::vector<std::string> param_names = parse_url_params(test.endpoint);
-
-                // add new params
-                for (const std::string& name : param_names) {
-                    auto param =
-                        std::find_if(test.request.url_parameters.elements.begin(),
-                                     test.request.url_parameters.elements.end(),
-                                     [&name](const auto& elem) { return elem.key == name; });
-                    if (param == test.request.url_parameters.elements.end()) {
-                        test.request.url_parameters.elements.push_back({.key = name});
-                    }
-                }
-
-                // remove old ones
-                std::erase_if(test.request.url_parameters.elements, [&param_names](
-                                                                        const auto& elem) {
-                    auto param =
-                        std::find_if(param_names.begin(), param_names.end(),
-                                     [&elem](const std::string& name) { return elem.key == name; });
-                    return param == param_names.end();
-                });
+                test_resolve_url_params(&test);
             }
 
             if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {

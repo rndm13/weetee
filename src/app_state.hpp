@@ -152,6 +152,7 @@ struct AppState {
     void open_file() noexcept;
     void post_open() noexcept;
 
+    void import_swagger_paths(const nlohmann::json&) noexcept;
     void import_swagger_servers(const nlohmann::json&) noexcept;
     void import_swagger(const std::string& filename) noexcept;
 

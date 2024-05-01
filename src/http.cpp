@@ -9,6 +9,18 @@ bool http_type_button(HTTPType type) noexcept {
     return result;
 }
 
+HTTPType http_type_from_label(std::string label) noexcept {
+    std::for_each(label.begin(), label.end(), [](char& c) {c = static_cast<char>(std::toupper(c));});
+
+    for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); ++i) {
+        if (HTTPTypeLabels[i] == label) {
+            return static_cast<HTTPType>(i);
+        }
+    }
+
+    return static_cast<HTTPType>(-1);
+}
+
 std::vector<std::string> parse_url_params(const std::string& endpoint) noexcept {
     std::vector<std::string> result;
     size_t index = 0;
@@ -60,3 +72,4 @@ ContentType parse_content_type(std::string input) noexcept {
 
     return {.type = type, .name = name};
 }
+

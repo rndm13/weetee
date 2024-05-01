@@ -195,8 +195,10 @@ struct Test {
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;
     void load(SaveState* save) noexcept;
+
 };
 
+void test_resolve_url_params(Test* test) noexcept;
 std::string request_endpoint(const Variables* vars, const Test* test) noexcept;
 
 enum TestResultStatus {
