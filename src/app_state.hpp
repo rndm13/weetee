@@ -6,6 +6,7 @@
 
 #include "BS_thread_pool.hpp"
 
+#include "partial_dict.hpp"
 #include "save_state.hpp"
 #include "test.hpp"
 
@@ -81,6 +82,12 @@ struct AppState {
     void post_undo() noexcept;
     void redo() noexcept;
 
+    VariablesMap variables(size_t id) const noexcept;
+    bool parent_disabled(size_t id) noexcept;
+    bool parent_selected(size_t id) const noexcept;
+    ClientSettings get_cli_settings(size_t id) const noexcept;
+    std::vector<size_t> select_top_layer() noexcept;
+
     struct SelectAnalysisResult {
         bool group = false;
         bool test = false;
@@ -90,13 +97,7 @@ struct AppState {
         size_t top_selected_count;
     };
 
-    const Variables* variables() const noexcept;
-
     SelectAnalysisResult select_analysis() const noexcept;
-    bool parent_disabled(size_t id) noexcept;
-    bool parent_selected(size_t id) const noexcept;
-    ClientSettings get_cli_settings(size_t id) const noexcept;
-    std::vector<size_t> select_top_layer() noexcept;
     template <bool select = true> void select_with_children(size_t id) noexcept {
         assert(this->tests.contains(id));
 
@@ -171,6 +172,6 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept;
 
 bool status_match(const std::string& match, int status) noexcept;
 const char* body_match(const Test* test, const httplib::Result& result) noexcept;
-const char* header_match(const Test* test, const httplib::Result& result) noexcept;
+const char* header_match(const VariablesMap&, const Test* test, const httplib::Result& result) noexcept;
 void test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result) noexcept;

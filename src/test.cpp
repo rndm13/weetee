@@ -1,131 +1,8 @@
 #include "test.hpp"
+#include "algorithm"
 #include "fstream"
 #include "http.hpp"
-#include "imgui.h"
 #include "partial_dict.hpp"
-#include <algorithm>
-
-#define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
-    do {                                                                                           \
-        bool flag = (flags) & (flag_name);                                                         \
-        if (ImGui::Checkbox((flag_label), &flag)) {                                                \
-            changed = true;                                                                        \
-            if (flag) {                                                                            \
-                (flags) |= (flag_name);                                                            \
-            } else {                                                                               \
-                (flags) &= ~(flag_name);                                                           \
-            }                                                                                      \
-        }                                                                                          \
-    } while (0);
-
-#define COMBO_VARIANT(label, variant, changed, variant_labels, variant_type)                       \
-    do {                                                                                           \
-        size_t type = (variant).index();                                                           \
-        if (ImGui::BeginCombo((label), (variant_labels)[type])) {                                  \
-            for (size_t i = 0; i < ARRAY_SIZE((variant_labels)); i++) {                            \
-                if (ImGui::Selectable((variant_labels)[i], i == type)) {                           \
-                    (changed) = true;                                                              \
-                    type = static_cast<size_t>(i);                                                 \
-                    (variant) = variant_from_index<variant_type>(type);                            \
-                }                                                                                  \
-            }                                                                                      \
-            ImGui::EndCombo();                                                                     \
-        }                                                                                          \
-    } while (0);
-
-bool show_auth(std::string label, AuthVariant* auth) noexcept {
-    bool changed = false;
-    COMBO_VARIANT(label.c_str(), *auth, changed, AuthTypeLabels, AuthVariant);
-    std::visit(overloaded{
-                   [&changed, &label](std::monostate) {},
-                   [&changed, &label](AuthBasic& basic) {
-                       changed |= ImGui::InputText((label + " Name").c_str(), &basic.name);
-                       changed |= ImGui::InputText((label + " Password").c_str(), &basic.password,
-                                                   ImGuiInputTextFlags_Password);
-                   },
-                   [&changed, &label](AuthBearerToken& token) {
-                       changed |= ImGui::InputText((label + " Token").c_str(), &token.token);
-                   },
-               },
-               *auth);
-
-    return changed;
-}
-
-bool show_client_settings(ClientSettings* set) noexcept {
-    assert(set);
-
-    bool changed = false;
-
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
-    if (set->flags & CLIENT_DYNAMIC) {
-        ImGui::SameLine();
-        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
-    }
-
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, "Follow Redirects");
-    changed |= show_auth("Authentication", &set->auth);
-
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_PROXY, "Set proxy");
-    if (set->flags & CLIENT_PROXY) {
-        changed |= ImGui::InputText("Proxy Host", &set->proxy_host);
-        changed |= ImGui::InputInt("Proxy Port", &set->proxy_port);
-        changed |= show_auth("Proxy Authentication", &set->proxy_auth);
-    }
-
-    return changed;
-}
-
-#undef CHECKBOX_FLAG
-#undef COMBO_MASK
-
-std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
-                                                            char end) noexcept {
-    std::vector<std::pair<size_t, size_t>> result;
-
-    size_t index = 0;
-    do {
-        size_t left_brace = str.find(begin, index);
-        size_t right_brace = str.find(end, left_brace);
-        if (left_brace == std::string::npos || right_brace == std::string::npos) {
-            break;
-        }
-
-        result.emplace_back(left_brace, right_brace - left_brace);
-        index = right_brace + 1;
-    } while (index < str.size());
-
-    return result;
-}
-
-std::string request_endpoint(const Variables* vars, const Test* test) noexcept {
-    assert(test);
-
-    std::string result = replace_variables(vars, test->endpoint);
-
-    if (test->request.url_parameters.empty()) {
-        return result;
-    }
-
-    std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
-    std::for_each(
-        params_idx.rbegin(), params_idx.rend(),
-        [&result, vars, &params = test->request.url_parameters](std::pair<size_t, size_t> range) {
-            auto [begin, size] = range;
-
-            std::string name = result.substr(begin + 1, size - 1);
-
-            auto found = std::find_if(
-                params.elements.begin(), params.elements.end(),
-                [&name](const auto& elem) { return elem.enabled && elem.key == name; });
-
-            if (found != params.elements.end()) {
-                result.replace(begin, size + 1, replace_variables(vars, found->data.data));
-            }
-        });
-
-    return result;
-}
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id) {
     assert(tests.contains(a_id));
@@ -146,13 +23,13 @@ bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id,
 
     return label_a > label_b;
 }
+
 void Request::save(SaveState* save) const noexcept {
     assert(save);
 
     save->save(this->body_type);
     save->save(this->body);
     save->save(this->cookies);
-    save->save(this->url_parameters);
     save->save(this->parameters);
     save->save(this->headers);
 }
@@ -167,9 +44,6 @@ bool Request::can_load(SaveState* save) const noexcept {
         return false;
     }
     if (!save->can_load(this->cookies)) {
-        return false;
-    }
-    if (!save->can_load(this->url_parameters)) {
         return false;
     }
     if (!save->can_load(this->parameters)) {
@@ -188,7 +62,6 @@ void Request::load(SaveState* save) noexcept {
     save->load(this->body_type);
     save->load(this->body);
     save->load(this->cookies);
-    save->load(this->url_parameters);
     save->load(this->parameters);
     save->load(this->headers);
 }
@@ -341,6 +214,7 @@ void Test::save(SaveState* save) const noexcept {
     save->save(this->type);
     save->save(this->flags);
     save->save(this->endpoint);
+    save->save(this->variables);
     save->save(this->request);
     save->save(this->response);
     save->save(this->cli_settings);
@@ -364,6 +238,9 @@ bool Test::can_load(SaveState* save) const noexcept {
     if (!save->can_load(this->endpoint)) {
         return false;
     }
+    if (!save->can_load(this->variables)) {
+        return false;
+    }
     if (!save->can_load(this->request)) {
         return false;
     }
@@ -384,6 +261,7 @@ void Test::load(SaveState* save) noexcept {
     save->load(this->type);
     save->load(this->flags);
     save->load(this->endpoint);
+    save->load(this->variables);
     save->load(this->request);
     save->load(this->response);
     save->load(this->cli_settings);
@@ -458,32 +336,44 @@ ContentType request_content_type(const Request* request) noexcept {
     return {};
 }
 
-void test_resolve_url_params(Test* test) noexcept {
+void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept {
     std::vector<std::string> param_names = parse_url_params(test->endpoint);
 
-    // add new params
+    // Add new required variables
     for (const std::string& name : param_names) {
-        auto param = std::find_if(test->request.url_parameters.elements.begin(),
-                                  test->request.url_parameters.elements.end(),
+        if (parent_vars.contains(name)) {
+            continue;
+        }
+
+        auto param = std::find_if(test->variables.elements.begin(), test->variables.elements.end(),
                                   [&name](const auto& elem) { return elem.key == name; });
-        if (param == test->request.url_parameters.elements.end()) {
-            test->request.url_parameters.elements.push_back({.key = name});
+
+        if (param == test->variables.elements.end()) {
+            test->variables.elements.push_back({
+                .flags = PARTIAL_DICT_ELEM_ENABLED | PARTIAL_DICT_ELEM_REQUIRED,
+                .key = name,
+            });
+        } else {
+            param->flags = PARTIAL_DICT_ELEM_ENABLED | PARTIAL_DICT_ELEM_REQUIRED;
         }
     }
 
-    // remove old ones
-    std::erase_if(test->request.url_parameters.elements, [&param_names](const auto& elem) {
+    // Remove required from old ones
+    std::for_each(test->variables.elements.begin(), test->variables.elements.end(), [&param_names, &parent_vars](auto& elem) {
         auto param = std::find_if(param_names.begin(), param_names.end(),
                                   [&elem](const std::string& name) { return elem.key == name; });
-        return param == param_names.end();
+
+        if (param == param_names.end() || parent_vars.contains(elem.key)) {
+            elem.flags &= ~PARTIAL_DICT_ELEM_REQUIRED;
+        }
     });
 }
 
-httplib::Headers request_headers(const Variables* vars, const Test* test) noexcept {
+httplib::Headers request_headers(const VariablesMap& vars, const Test* test) noexcept {
     httplib::Headers result;
 
     for (const auto& header : test->request.headers.elements) {
-        if (!header.enabled) {
+        if (!(header.flags & PARTIAL_DICT_ELEM_ENABLED)) {
             continue;
         }
         result.emplace(replace_variables(vars, header.key),
@@ -491,7 +381,7 @@ httplib::Headers request_headers(const Variables* vars, const Test* test) noexce
     }
 
     for (const auto& cookie : test->request.cookies.elements) {
-        if (!cookie.enabled) {
+        if (!(cookie.flags & PARTIAL_DICT_ELEM_ENABLED)) {
             continue;
         }
         result.emplace("Cookie", replace_variables(vars, cookie.key) + "=" +
@@ -501,11 +391,11 @@ httplib::Headers request_headers(const Variables* vars, const Test* test) noexce
     return result;
 }
 
-httplib::Params request_params(const Variables* vars, const Test* test) noexcept {
+httplib::Params request_params(const VariablesMap& vars, const Test* test) noexcept {
     httplib::Params result;
 
     for (const auto& param : test->request.parameters.elements) {
-        if (!param.enabled) {
+        if (!(param.flags & PARTIAL_DICT_ELEM_ENABLED)) {
             continue;
         }
         result.emplace(replace_variables(vars, param.key),
@@ -515,7 +405,7 @@ httplib::Params request_params(const Variables* vars, const Test* test) noexcept
     return result;
 }
 
-RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept {
+RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexcept {
     if (std::holds_alternative<std::string>(test->request.body)) {
         return {
             .content_type = to_string(request_content_type(&test->request)),
@@ -597,49 +487,23 @@ ContentType response_content_type(const Response* response) noexcept {
     return {};
 }
 
-httplib::Headers response_headers(const Variables* vars, const Test* test) noexcept {
+httplib::Headers response_headers(const VariablesMap& vars, const Test* test) noexcept {
     httplib::Headers result;
 
     for (const auto& header : test->response.headers.elements) {
-        if (!header.enabled) {
+        if (!(header.flags & PARTIAL_DICT_ELEM_ENABLED)) {
             continue;
         }
         result.emplace(header.key, replace_variables(vars, header.data.data));
     }
 
     for (const auto& cookie : test->response.cookies.elements) {
-        if (!cookie.enabled) {
+        if (!(cookie.flags & PARTIAL_DICT_ELEM_ENABLED)) {
             continue;
         }
         result.emplace("Set-Cookie", replace_variables(vars, cookie.key) + "=" +
                                          replace_variables(vars, cookie.data.data));
     }
-
-    return result;
-}
-
-std::string replace_variables(const Variables* vars, const std::string& target,
-                              size_t recursion) noexcept {
-    std::string result = target;
-    if (recursion > REPLACE_VARIABLES_MAX_NEST) {
-        return result;
-    }
-    std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '<', '>');
-    std::for_each(params_idx.rbegin(), params_idx.rend(),
-                  [&result, vars, recursion](std::pair<size_t, size_t> range) {
-                      auto [begin, size] = range;
-
-                      std::string name = result.substr(begin + 1, size - 1);
-
-                      auto found = std::find_if(
-                          vars->elements.begin(), vars->elements.end(),
-                          [&name](const auto& elem) { return elem.enabled && elem.key == name; });
-
-                      if (found != vars->elements.end()) {
-                          result.replace(begin, size + 1,
-                                         replace_variables(vars, found->data.data, recursion + 1));
-                      }
-                  });
 
     return result;
 }

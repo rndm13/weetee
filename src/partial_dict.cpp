@@ -178,3 +178,31 @@ void VariablesElementData::load(SaveState* save) noexcept {
 const char* VariablesElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
 };
+
+std::string replace_variables(const VariablesMap& vars, const std::string& target,
+                              size_t recursion) noexcept {
+    std::string result = target;
+    if (recursion > REPLACE_VARIABLES_MAX_NEST) {
+        return result;
+    }
+
+    std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
+    std::for_each(params_idx.rbegin(), params_idx.rend(),
+                  [&result, vars, recursion](std::pair<size_t, size_t> range) {
+                      auto [begin, size] = range;
+
+                      std::string name = result.substr(begin + 1, size - 1);
+
+                      if (vars.contains(name)) {
+                          std::string value = vars.at(name);
+                          if (value.empty()) {
+                              value = "<empty>";
+                          }
+
+                          result.replace(begin, size + 1,
+                                         replace_variables(vars, value, recursion + 1));
+                      }
+                  });
+
+    return result;
+}

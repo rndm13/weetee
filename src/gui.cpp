@@ -297,7 +297,7 @@ bool tree_view_show(AppState* app, Test& test, float indentation) noexcept {
         ImGui::EndDragDropTarget();
     }
 
-    changed = changed | tree_view_context(app, id);
+    changed |= tree_view_context(app, id);
 
     if (!changed && double_clicked) {
         app->editor_open_tab(test.id);
@@ -391,7 +391,7 @@ bool tree_view_show(AppState* app, Group& group, float indentation) noexcept {
     if (!changed && group.flags & GROUP_OPEN) {
         for (size_t child_id : group.children_ids) {
             assert(app->tests.contains(child_id));
-            changed = changed | tree_view_show(app, app->tests.at(child_id), indentation + 22);
+            changed |= tree_view_show(app, app->tests.at(child_id), indentation + 22);
             if (changed) {
                 break;
             }
@@ -421,7 +421,7 @@ void tree_view(AppState* app) noexcept {
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
         ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 0.0f);
-        changed = changed | tree_view_show(app, app->tests[0], 0.0f);
+        changed |= tree_view_show(app, app->tests[0], 0.0f);
         ImGui::EndTable();
     }
 
@@ -432,42 +432,48 @@ void tree_view(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
-bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem,
+                           const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
-        tooltip("%s", replace_variables(app->variables(), elem->data.data).c_str());
+        changed |= ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem,
+                           const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
-        tooltip("%s", replace_variables(app->variables(), elem->data.data).c_str());
+        changed |= ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
+                           const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
-        tooltip("%s", replace_variables(app->variables(), elem->data.data).c_str());
+        changed |= ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Variables*, VariablesElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, Variables*, VariablesElement* elem,
+                           const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
-        changed = changed | ImGui::InputText("##data", &elem->data.data);
+        changed |= ImGui::InputText("##data", &elem->data.data);
+        tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* elem) noexcept {
+bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* elem,
+                           const VariablesMap& vars) noexcept {
     bool changed = false;
 
     if (ImGui::TableNextColumn()) { // type
@@ -510,7 +516,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
                 elem->data.resolve_content_type();
             }
 
-            tooltip("%s", replace_variables(app->variables(), *str).c_str());
+            tooltip("%s", replace_variables(vars, *str).c_str());
         } break;
         case MPBD_FILES:
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
@@ -546,12 +552,14 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
     if (ImGui::TableNextColumn()) { // content-type
         ImGui::SetNextItemWidth(-1);
         changed |= ImGui::InputText("##content_type", &elem->data.content_type);
-        tooltip("%s", replace_variables(app->variables(), elem->data.content_type).c_str());
+        tooltip("%s", replace_variables(vars, elem->data.content_type).c_str());
     }
     return changed;
 }
 
-bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
+bool editor_test_request(AppState* app, Test& test) noexcept {
+    const VariablesMap& vars = app->variables(test.id);
+
     bool changed = false;
 
     if (ImGui::BeginTabBar("Request")) {
@@ -600,12 +608,11 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
             switch (test.request.body_type) {
             case REQUEST_JSON:
             case REQUEST_PLAIN:
-            case REQUEST_OTHER:
-                {
+            case REQUEST_OTHER: {
                 ImGui::PushFont(app->mono_font);
                 std::string* body = &std::get<std::string>(test.request.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
-                tooltip("%s", replace_variables(app->variables(), *body).c_str());
+                tooltip("%s", replace_variables(vars, *body).c_str());
 
                 // TODO: This crashes when opened with response partial_dicts at the same time
                 // if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem()) {
@@ -624,40 +631,31 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
 
             case REQUEST_MULTIPART:
                 auto& mpb = std::get<MultiPartBody>(test.request.body);
-                changed = changed | partial_dict(app, &mpb, "##body");
+                changed |= partial_dict(app, &mpb, "##body", vars);
                 break;
             }
             ImGui::EndTabItem();
         }
 
-        if (!test.request.url_parameters.empty() && ImGui::BeginTabItem("URL Parameters")) {
-            ImGui::PushFont(app->mono_font);
-            static constexpr int32_t flags =
-                PARTIAL_DICT_NO_DELETE | PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_CREATE;
-            changed = changed |
-                      partial_dict(app, &test.request.url_parameters, "##url_parameters", flags);
-            ImGui::PopFont();
-            ImGui::EndTabItem();
-        }
         if (ImGui::BeginTabItem("Parameters")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.parameters, "##parameters");
+            changed |= partial_dict(app, &test.request.parameters, "##parameters", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.cookies, "##cookies");
+            changed |= partial_dict(app, &test.request.cookies, "##cookies", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed =
-                changed | partial_dict(app, &test.request.headers, "##headers", PARTIAL_DICT_NONE,
-                                       RequestHeadersLabels, ARRAY_SIZE(RequestHeadersLabels));
+            changed = changed | partial_dict(app, &test.request.headers, "##headers", vars,
+                                             PARTIAL_DICT_NONE, RequestHeadersLabels,
+                                             ARRAY_SIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -669,7 +667,9 @@ bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept {
     return changed;
 }
 
-bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
+bool editor_test_response(AppState* app, Test& test) noexcept {
+    const VariablesMap& vars = app->variables(test.id);
+
     bool changed = false;
 
     if (ImGui::BeginTabBar("Response")) {
@@ -726,7 +726,7 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
 
                 std::string* body = &std::get<std::string>(test.response.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
-                tooltip("%s", replace_variables(app->variables(), *body).c_str());
+                tooltip("%s", replace_variables(vars, *body).c_str());
 
                 // TODO: This crashes when opened with request partial_dicts at the same time
                 // if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem()) {
@@ -749,16 +749,16 @@ bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Set Cookies")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.response.cookies, "##cookies");
+            changed |= partial_dict(app, &test.response.cookies, "##cookies", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed =
-                changed | partial_dict(app, &test.response.headers, "##headers", PARTIAL_DICT_NONE,
-                                       ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
+            changed |=
+                partial_dict(app, &test.response.headers, "##headers", vars, PARTIAL_DICT_NONE,
+                             ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -798,6 +798,49 @@ ModalResult unsaved_changes(AppState*) noexcept {
     }
 
     return result;
+}
+
+bool editor_auth(std::string label, AuthVariant* auth) noexcept {
+    bool changed = false;
+    COMBO_VARIANT(label.c_str(), *auth, changed, AuthTypeLabels, AuthVariant);
+    std::visit(overloaded{
+                   [&changed, &label](std::monostate) {},
+                   [&changed, &label](AuthBasic& basic) {
+                       changed |= ImGui::InputText((label + " Name").c_str(), &basic.name);
+                       changed |= ImGui::InputText((label + " Password").c_str(), &basic.password,
+                                                   ImGuiInputTextFlags_Password);
+                   },
+                   [&changed, &label](AuthBearerToken& token) {
+                       changed |= ImGui::InputText((label + " Token").c_str(), &token.token);
+                   },
+               },
+               *auth);
+
+    return changed;
+}
+
+bool editor_client_settings(ClientSettings* set) noexcept {
+    assert(set);
+
+    bool changed = false;
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
+    if (set->flags & CLIENT_DYNAMIC) {
+        ImGui::SameLine();
+        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
+    }
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, "Follow Redirects");
+    changed |= editor_auth("Authentication", &set->auth);
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_PROXY, "Set proxy");
+    if (set->flags & CLIENT_PROXY) {
+        changed |= ImGui::InputText("Proxy Host", &set->proxy_host);
+        changed |= ImGui::InputInt("Proxy Port", &set->proxy_port);
+        changed |= editor_auth("Proxy Authentication", &set->proxy_auth);
+    }
+
+    return changed;
 }
 
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept {
@@ -1048,6 +1091,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Test>(*edit));
     auto& test = std::get<Test>(*edit);
 
+    VariablesMap vars = app->variables(test.id);
+
     bool changed = false;
 
     EditorTabResult result = TAB_NONE;
@@ -1062,12 +1107,13 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             // Don't display tooltip while endpoint is being edited
             if (!ImGui::IsItemActive() &&
                 ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip("%s", request_endpoint(app->variables(), &test).c_str());
+                ImGui::SetTooltip(
+                    "%s", replace_variables(vars, test.endpoint).c_str());
             }
 
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 changed = true;
-                test_resolve_url_params(&test);
+                test_resolve_url_variables(app->variables(test.parent_id), &test);
             }
 
             if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
@@ -1080,8 +1126,16 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 ImGui::EndCombo();
             }
 
-            changed = changed | editor_test_request(app, tab, test);
-            changed = changed | editor_test_response(app, tab, test);
+            if (ImGui::TreeNode("Variables")) {
+                ImGui::PushFont(app->mono_font);
+                changed = changed | partial_dict(app, &test.variables, "##variables", vars);
+                ImGui::PopFont();
+
+                ImGui::TreePop();
+            }
+
+            changed |= editor_test_request(app, test);
+            changed |= editor_test_response(app, test);
 
             ImGui::Text("Client Settings");
             ImGui::Separator();
@@ -1101,7 +1155,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             }
 
             ClientSettings cli_settings = app->get_cli_settings(test.id);
-            if (show_client_settings(&cli_settings)) {
+            if (editor_client_settings(&cli_settings)) {
                 changed = true;
                 test.cli_settings = cli_settings;
             }
@@ -1133,6 +1187,8 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Group>(*edit));
     auto& group = std::get<Group>(*edit);
 
+    VariablesMap vars = app->variables(group.id);
+
     bool changed = false;
 
     EditorTabResult result = TAB_NONE;
@@ -1144,14 +1200,14 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
-            tooltip("%s", replace_variables(app->variables(), group.name).c_str());
+            tooltip("%s", replace_variables(app->variables(group.id), group.name).c_str());
 
-            if (group.variables.has_value()) {
-                ImGui::Text("Variables");
+            if (ImGui::TreeNode("Variables")) {
                 ImGui::SameLine();
                 hint("To use a variable, write it's name anywhere incapsulated in <>\nexample: "
                      "<host>/api/test/");
-                partial_dict(app, &group.variables.value(), "variables");
+                partial_dict(app, &group.variables, "variables", vars);
+                ImGui::TreePop();
             }
 
             ImGui::Text("Client Settings");
@@ -1172,7 +1228,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             }
 
             ClientSettings cli_settings = app->get_cli_settings(group.id);
-            if (show_client_settings(&cli_settings)) {
+            if (editor_client_settings(&cli_settings)) {
                 changed = true;
                 group.cli_settings = cli_settings;
             }
@@ -1375,7 +1431,8 @@ void open_file_dialog(AppState* app) noexcept {
 }
 
 void open_swagger_file_dialog(AppState* app) noexcept {
-    app->open_swagger_file_dialog = pfd::open_file("Open Swagger JSON File", ".", {"All Files", "*.json"}, pfd::opt::none);
+    app->open_swagger_file_dialog =
+        pfd::open_file("Open Swagger JSON File", ".", {"All Files", "*.json"}, pfd::opt::none);
 }
 
 void show_menus(AppState* app) noexcept {
@@ -1481,7 +1538,6 @@ void show_gui(AppState* app) noexcept {
 
         app->open_swagger_file_dialog = std::nullopt;
     }
-
 
     // SHORTCUTS
     //

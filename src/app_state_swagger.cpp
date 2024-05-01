@@ -4,28 +4,6 @@
 
 using nljson = nlohmann::json;
 
-std::string replace_swagger_variables(const std::string& swagger_vars) noexcept {
-    size_t idx = 0;
-    std::string result = swagger_vars;
-    do {
-        size_t left = result.find("{", idx);
-        if (left == std::string::npos) {
-            break;
-        }
-        size_t right = result.find("}", left);
-        if (right == std::string::npos) {
-            break;
-        }
-
-        result[left] = '<';
-        result[right] = '>';
-
-        idx = right + 1;
-    } while (idx < swagger_vars.size());
-
-    return result;
-}
-
 void AppState::import_swagger_servers(const nljson& servers) noexcept {
     if (servers.size() <= 0) {
         Log(LogLevel::Warning, "Failed to import swagger servers");
@@ -34,10 +12,10 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
 
     const auto& server = servers[0];
     if (server.contains("url")) {
-        std::string url = replace_swagger_variables(server["url"]);
+        std::string url = server["url"];
 
         Group* root = this->root_group();
-        root->variables->elements.push_back(VariablesElement{
+        root->variables.elements.push_back(VariablesElement{
             .key = "url",
             .data = {.data = url},
         });
@@ -55,9 +33,9 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
 
             // NOTE: Missing enum and description
             if (value.contains("default")) {
-                root->variables->elements.push_back(VariablesElement{
+                root->variables.elements.push_back(VariablesElement{
                     .key = it.key(),
-                    .data = {.data = replace_swagger_variables(value["default"])},
+                    .data = {.data = value["default"]},
                 });
             }
         }
@@ -68,19 +46,26 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
 
 void AppState::import_swagger_paths(const nljson& paths) noexcept {
     for (auto path = paths.begin(); path != paths.end(); path++) {
-        std::string endpoint = "<url>" + path.key();
+        std::string endpoint = "{url}" + path.key();
 
         auto group_id = ++this->id_counter;
-        auto new_group = Group{
-            .parent_id = 0,
-            .id = group_id,
-            .flags = GROUP_OPEN,
-            .name = endpoint,
-            .cli_settings = {},
-            .children_ids = {},
-            .variables = {},
-        };
+        {
+            auto new_group = Group{
+                .parent_id = 0,
+                .id = group_id,
+                .flags = GROUP_OPEN,
+                .name = endpoint,
+                .cli_settings = {},
+                .children_ids = {},
+                .variables = {},
+            };
+            this->root_group()->children_ids.push_back(group_id);
+            this->tests.emplace(group_id, new_group);
+        }
+        Group& new_group = std::get<Group>(this->tests.at(group_id));
 
+        // TODO: Servers, Parameters
+        auto group_vars = this->variables(group_id);
         auto operations = path.value();
         for (auto op = operations.begin(); op != operations.end(); op++) {
             HTTPType type = http_type_from_label(op.key());
@@ -89,27 +74,28 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
             }
 
             auto test_id = ++this->id_counter;
-            auto new_test = Test{
-                .parent_id = group_id,
-                .id = test_id,
-                .flags = TEST_NONE,
+            {
+                auto new_test = Test{
+                    .parent_id = group_id,
+                    .id = test_id,
+                    .flags = TEST_NONE,
 
-                .type = type,
-                .endpoint = endpoint,
+                    .type = type,
+                    .endpoint = endpoint,
 
-                .request = {},
-                .response = {},
+                    .request = {},
+                    .response = {},
 
-                .cli_settings = {},
-            };
-            test_resolve_url_params(&new_test);
+                    .cli_settings = {},
+                };
 
-            new_group.children_ids.push_back(test_id);
-            this->tests.emplace(test_id, new_test);
+                new_group.children_ids.push_back(test_id);
+                this->tests.emplace(test_id, new_test);
+            }
+            Test& new_test = std::get<Test>(this->tests.at(test_id));
+
+            test_resolve_url_variables(group_vars, &new_test);
         }
-
-        this->root_group()->children_ids.push_back(group_id);
-        this->tests.emplace(group_id, new_group);
     }
 }
 
@@ -131,6 +117,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         this->id_counter = 0;
         this->test_results.clear();
         this->filtered_tests.clear();
+        this->opened_editor_tabs.clear();
 
         // pushes initial undo state
         this->undo_history.reset_undo_history(this);

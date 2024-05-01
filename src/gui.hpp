@@ -4,9 +4,38 @@
 #include "imgui_stdlib.h"
 
 #include "app_state.hpp"
+#include "partial_dict.hpp"
 #include "test.hpp"
 
 #include "cmath"
+
+#define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
+    do {                                                                                           \
+        bool flag = (flags) & (flag_name);                                                         \
+        if (ImGui::Checkbox((flag_label), &flag)) {                                                \
+            changed = true;                                                                        \
+            if (flag) {                                                                            \
+                (flags) |= (flag_name);                                                            \
+            } else {                                                                               \
+                (flags) &= ~(flag_name);                                                           \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0);
+
+#define COMBO_VARIANT(label, variant, changed, variant_labels, variant_type)                       \
+    do {                                                                                           \
+        size_t type = (variant).index();                                                           \
+        if (ImGui::BeginCombo((label), (variant_labels)[type])) {                                  \
+            for (size_t i = 0; i < ARRAY_SIZE((variant_labels)); i++) {                            \
+                if (ImGui::Selectable((variant_labels)[i], i == type)) {                           \
+                    (changed) = true;                                                              \
+                    type = static_cast<size_t>(i);                                                 \
+                    (variant) = variant_from_index<variant_type>(type);                            \
+                }                                                                                  \
+            }                                                                                      \
+            ImGui::EndCombo();                                                                     \
+        }                                                                                          \
+    } while (0);
 
 bool tree_view_context(AppState* app, size_t nested_test_id) noexcept;
 bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept;
@@ -17,33 +46,37 @@ void tree_view(AppState* app) noexcept;
 
 template <typename Data>
 bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem,
-                      int32_t flags, const char** hints = nullptr,
-                      const size_t hint_count = 0) noexcept {
+                      const VariablesMap& vars, int32_t flags, const char** hints,
+                      const size_t hint_count) noexcept {
     bool changed = false;
     auto select_only_this = [pd, elem]() {
         for (auto& e : pd->elements) {
-            e.selected = false;
+            e.flags &= ~PARTIAL_DICT_ELEM_SELECTED;
         }
-        elem->selected = true;
+        elem->flags |= PARTIAL_DICT_ELEM_SELECTED;
     };
+
     if (ImGui::TableNextColumn()) {
         if (flags & PARTIAL_DICT_NO_ENABLE) {
             ImGui::BeginDisabled();
         }
-        changed = changed | ImGui::Checkbox("##enabled", &elem->enabled);
+        CHECKBOX_FLAG(elem->flags, changed, PARTIAL_DICT_ELEM_ENABLED, "##enabled");
         if (flags & PARTIAL_DICT_NO_ENABLE) {
             ImGui::EndDisabled();
         }
+
         ImGui::SameLine();
-        if (ImGui::Selectable("##element", elem->selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
+        if (ImGui::Selectable("##element", elem->flags & PARTIAL_DICT_ELEM_SELECTED,
+                              SELECTABLE_FLAGS, ImVec2(0, 0))) {
             if (ImGui::GetIO().KeyCtrl) {
-                elem->selected = !elem->selected;
+                elem->flags ^= PARTIAL_DICT_ELEM_SELECTED;
             } else {
                 select_only_this();
             }
         }
+
         if (ImGui::BeginPopupContextItem()) {
-            if (!elem->selected) {
+            if (!(elem->flags & PARTIAL_DICT_ELEM_SELECTED)) {
                 select_only_this();
             }
 
@@ -51,52 +84,66 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 changed = true;
 
                 for (auto& e : pd->elements) {
-                    e.to_delete = e.selected;
+                    if (e.flags & PARTIAL_DICT_ELEM_SELECTED) {
+                        e.flags |= PARTIAL_DICT_ELEM_TO_DELETE;
+                    }
                 }
             }
 
             if (!(flags & PARTIAL_DICT_NO_ENABLE) && ImGui::MenuItem("Enable")) {
                 for (auto& e : pd->elements) {
-                    e.enabled = e.enabled || e.selected;
+                    if (e.flags & PARTIAL_DICT_ELEM_SELECTED) {
+                        e.flags |= PARTIAL_DICT_ELEM_ENABLED;
+                    }
                 }
             }
 
             if (!(flags & PARTIAL_DICT_NO_ENABLE) && ImGui::MenuItem("Disable")) {
                 for (auto& e : pd->elements) {
-                    e.enabled = e.enabled && !e.selected;
+                    if (e.flags & PARTIAL_DICT_ELEM_SELECTED) {
+                        e.flags &= ~PARTIAL_DICT_ELEM_ENABLED;
+                    }
                 }
             }
+
             ImGui::EndPopup();
         }
     }
-    if (ImGui::TableNextColumn()) { // name
-        if (hint_count > 0) {
+
+    if (ImGui::TableNextColumn()) { // Name
+        // If no key change is set, can use regular text input
+        if (hint_count > 0 && !(flags & PARTIAL_DICT_NO_KEY_CHANGE)) {
             assert(hints);
             if (!elem->cfs) {
                 elem->cfs = ComboFilterState{};
             }
             ImGui::SetNextItemWidth(-1);
-            changed =
-                changed | ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
+            changed |= ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
         } else {
             ImGui::SetNextItemWidth(-1);
-            changed = changed | ImGui::InputText("##name", &elem->key);
+            changed |=
+                ImGui::InputText("##name", &elem->key,
+                                 (flags & PARTIAL_DICT_NO_KEY_CHANGE) ? ImGuiInputTextFlags_ReadOnly
+                                                                      : ImGuiInputTextFlags_None);
         }
     }
 
-    changed = changed | partial_dict_data_row(app, pd, elem);
+    changed |= partial_dict_data_row(app, pd, elem, vars);
     return changed;
 }
 
-bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem) noexcept;
-bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem) noexcept;
-bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem) noexcept;
-bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem) noexcept;
-bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem) noexcept;
+bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem, const VariablesMap&) noexcept;
+bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem,
+                           const VariablesMap&) noexcept;
+bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem, const VariablesMap&) noexcept;
+bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem,
+                           const VariablesMap&) noexcept;
+bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem,
+                           const VariablesMap&) noexcept;
 
 template <typename Data>
-bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
-                  int32_t flags = PARTIAL_DICT_NONE, const char** hints = nullptr,
+bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const VariablesMap& vars,
+                  uint8_t flags = PARTIAL_DICT_NONE, const char** hints = nullptr,
                   const size_t hint_count = 0) noexcept {
     using DataType = PartialDict<Data>::DataType;
 
@@ -117,16 +164,23 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
             auto* elem = &pd->elements[i];
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(i));
-            changed = partial_dict_row(app, pd, elem, flags, hints, hint_count);
-            deletion |= elem->to_delete;
+
+            uint8_t row_flags = flags | (elem->flags & PARTIAL_DICT_ELEM_REQUIRED
+                                             ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE | PARTIAL_DICT_NO_KEY_CHANGE
+                                             : PARTIAL_DICT_NONE);
+
+            changed |= partial_dict_row(app, pd, elem, vars, row_flags, hints, hint_count);
+            deletion |= elem->flags & PARTIAL_DICT_ELEM_TO_DELETE;
             ImGui::PopID();
         }
 
         if (deletion) {
             changed = true;
 
-            pd->elements.erase(std::remove_if(pd->elements.begin(), pd->elements.end(),
-                                              [](const auto& elem) { return elem.to_delete; }));
+            pd->elements.erase(
+                std::remove_if(pd->elements.begin(), pd->elements.end(), [](const auto& elem) {
+                    return elem.flags & PARTIAL_DICT_ELEM_TO_DELETE;
+                }));
         }
 
         if (!(flags & PARTIAL_DICT_NO_CREATE)) {
@@ -138,7 +192,10 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
 
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(pd->elements.size()));
-            if (partial_dict_row(app, pd, &pd->add_element, flags, hints, hint_count)) {
+
+            uint8_t row_flags = flags | PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE;
+
+            if (partial_dict_row(app, pd, &pd->add_element, vars, row_flags, hints, hint_count)) {
                 changed = true;
 
                 pd->elements.push_back(pd->add_element);
@@ -153,8 +210,8 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label,
     return changed;
 }
 
-bool editor_test_request(AppState* app, EditorTab, Test& test) noexcept;
-bool editor_test_response(AppState* app, EditorTab, Test& test) noexcept;
+bool editor_test_request(AppState* app, Test& test) noexcept;
+bool editor_test_response(AppState* app, Test& test) noexcept;
 
 enum ModalResult : uint8_t {
     MODAL_NONE,
@@ -164,6 +221,9 @@ enum ModalResult : uint8_t {
 };
 
 ModalResult unsaved_changes(AppState*) noexcept;
+
+bool editor_auth(std::string label, AuthVariant* auth) noexcept;
+bool editor_client_settings(ClientSettings* set) noexcept;
 
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept;
 void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept;

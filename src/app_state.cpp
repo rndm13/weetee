@@ -5,10 +5,11 @@
 #include "hello_imgui/hello_imgui_logger.h"
 #include "http.hpp"
 #include "iterator"
+#include "partial_dict.hpp"
 #include "test.hpp"
 #include "utility"
 #include "utils.hpp"
-#include <variant>
+#include <algorithm>
 
 const Group AppState::root_initial = Group{
     .parent_id = static_cast<size_t>(-1),
@@ -159,6 +160,45 @@ void AppState::redo() noexcept {
     this->post_undo();
 }
 
+VariablesMap AppState::variables(size_t id) const noexcept {
+    VariablesMap result = {};
+
+    while (this->tests.contains(id)) {
+        const auto& test = this->tests.at(id);
+        const Variables& vars_input = std::visit(VariablesVisitor(), test);
+        std::for_each(vars_input.elements.begin(), vars_input.elements.end(), [&result](const VariablesElement& elem){
+            if (elem.flags & PARTIAL_DICT_ELEM_ENABLED && !result.contains(elem.key)) {
+                result.emplace(elem.key, elem.data.data);
+            }
+        });
+
+        id = std::visit(ParentIDVisitor(), test);
+    }
+    
+    return result;
+}
+
+bool AppState::parent_disabled(size_t id) noexcept {
+    // OPTIM: maybe add some cache for every test that clears every frame?
+    // if performance becomes a problem
+    assert(this->tests.contains(id));
+    id = std::visit(ParentIDVisitor(), this->tests.at(id));
+
+    while (id != -1ull) {
+        assert(this->tests.contains(id));
+        NestedTest* nt = &this->tests.at(id);
+
+        assert(std::holds_alternative<Group>(*nt));
+        const Group& group = std::get<Group>(*nt);
+        if (group.flags & GROUP_DISABLED) {
+            return true;
+        }
+
+        id = group.parent_id;
+    }
+    return false;
+}
+
 bool AppState::parent_selected(size_t id) const noexcept {
     assert(this->tests.contains(id));
 
@@ -242,27 +282,6 @@ AppState::SelectAnalysisResult AppState::select_analysis() const noexcept {
     return result;
 }
 
-bool AppState::parent_disabled(size_t id) noexcept {
-    // OPTIM: maybe add some cache for every test that clears every frame?
-    // if performance becomes a problem
-    assert(this->tests.contains(id));
-    id = std::visit(ParentIDVisitor(), this->tests.at(id));
-
-    while (id != -1ull) {
-        assert(this->tests.contains(id));
-        NestedTest* nt = &this->tests.at(id);
-
-        assert(std::holds_alternative<Group>(*nt));
-        const Group& group = std::get<Group>(*nt);
-        if (group.flags & GROUP_DISABLED) {
-            return true;
-        }
-
-        id = group.parent_id;
-    }
-    return false;
-}
-
 void AppState::move_children_up(Group* group) noexcept {
     assert(group);
     assert(group->id != 0); // not root
@@ -341,13 +360,15 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     assert(count >= 1);
 
     auto id = ++this->id_counter;
-    auto new_group = Group{.parent_id = parent_group.id,
-                           .id = id,
-                           .flags = GROUP_OPEN,
-                           .name = "New group",
-                           .cli_settings = {},
-                           .children_ids = {},
-                           .variables = {}};
+    auto new_group = Group{
+        .parent_id = parent_group.id,
+        .id = id,
+        .flags = GROUP_OPEN,
+        .name = "New group",
+        .cli_settings = {},
+        .children_ids = {},
+        .variables = {},
+    };
 
     // Copy selected to new group
     std::copy_if(this->selected_tests.begin(), this->selected_tests.end(),
@@ -582,6 +603,7 @@ bool status_match(const std::string& match, int status) noexcept {
     return true;
 }
 
+// TODO: replace variables
 const char* body_match(const Test* test, const httplib::Result& result) noexcept {
     if (test->response.body_type == RESPONSE_ANY) {
         return nullptr; // skip checks
@@ -618,10 +640,11 @@ const char* body_match(const Test* test, const httplib::Result& result) noexcept
     return nullptr;
 }
 
-const char* header_match(const Variables* vars, const Test* test, const httplib::Result& result) noexcept {
+const char* header_match(const VariablesMap& vars, const Test* test,
+                         const httplib::Result& result) noexcept {
     httplib::Headers headers = response_headers(vars, test);
     for (const auto& elem : test->response.cookies.elements) {
-        if (elem.enabled) {
+        if (elem.flags & PARTIAL_DICT_ELEM_ENABLED) {
             headers.emplace("Set-Cookie", elem.key + "=" + elem.data.data);
         }
     }
@@ -660,7 +683,7 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result,
             break;
         }
 
-        err = header_match(app->variables(), test, http_result);
+        err = header_match(app->variables(test->id), test, http_result);
         if (err) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
@@ -683,14 +706,16 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result,
 }
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept {
-    const auto params = request_params(app->variables(), test);
-    const auto headers = request_headers(app->variables(), test);
+    auto vars = app->variables(test->id);
 
-    const auto req_body = request_body(app->variables(), test);
+    const auto params = request_params(vars, test);
+    const auto headers = request_headers(vars, test);
+
+    const auto req_body = request_body(vars, test);
     std::string content_type = req_body.content_type;
     std::string body = req_body.body;
 
-    auto [host, dest] = split_endpoint(request_endpoint(app->variables(), test));
+    auto [host, dest] = split_endpoint(replace_variables(vars, test->endpoint));
 
     std::string params_dest = httplib::append_query_params(dest, params);
 
@@ -814,13 +839,4 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
 
         app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
     }
-}
-
-const Variables* AppState::variables() const noexcept {
-    assert(this->tests.contains(0));
-    auto& root = this->tests.at(0);
-    assert(std::holds_alternative<Group>(root));
-    auto& root_group = std::get<Group>(root);
-    assert(root_group.variables.has_value());
-    return &root_group.variables.value();
 }

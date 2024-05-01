@@ -73,3 +73,22 @@ std::vector<std::string> split_string(const std::string& str, const std::string&
 
     return result;
 }
+
+std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
+                                                            char end) noexcept {
+    std::vector<std::pair<size_t, size_t>> result;
+
+    size_t index = 0;
+    do {
+        size_t left_brace = str.find(begin, index);
+        size_t right_brace = str.find(end, left_brace);
+        if (left_brace == std::string::npos || right_brace == std::string::npos) {
+            break;
+        }
+
+        result.emplace_back(left_brace, right_brace - left_brace);
+        index = right_brace + 1;
+    } while (index < str.size());
+
+    return result;
+}

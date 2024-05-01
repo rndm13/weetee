@@ -6,7 +6,6 @@
 
 #include "string"
 #include "variant"
-using json = nlohmann::json;
 
 // returns an error message, if there isn't returns null pointer
 const char* json_format(std::string* json) noexcept;

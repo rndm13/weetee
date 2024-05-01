@@ -10,12 +10,18 @@
 #include "string"
 #include "vector"
 
-template <typename Data> struct PartialDictElement {
-    bool enabled = true;
+enum PartialDictElementFlags : uint8_t {
+    PARTIAL_DICT_ELEM_ENABLED = 1 << 0,
 
-    // do not save
-    bool selected = false;
-    bool to_delete = false;
+    PARTIAL_DICT_ELEM_SELECTED = 1 << 1,
+    PARTIAL_DICT_ELEM_TO_DELETE = 1 << 2,
+
+    // No key change and no delete/disable
+    PARTIAL_DICT_ELEM_REQUIRED = 1 << 3, 
+};
+
+template <typename Data> struct PartialDictElement {
+    uint8_t flags = PARTIAL_DICT_ELEM_ENABLED; 
 
     // save
     std::string key;
@@ -27,7 +33,7 @@ template <typename Data> struct PartialDictElement {
     void save(SaveState* save) const noexcept {
         assert(save);
 
-        save->save(this->enabled);
+        save->save(this->flags);
         save->save(this->key);
         save->save(this->data);
     }
@@ -35,7 +41,7 @@ template <typename Data> struct PartialDictElement {
     bool can_load(SaveState* save) const noexcept {
         assert(save);
 
-        if (!save->can_load(this->enabled)) {
+        if (!save->can_load(this->flags)) {
             return false;
         }
         if (!save->can_load(this->key)) {
@@ -51,7 +57,7 @@ template <typename Data> struct PartialDictElement {
     void load(SaveState* save) noexcept {
         assert(save);
 
-        save->load(this->enabled);
+        save->load(this->flags);
         save->load(this->key);
         save->load(this->data);
     }
@@ -92,11 +98,12 @@ template <typename Data> struct PartialDict {
     constexpr bool empty() const noexcept { return this->elements.empty(); }
 };
 
-enum PartialDictFlags {
+enum PartialDictFlags : uint8_t {
     PARTIAL_DICT_NONE = 0,
     PARTIAL_DICT_NO_DELETE = 1 << 0,
     PARTIAL_DICT_NO_CREATE = 1 << 1,
     PARTIAL_DICT_NO_ENABLE = 1 << 2,
+    PARTIAL_DICT_NO_KEY_CHANGE = 1 << 3,
 };
 
 enum MultiPartBodyDataType : uint8_t {
@@ -189,3 +196,7 @@ struct VariablesElementData {
 };
 using Variables = PartialDict<VariablesElementData>;
 using VariablesElement = Variables::ElementType;
+using VariablesMap = std::unordered_map<std::string, std::string>;
+
+static constexpr size_t REPLACE_VARIABLES_MAX_NEST = 10;
+std::string replace_variables(const VariablesMap& vars, const std::string& target, size_t recursion = 0) noexcept;

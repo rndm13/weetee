@@ -56,6 +56,8 @@ using SetIDVisitor = SETTER_VISITOR(id, size_t);
 using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id);
 using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t);
 
+using VariablesVisitor = GETTER_VISITOR(variables);
+
 using LabelVisitor = COPY_GETTER_VISITOR(label());
 using EmptyVisitor = COPY_GETTER_VISITOR(empty());
 
@@ -123,4 +125,7 @@ auto variant_cast(const std::variant<Args...>& v) -> variant_cast_proxy<Args...>
 }
 
 std::string file_name(const std::string& path) noexcept;
-std::vector<std::string> split_string(const std::string& str, const std::string& separator) noexcept;
+std::vector<std::string> split_string(const std::string& str,
+                                      const std::string& separator) noexcept;
+std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
+                                                            char end) noexcept;

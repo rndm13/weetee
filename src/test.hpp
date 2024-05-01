@@ -2,9 +2,6 @@
 
 #include "hello_imgui/hello_imgui_logger.h"
 
-#include "imgui.h"
-#include "imgui_stdlib.h"
-
 #include "httplib.h"
 
 #include "nlohmann/json.hpp"
@@ -63,7 +60,6 @@ struct Request {
 
     Cookies cookies;
     Parameters parameters;
-    Parameters url_parameters; // can only be added/removed when endpoint changes
     Headers headers;
 
     void save(SaveState* save) const noexcept;
@@ -170,8 +166,6 @@ struct ClientSettings {
     }
 };
 
-bool show_client_settings(ClientSettings* set) noexcept;
-
 enum TestFlags : uint8_t {
     TEST_NONE = 0,
     TEST_DISABLED = 1 << 0,
@@ -185,6 +179,7 @@ struct Test {
     HTTPType type;
     std::string endpoint;
 
+    Variables variables;
     Request request;
     Response response;
 
@@ -198,8 +193,7 @@ struct Test {
 
 };
 
-void test_resolve_url_params(Test* test) noexcept;
-std::string request_endpoint(const Variables* vars, const Test* test) noexcept;
+void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept;
 
 enum TestResultStatus {
     STATUS_RUNNING,
@@ -262,7 +256,7 @@ struct Group {
     std::optional<ClientSettings> cli_settings;
 
     std::vector<size_t> children_ids;
-    std::optional<Variables> variables;
+    Variables variables;
 
     std::string label() const noexcept;
 
@@ -321,14 +315,14 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 
         std::unordered_multimap<std::string, MultiPartBodyData> map;
         for (const auto& elem : mpb.elements) {
-            if (!elem.enabled) {
+            if (!(elem.flags & PARTIAL_DICT_ELEM_ENABLED)) {
                 continue;
             }
             map.emplace(elem.key, elem.data.data);
         }
 
-        nlohmann::json json = map;
-        test->request.body = json.dump(4);
+        nlohmann::json map_json = map;
+        test->request.body = map_json.dump(4);
     }
 
     if constexpr (to_type == REQUEST_MULTIPART) {
@@ -362,20 +356,16 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
     test->request.body_type = to_type;
 }
 
-static constexpr size_t REPLACE_VARIABLES_MAX_NEST = 10;
-std::string replace_variables(const Variables* vars, const std::string& target, size_t recursion = 0) noexcept;
-
 // Prefer request_body output instead
 ContentType request_content_type(const Request* request) noexcept;
-httplib::Headers request_headers(const Variables* vars, const Test* test) noexcept;
-httplib::Params request_params(const Variables* vars, const Test* test) noexcept;
+httplib::Headers request_headers(const VariablesMap& vars, const Test* test) noexcept;
+httplib::Params request_params(const VariablesMap& vars, const Test* test) noexcept;
 
 struct RequestBodyResult {
     std::string content_type;
     std::string body;
 };
 
-RequestBodyResult request_body(const Variables* vars, const Test* test) noexcept;
-
-httplib::Headers response_headers(const Variables* vars, const Test* test) noexcept;
+RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexcept;
+httplib::Headers response_headers(const VariablesMap& vars, const Test* test) noexcept;
 ContentType response_content_type(const Response* response) noexcept;
