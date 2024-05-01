@@ -166,15 +166,17 @@ VariablesMap AppState::variables(size_t id) const noexcept {
     while (this->tests.contains(id)) {
         const auto& test = this->tests.at(id);
         const Variables& vars_input = std::visit(VariablesVisitor(), test);
-        std::for_each(vars_input.elements.begin(), vars_input.elements.end(), [&result](const VariablesElement& elem){
-            if (elem.flags & PARTIAL_DICT_ELEM_ENABLED && !result.contains(elem.key)) {
-                result.emplace(elem.key, elem.data.data);
-            }
-        });
+        std::for_each(vars_input.elements.begin(), vars_input.elements.end(),
+                      [&result](const VariablesElement& elem) {
+                          if (elem.flags & PARTIAL_DICT_ELEM_ENABLED &&
+                              !result.contains(elem.key)) {
+                              result.emplace(elem.key, elem.data.data);
+                          }
+                      });
 
         id = std::visit(ParentIDVisitor(), test);
     }
-    
+
     return result;
 }
 
@@ -603,18 +605,16 @@ bool status_match(const std::string& match, int status) noexcept {
     return true;
 }
 
-// TODO: replace variables
-const char* body_match(const Test* test, const httplib::Result& result) noexcept {
+const char* body_match(const VariablesMap& vars, const Test* test,
+                       const httplib::Result& result) noexcept {
     if (test->response.body_type == RESPONSE_ANY) {
-        return nullptr; // skip checks
+        return nullptr; // Skip checks
     }
 
     if (result->has_header("Content-Type")) {
         ContentType to_match = response_content_type(&test->response);
 
         ContentType content_type = parse_content_type(result->get_header_value("Content-Type"));
-        // printf("%s / %s = %s / %s\n", to_match.type.c_str(), to_match.name.c_str(),
-        // content_type.type.c_str(), content_type.name.c_str());
 
         if (to_match != content_type) {
             return "Unexpected Response Content-Type";
@@ -624,13 +624,13 @@ const char* body_match(const Test* test, const httplib::Result& result) noexcept
             if (test->response.body_type == RESPONSE_JSON) {
                 assert(std::holds_alternative<std::string>(test->response.body));
                 const char* err =
-                    json_validate(&std::get<std::string>(test->response.body), &result->body);
+                    json_validate(replace_variables(vars, std::get<std::string>(test->response.body)), result->body);
                 if (err) {
                     return err;
                 }
             } else {
                 assert(std::holds_alternative<std::string>(test->response.body));
-                if (std::get<std::string>(test->response.body) != result->body) {
+                if (replace_variables(vars, std::get<std::string>(test->response.body)) != result->body) {
                     return "Unexpected Response Body";
                 }
             }
@@ -667,7 +667,7 @@ const char* header_match(const VariablesMap& vars, const Test* test,
 }
 
 void test_analysis(AppState* app, const Test* test, TestResult* test_result,
-                   httplib::Result&& http_result) noexcept {
+                   httplib::Result&& http_result, const VariablesMap& vars) noexcept {
     switch (http_result.error()) {
     case httplib::Error::Success: {
         if (!status_match(test->response.status, http_result->status)) {
@@ -676,14 +676,14 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result,
             break;
         }
 
-        char const* err = body_match(test, http_result);
+        char const* err = body_match(vars, test, http_result);
         if (err) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
             break;
         }
 
-        err = header_match(app->variables(test->id), test, http_result);
+        err = header_match(vars, test, http_result);
         if (err) {
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
@@ -814,7 +814,7 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     return result;
 }
 
-void run_test(AppState* app, const Test* test) noexcept {
+void run_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept {
     httplib::Result result = make_request(app, test);
     if (!app->test_results.contains(test->id)) {
         return;
@@ -822,7 +822,7 @@ void run_test(AppState* app, const Test* test) noexcept {
 
     TestResult* test_result = &app->test_results.at(test->id);
     test_result->running.store(false);
-    test_analysis(app, test, test_result, std::move(result));
+    test_analysis(app, test, test_result, std::move(result), vars);
 }
 
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
@@ -837,6 +837,6 @@ void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
         // add cli settings from parent to a copy
         test.cli_settings = app->get_cli_settings(test.id);
 
-        app->thr_pool.detach_task([app, test = std::move(test)]() { return run_test(app, &test); });
+        app->thr_pool.detach_task([app, test = std::move(test), vars = app->variables(test.id)]() { return run_test(app, &test, vars); });
     }
 }

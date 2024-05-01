@@ -8,8 +8,8 @@
 #include "variant"
 
 // returns an error message, if there isn't returns null pointer
-const char* json_format(std::string* json) noexcept;
-const char* json_validate(const std::string*, const std::string*) noexcept;
+const char* json_format(std::string& json) noexcept;
+const char* json_validate(const std::string&, const std::string&) noexcept;
 
 // partial specialization (full specialization works too)
 namespace nlohmann {
