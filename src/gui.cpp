@@ -1097,7 +1097,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(
-            tab.name.c_str(), &open,
+            (tab.name + "###" + to_string(tab.original_idx)).c_str(), &open,
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
@@ -1192,7 +1192,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(
-            tab.name.c_str(), &open,
+            (tab.name + "###" + to_string(tab.original_idx)).c_str(), &open,
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
