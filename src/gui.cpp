@@ -1202,7 +1202,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
             if (ImGui::TreeNode("Variables")) {
                 ImGui::SameLine();
-                hint("To use a variable, write it's name anywhere incapsulated in {}.\nExample:\n"
+                hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
                      "{host}/api/test/");
                 partial_dict(app, &group.variables, "variables", vars);
                 ImGui::TreePop();
