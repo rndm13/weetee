@@ -175,6 +175,10 @@ void VariablesElementData::load(SaveState* save) noexcept {
     save->load(data);
 }
 
+bool VariablesElementData::operator!=(const VariablesElementData& other) const noexcept {
+    return this->data != other.data;
+}
+
 const char* VariablesElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
 };

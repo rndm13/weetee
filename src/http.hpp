@@ -47,6 +47,7 @@ static const char* RequestHeadersLabels[] = {
     reinterpret_cast<const char*>("Via"),
     reinterpret_cast<const char*>("Warning"),
 };
+
 static const char* ResponseHeadersLabels[] = {
     reinterpret_cast<const char*>("Accept-CH"),
     reinterpret_cast<const char*>("Access-Control-Allow-Origin"),

@@ -69,9 +69,11 @@ struct Request {
     void load(SaveState* save) noexcept;
 
     constexpr bool operator==(const Request& other) const noexcept {
-        return this->body_type == other.body_type && this->body == other.body &&
-               this->cookies == other.cookies && this->headers == other.headers &&
-               this->parameters == other.parameters;
+        return this->body_type == other.body_type &&
+               (this->body_type != REQUEST_OTHER || other.body_type != REQUEST_OTHER ||
+                this->other_content_type == other.other_content_type) &&
+               this->body == other.body && this->cookies == other.cookies &&
+               this->headers == other.headers && this->parameters == other.parameters;
     }
 };
 
@@ -91,7 +93,7 @@ static const char* ResponseBodyTypeLabels[] = {
 };
 
 // I'm too lazy to change it...
-using ResponseBody = std::variant<std::string>; 
+using ResponseBody = std::variant<std::string>;
 
 struct Response {
     std::string status = "2XX"; // a string so user can get hints and write their own status code
@@ -107,9 +109,11 @@ struct Response {
     void load(SaveState* save) noexcept;
 
     constexpr bool operator==(const Response& other) const noexcept {
-        return this->status == other.status && this->body_type == other.body_type &&
-               this->body == other.body && this->cookies == other.cookies &&
-               this->headers == other.headers;
+        return this->status == other.status &&
+               (this->body_type != RESPONSE_OTHER || other.body_type != RESPONSE_OTHER ||
+                this->other_content_type == other.other_content_type) &&
+               this->body_type == other.body_type && this->body == other.body &&
+               this->cookies == other.cookies && this->headers == other.headers;
     }
 };
 
@@ -192,7 +196,6 @@ struct Test {
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;
     void load(SaveState* save) noexcept;
-
 };
 
 void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept;
@@ -287,7 +290,7 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
         const auto& test_b = std::get<Test>(*b);
         return test_a.endpoint == test_b.endpoint && test_a.type == test_b.type &&
                test_a.request == test_b.request && test_a.response == test_b.response &&
-               test_a.cli_settings == test_b.cli_settings;
+               test_a.cli_settings == test_b.cli_settings && test_a.variables == test_b.variables;
     } break;
     case GROUP_VARIANT:
         assert(std::holds_alternative<Group>(*a));
@@ -295,7 +298,8 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 
         const auto& group_a = std::get<Group>(*a);
         const auto& group_b = std::get<Group>(*b);
-        return group_a.name == group_b.name && group_a.cli_settings == group_b.cli_settings;
+        return group_a.name == group_b.name && group_a.cli_settings == group_b.cli_settings &&
+               group_a.variables == group_b.variables;
         break;
     }
 

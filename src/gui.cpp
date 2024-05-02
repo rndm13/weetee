@@ -1107,8 +1107,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             // Don't display tooltip while endpoint is being edited
             if (!ImGui::IsItemActive() &&
                 ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                ImGui::SetTooltip(
-                    "%s", replace_variables(vars, test.endpoint).c_str());
+                ImGui::SetTooltip("%s", replace_variables(vars, test.endpoint).c_str());
             }
 
             if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -1430,21 +1429,39 @@ void open_file_dialog(AppState* app) noexcept {
     app->open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
 }
 
-void open_swagger_file_dialog(AppState* app) noexcept {
-    app->open_swagger_file_dialog =
-        pfd::open_file("Open Swagger JSON File", ".", {"All Files", "*.json"}, pfd::opt::none);
+void import_swagger_file_dialog(AppState* app) noexcept {
+    app->import_swagger_file_dialog =
+        pfd::open_file("Import Swagger JSON File", ".", {"JSON", "*.json"}, pfd::opt::none);
+}
+
+void export_swagger_file_dialog(AppState* app) noexcept {
+    app->export_swagger_file_dialog =
+        pfd::save_file("Export To", ".", {"JSON", "*.json"}, pfd::opt::none);
 }
 
 void show_menus(AppState* app) noexcept {
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Save As", "Ctrl + Shift + S")) {
             save_as_file_dialog(app);
-        } else if (ImGui::MenuItem("Save", "Ctrl + S")) {
+        }
+        if (ImGui::MenuItem("Save", "Ctrl + S")) {
             save_file_dialog(app);
-        } else if (ImGui::MenuItem("Open", "Ctrl + O")) {
+        }
+        if (ImGui::MenuItem("Open", "Ctrl + O")) {
             open_file_dialog(app);
-        } else if (ImGui::MenuItem("Import Swagger JSON")) {
-            open_swagger_file_dialog(app);
+        }
+        if (ImGui::BeginMenu("Import")) {
+            if (ImGui::MenuItem("Swagger JSON")) {
+                import_swagger_file_dialog(app);
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Export")) {
+            if (ImGui::MenuItem("Swagger JSON")) {
+                export_swagger_file_dialog(app);
+            }
+            ImGui::EndMenu();
         }
         ImGui::EndMenu();
     }
@@ -1528,15 +1545,26 @@ void show_gui(AppState* app) noexcept {
     }
 
     // Importing
-    if (app->open_swagger_file_dialog.has_value() && app->open_swagger_file_dialog->ready()) {
-        auto result = app->open_swagger_file_dialog->result();
+    if (app->import_swagger_file_dialog.has_value() && app->import_swagger_file_dialog->ready()) {
+        auto result = app->import_swagger_file_dialog->result();
 
         if (result.size() > 0) {
             Log(LogLevel::Debug, "filename: %s", result[0].c_str());
             app->import_swagger(result[0]);
         }
 
-        app->open_swagger_file_dialog = std::nullopt;
+        app->import_swagger_file_dialog = std::nullopt;
+    }
+
+    // Exporting
+    if (app->export_swagger_file_dialog.has_value() && app->export_swagger_file_dialog->ready()) {
+        if (app->export_swagger_file_dialog->result().size() > 0) {
+            std::string filename = app->export_swagger_file_dialog->result();
+            Log(LogLevel::Debug, "filename: %s", filename.c_str());
+            app->export_swagger(filename);
+        }
+
+        app->export_swagger_file_dialog = std::nullopt;
     }
 
     // SHORTCUTS

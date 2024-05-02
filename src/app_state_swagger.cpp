@@ -64,11 +64,13 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
             value = to_string(param.at("example"));
         } else if (param.contains("examples")) {
             const auto& examples = param.at("examples");
-            // TODO: Multiple tests for each example
-            if (examples.size() > 0) {
-                if (examples.at(0).contains("value")) {
-                    value = examples.at(0).at("value");
+            for (auto example = examples.begin(); example != examples.end(); example++) {
+                if (example.value().contains("value")) {
+                    value = example.value().at("value");
                 }
+
+                // TODO: Multiple tests for each example
+                break;
             }
         } else if (param.contains("schema")) {
             value = to_string(param.at("schema"));
@@ -78,14 +80,14 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
         // variables resolve and you should provide a way to change it for user
         if (in == "query") {
             params.elements.push_back({
-                    .key = name,
-                    .data = {.data = value},
-                    });
+                .key = name,
+                .data = {.data = value},
+            });
         } else {
             vars.elements.push_back({
-                    .key = name,
-                    .data = {.data = value},
-                    });
+                .key = name,
+                .data = {.data = value},
+            });
         }
     }
     return {vars, params};
@@ -154,13 +156,14 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
             if (op.value().contains("parameters")) {
                 auto [vars, params] = import_swagger_parameters(op.value().at("parameters"));
                 new_test.variables = vars;
-                std::copy(params.elements.begin(), params.elements.end(), std::back_inserter(new_test.request.parameters.elements));
+                std::copy(params.elements.begin(), params.elements.end(),
+                          std::back_inserter(new_test.request.parameters.elements));
             }
 
             test_resolve_url_variables(group_vars, &new_test);
 
-            // Body 
-        
+            // Body
+
             if (op.value().contains("requestBody")) {
                 if (op.value().at("requestBody").contains("content")) {
                     const auto& content = op.value().at("requestBody").at("content");
@@ -232,9 +235,69 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         } else {
             Log(LogLevel::Warning, "Failed to import swagger paths");
         }
+
+        Log(LogLevel::Info, "Successfully imported swagger file '%s'", swagger_file.c_str());
     } catch (nljson::parse_error& pe) {
         Log(LogLevel::Error, "Failed to parse file %s: %s", swagger_file.c_str(), pe.what());
     } catch (std::exception& e) {
-        Log(LogLevel::Error, "Failed to import swagger: %s", swagger_file.c_str(), e.what());
+        Log(LogLevel::Error, "Failed to import swagger: %s", e.what());
+    }
+    // TOOD: Add refs to swagger
+}
+
+void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
+    // TODO: Export swagger paths
+}
+
+void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {
+    VariablesMap root_vars = this->variables(0);
+    if (root_vars.contains("url")) {
+        nljson servers = {};
+        servers.emplace_back();                             // Make a single element
+        servers.back().emplace("url", root_vars.at("url")); // Add to it a url
+
+        nljson variables = {};
+        for (const auto& [key, value] : root_vars) {
+            if (key == "url") {
+                continue;
+            }
+
+            nljson var = {};
+            var.emplace("default", value);
+
+            variables.emplace(key, var);
+        }
+        swagger.emplace("variables", variables);
+
+        swagger.emplace("servers", servers);
+    }
+}
+
+void AppState::export_swagger(const std::string& swagger_file) const noexcept {
+    std::ofstream out(swagger_file);
+    if (!out) {
+        Log(LogLevel::Error, "Failed to open file %s", swagger_file.c_str());
+        return;
+    }
+
+    try {
+        nljson swagger = {};
+        swagger.emplace("openapi", "3.1.0"); // Version
+
+        {
+            nljson info = {};
+            info.emplace("title", this->root_group()->name);
+            info.emplace("version", "0.1.0"); // TODO: Allow user to change this
+
+            swagger.emplace("info", info);
+        }
+
+        this->export_swagger_servers(swagger);
+        this->export_swagger_paths(swagger);
+
+        out << swagger.dump(2);
+        Log(LogLevel::Info, "Successfully exported swagger to '%s'", swagger_file.c_str());
+    } catch (std::exception& e) {
+        Log(LogLevel::Error, "Failed to export swagger: %s", e.what());
     }
 }

@@ -63,7 +63,7 @@ template <typename Data> struct PartialDictElement {
     }
 
     bool operator!=(const PartialDictElement<Data>& other) const noexcept {
-        return this->data != other.data;
+        return this->flags != other.flags || this->data != other.data;
     }
 };
 
