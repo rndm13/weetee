@@ -577,7 +577,7 @@ void AppState::open_file() noexcept {
     }
 
     Log(LogLevel::Info, "Loading from '%s': %zuB", this->filename->c_str(), save.original_size);
-    if (save.can_load(*this) && save.load_idx == save.original_size - 1) {
+    if (!save.can_load(*this) || save.load_idx != save.original_size) {
         Log(LogLevel::Error, "Failed to load, likely file is invalid");
         return;
     }

@@ -242,7 +242,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     } catch (std::exception& e) {
         Log(LogLevel::Error, "Failed to import swagger: %s", e.what());
     }
-    // TOOD: Add refs to swagger
+    // TODO: Add refs to swagger
 }
 
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {

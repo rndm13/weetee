@@ -90,7 +90,11 @@ struct SaveState {
         bool has_value;
         this->load(has_value);
 
-        return !has_value || this->can_load(opt.value());
+        if (has_value) {
+            return this->can_load(T{});
+        }
+
+        return true;
     }
 
     template <class T> void load(std::optional<T>& opt) noexcept {
@@ -159,9 +163,11 @@ struct SaveState {
     template <class... T> bool can_load(const std::variant<T...>& variant) noexcept {
         size_t index;
         this->load(index);
-        if (index != std::variant_npos) {
-            return false;
-        }
+
+        // if (index != std::variant_npos) {
+        //     return false;
+        // }
+
         if (!valid_variant_from_index<std::variant<T...>>(index)) {
             return false;
         }

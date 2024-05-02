@@ -15,9 +15,6 @@
 //
 //
 // TODO: Add fuzz tests (very very hard)
-//
-// 
-// TODO: Fix can_load... (bullshit)
 
 void post_init(AppState* app) noexcept;
 
