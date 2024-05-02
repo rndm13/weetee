@@ -51,13 +51,13 @@ void post_init(AppState* app) noexcept {
     Log(LogLevel::Debug, "Theme: %s",
         ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
 
-#if !CPPHTTPLIB_OPENSSL_SUPPORT
+#ifndef CPPHTTPLIB_OPENSSL_SUPPORT
     Log(LogLevel::Warning, "Compiled without OpenSSL support! HTTPS will not work!");
 #endif
-#if !CPPHTTPLIB_ZLIB_SUPPORT
+#ifndef CPPHTTPLIB_ZLIB_SUPPORT
     Log(LogLevel::Warning, "Compiled without ZLib support! ZLib compression will not work!");
 #endif
-#if !CPPHTTPLIB_BROTLI_SUPPORT
+#ifndef CPPHTTPLIB_BROTLI_SUPPORT
     Log(LogLevel::Warning, "Compiled without Brotli support! Brotli compression will not work!");
 #endif
 

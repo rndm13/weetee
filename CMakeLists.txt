@@ -9,6 +9,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op")
 
+set(OPENSSL_USE_STATIC_LIBS TRUE)
+set(HTTPLIB_COMPILE ON)
+
+set(JSON_BuildTests OFF CACHE INTERNAL "")
+set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
+
+set(BS_thread_pool_SOURCE_DIR external/thread-pool/)
+
 # Add imgui_bundle
 # =================
 # 1/  Option 1: if you added imgui_bundle in a subfolder, you can add it to your project with:
@@ -35,41 +43,36 @@ imgui_bundle_add_app(weetee src/main.cpp)
 target_link_libraries(weetee PRIVATE
     "$<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>")
 
-# Add https and json
+# Add HTTPS
 # ==================
 
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-find_package(OpenSSL)
-if (${OpenSSL_FOUND})
-    target_link_libraries(
-        weetee PRIVATE
-        OpenSSL::Crypto
-        OpenSSL::SSL)
-    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "OPENSSL=1")
-else (${OpenSSL_FOUND})
-    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "OPENSSL=0")
-endif (${OpenSSL_FOUND})
-
-set(HTTPLIB_COMPILE ON)
 add_subdirectory(external/cpp-httplib)
 
-target_link_libraries(weetee PRIVATE httplib::httplib)
+if (HTTPLIB_IS_USING_OPENSSL)
+    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "CPPHTTPLIB_OPENSSL_SUPPORT=1")
+endif()
+if (HTTPLIB_IS_USING_ZLIB)
+    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "CPPHTTPLIB_ZLIB_SUPPORT=1")
+endif()
+if (HTTPLIB_IS_USING_BROTLI)
+    set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "CPPHTTPLIB_BROTLI_SUPPORT=1")
+endif()
 
 # Add json 
 # =============== 
 
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
-add_subdirectory(external/json)
+if (NOT TARGET nlohmann_json) 
+    add_subdirectory(external/json)
+    add_library(nljson ALIAS nlohmann_json::nlohmann_json)
+else()
+    add_library(nljson ALIAS nlohmann_json)
+endif()
 
 # Add Thread Pool
 # ===============
 
-set(BS_thread_pool_SOURCE_DIR external/thread-pool/)
 add_library(BS_thread_pool INTERFACE)
 target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}/include)
-
-target_link_libraries(weetee PRIVATE BS_thread_pool)
 
 # Add src
 # ==================

@@ -834,6 +834,7 @@ void run_test(AppState* app, const Test* test, const VariablesMap& vars) noexcep
 void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
     app->thr_pool.purge();
     app->test_results.clear();
+
     app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
         true;
 

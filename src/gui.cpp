@@ -824,11 +824,13 @@ bool editor_client_settings(ClientSettings* set) noexcept {
 
     bool changed = false;
 
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
-    if (set->flags & CLIENT_DYNAMIC) {
-        ImGui::SameLine();
-        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
-    }
+    // CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
+    // if (set->flags & CLIENT_DYNAMIC) {
+    //     ImGui::SameLine();
+    //     CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
+    // }
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_COMPRESSION, "Enable Compression");
 
     CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, "Follow Redirects");
     changed |= editor_auth("Authentication", &set->auth);

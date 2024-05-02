@@ -1,4 +1,3 @@
 .cache
 build*/
 cmake-build*/
-external/

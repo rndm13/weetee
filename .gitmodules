@@ -1,0 +1,12 @@
+[submodule "external/cpp-httplib"]
+	path = external/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "external/thread-pool"]
+	path = external/thread-pool
+	url = https://github.com/bshoshany/thread-pool.git
+[submodule "external/json"]
+	path = external/json
+	url = https://github.com/nlohmann/json.git
+[submodule "external/imgui_bundle"]
+	path = external/imgui_bundle
+	url = https://github.com/pthom/imgui_bundle.git

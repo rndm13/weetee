@@ -5,7 +5,7 @@ add_library(save_state save_state.hpp save_state.cpp)
 target_link_libraries(save_state PUBLIC utils hello_imgui portable_file_dialogs)
 
 add_library(json STATIC json.hpp json.cpp)
-target_link_libraries(json PUBLIC nlohmann_json::nlohmann_json utils)
+target_link_libraries(json PUBLIC nljson utils)
 
 add_library(textinputcombo textinputcombo.hpp textinputcombo.cpp)
 target_link_libraries(textinputcombo PUBLIC hello_imgui)
@@ -31,7 +31,7 @@ add_library(gui gui.hpp gui.cpp)
 target_link_libraries(gui PUBLIC 
     textinputcombo
     hello_imgui portable_file_dialogs imspinner
-    save_state partial_dict test
+    save_state partial_dict test app_state
     json http BS_thread_pool)
 
 add_library(gui_tests gui_tests.hpp gui_tests.cpp)
