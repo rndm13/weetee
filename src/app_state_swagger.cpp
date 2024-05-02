@@ -1,6 +1,7 @@
 #include "app_state.hpp"
 #include "http.hpp"
 #include "nlohmann/json.hpp"
+#include "partial_dict.hpp"
 #include "test.hpp"
 
 using nljson = nlohmann::json;
@@ -45,6 +46,51 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
     // NOTE: Missing description
 }
 
+std::pair<Variables, Parameters> import_swagger_parameters(const nljson& parameters) noexcept {
+    Variables vars;
+    Parameters params;
+
+    for (const auto& param : parameters) {
+        if (!param.contains("name") || !param.contains("in")) {
+            continue;
+        }
+
+        std::string name = param.at("name");
+        std::string in = param.at("in");
+
+        std::string value = "";
+
+        if (param.contains("example")) {
+            value = to_string(param.at("example"));
+        } else if (param.contains("examples")) {
+            const auto& examples = param.at("examples");
+            // TODO: Multiple tests for each example
+            if (examples.size() > 0) {
+                if (examples.at(0).contains("value")) {
+                    value = examples.at(0).at("value");
+                }
+            }
+        } else if (param.contains("schema")) {
+            value = to_string(param.at("schema"));
+        }
+
+        // Don't put required on this one as it won't remain required after url
+        // variables resolve and you should provide a way to change it for user
+        if (in == "query") {
+            params.elements.push_back({
+                    .key = name,
+                    .data = {.data = value},
+                    });
+        } else {
+            vars.elements.push_back({
+                    .key = name,
+                    .data = {.data = value},
+                    });
+        }
+    }
+    return {vars, params};
+}
+
 void AppState::import_swagger_paths(const nljson& paths) noexcept {
     for (auto path = paths.begin(); path != paths.end(); path++) {
         std::string endpoint = "{url}" + path.key();
@@ -65,7 +111,14 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
         }
         Group& new_group = std::get<Group>(this->tests.at(group_id));
 
-        // TODO: Servers, Parameters
+        Parameters group_params;
+        if (path.value().contains("parameters")) {
+            path.value().at("parameters");
+
+            auto [vars, params] = import_swagger_parameters(path.value().at("parameters"));
+            new_group.variables = vars;
+            group_params = params;
+        }
 
         auto group_vars = this->variables(group_id);
         const auto& operations = path.value();
@@ -85,7 +138,7 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
                     .type = type,
                     .endpoint = endpoint,
 
-                    .request = {},
+                    .request = {.parameters = group_params},
                     .response = {},
 
                     .cli_settings = {},
@@ -99,46 +152,9 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
             // Variables/Parameters
 
             if (op.value().contains("parameters")) {
-                for (const auto& param : op.value().at("parameters")) {
-                    if (!param.contains("name") || !param.contains("in")) {
-                        continue;
-                    }
-
-                    std::string name = param.at("name");
-                    std::string in = param.at("in");
-
-                    std::string value = "";
-
-                    if (param.contains("example")) {
-                        value = to_string(param.at("example"));
-                    } else if (param.contains("examples")) {
-                        const auto& examples = param.at("examples");
-                        // TODO: Multiple tests for each example
-                        if (examples.size() > 0) {
-                            if (examples.at(0).contains("value")) {
-                                value = examples.at(0).at("value");
-                            }
-                        }
-                    } else if (param.contains("schema")) {
-                        value = to_string(param.at("schema"));
-                    }
-
-                    // TODO: Explode
-
-                    // Don't put required on this one as it won't remain required after url
-                    // variables resolve and you should provide a way to change it for user
-                    if (in == "query") {
-                        new_test.request.parameters.elements.push_back({
-                            .key = name,
-                            .data = {.data = value},
-                        });
-                    } else {
-                        new_test.variables.elements.push_back({
-                            .key = name,
-                            .data = {.data = value},
-                        });
-                    }
-                }
+                auto [vars, params] = import_swagger_parameters(op.value().at("parameters"));
+                new_test.variables = vars;
+                std::copy(params.elements.begin(), params.elements.end(), std::back_inserter(new_test.request.parameters.elements));
             }
 
             test_resolve_url_variables(group_vars, &new_test);
@@ -195,7 +211,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         this->filtered_tests.clear();
         this->opened_editor_tabs.clear();
 
-        // pushes initial undo state
+        // Pushes initial undo state
         this->undo_history.reset_undo_history(this);
 
         if (swagger.contains("info")) {

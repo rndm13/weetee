@@ -65,6 +65,10 @@ std::string to_string(const ContentType& cont) noexcept { return cont.type + '/'
 
 ContentType parse_content_type(std::string input) noexcept {
     size_t slash = input.find("/");
+    if (slash == std::string::npos) {
+        return {"*", "*"};
+    }
+
     size_t end = input.find(";");
 
     std::string type = input.substr(0, slash);
@@ -72,4 +76,3 @@ ContentType parse_content_type(std::string input) noexcept {
 
     return {.type = type, .name = name};
 }
-

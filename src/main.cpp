@@ -7,8 +7,7 @@
 #include "gui.hpp"
 #include "gui_tests.hpp"
 
-// TODO: Swagger file import/export (medium)
-// TODO: Add swagger descriptions (medium)
+// TODO: Swagger file export (medium)
 //
 //
 // TODO: Make dynamic tests work (and with keep alive connection) (very hard)

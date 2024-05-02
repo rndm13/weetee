@@ -204,12 +204,13 @@ struct ContentType {
     std::string name;
 
     constexpr bool operator!=(const ContentType& other) noexcept {
-        if (other.type != this->type) {
+        if (this->type != "*" && other.type != "*" && other.type != this->type) {
             return true;
         }
-        return other.name == this->name;
+        return this->name != "*" && other.name != "*" && other.name != this->name;
     }
 };
+
 std::string to_string(const ContentType& cont) noexcept;
 ContentType parse_content_type(std::string input) noexcept;
 

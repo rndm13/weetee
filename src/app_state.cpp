@@ -611,8 +611,6 @@ const char* body_match(const VariablesMap& vars, const Test* test,
         return nullptr; // Skip checks
     }
 
-    // TODO: add wildcards to content-type matching (easy)
-
     if (result->has_header("Content-Type")) {
         ContentType to_match = response_content_type(&test->response);
 

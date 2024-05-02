@@ -28,6 +28,7 @@ void Request::save(SaveState* save) const noexcept {
     assert(save);
 
     save->save(this->body_type);
+    save->save(this->other_content_type);
     save->save(this->body);
     save->save(this->cookies);
     save->save(this->parameters);
@@ -38,6 +39,9 @@ bool Request::can_load(SaveState* save) const noexcept {
     assert(save);
 
     if (!save->can_load(this->body_type)) {
+        return false;
+    }
+    if (!save->can_load(this->other_content_type)) {
         return false;
     }
     if (!save->can_load(this->body)) {
@@ -60,6 +64,7 @@ void Request::load(SaveState* save) noexcept {
     assert(save);
 
     save->load(this->body_type);
+    save->load(this->other_content_type);
     save->load(this->body);
     save->load(this->cookies);
     save->load(this->parameters);
@@ -71,6 +76,7 @@ void Response::save(SaveState* save) const noexcept {
 
     save->save(this->status);
     save->save(this->body_type);
+    save->save(this->other_content_type);
     save->save(this->body);
     save->save(this->cookies);
     save->save(this->headers);
@@ -83,6 +89,9 @@ bool Response::can_load(SaveState* save) const noexcept {
         return false;
     }
     if (!save->can_load(this->body_type)) {
+        return false;
+    }
+    if (!save->can_load(this->other_content_type)) {
         return false;
     }
     if (!save->can_load(this->body)) {
@@ -102,6 +111,7 @@ void Response::load(SaveState* save) noexcept {
 
     save->load(this->status);
     save->load(this->body_type);
+    save->load(this->other_content_type);
     save->load(this->body);
     save->load(this->cookies);
     save->load(this->headers);
