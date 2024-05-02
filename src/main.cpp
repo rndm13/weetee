@@ -7,9 +7,6 @@
 #include "gui.hpp"
 #include "gui_tests.hpp"
 
-// TODO: Swagger file export (medium)
-//
-//
 // TODO: Make dynamic tests work (and with keep alive connection) (very hard)
 // TODO: Add move reordering (very hard)
 //
@@ -58,7 +55,7 @@ void post_init(AppState* app) noexcept {
     Log(LogLevel::Warning, "Compiled without OpenSSL support! HTTPS will not work!");
 #endif
 #if !CPPHTTPLIB_ZLIB_SUPPORT
-    Log(LogLevel::Warning, "Compiled without ZLib support! Zlib compression will not work!");
+    Log(LogLevel::Warning, "Compiled without ZLib support! ZLib compression will not work!");
 #endif
 #if !CPPHTTPLIB_BROTLI_SUPPORT
     Log(LogLevel::Warning, "Compiled without Brotli support! Brotli compression will not work!");

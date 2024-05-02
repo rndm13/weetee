@@ -33,6 +33,7 @@ std::string file_name(const std::string& path) noexcept {
 #else
     size_t slash = path.rfind("\\");
 #endif
+
     if (slash == std::string::npos) {
         slash = 0;
     } else {

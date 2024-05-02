@@ -9,7 +9,6 @@
 #include "test.hpp"
 #include "utility"
 #include "utils.hpp"
-#include <algorithm>
 
 const Group AppState::root_initial = Group{
     .parent_id = static_cast<size_t>(-1),
@@ -812,6 +811,10 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
                 test_result->req_headers.emplace_hint(search_begin, possible_header, header_value);
             }
         }
+    }
+
+    if (result.error() == httplib::Error::Success) {
+        test_result->res_body = format_response_body(result->body);
     }
 
     return result;

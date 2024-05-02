@@ -331,6 +331,17 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->variables);
 }
 
+std::string format_response_body(const std::string& body) noexcept {
+    using json = nlohmann::json;
+    try {
+        return json::parse(body).dump(4);
+    } catch (std::exception&) {
+
+    }
+    // TODO: Escape non utf-8
+    return body;
+}
+
 RequestBodyType request_body_type(const std::string& str) noexcept {
     if (str == "application/json") {
         return REQUEST_JSON;

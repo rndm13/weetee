@@ -239,12 +239,16 @@ struct TestResult {
     std::string req_endpoint;
     httplib::Headers req_headers;
 
+    std::string res_body;
+
     // progress
     size_t progress_total;
     size_t progress_current;
 
     TestResult(const Test& _original_test) noexcept : original_test(_original_test) {}
 };
+
+std::string format_response_body(const std::string& body) noexcept;
 
 enum GroupFlags : uint8_t {
     GROUP_NONE = 0,

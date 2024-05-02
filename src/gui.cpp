@@ -993,8 +993,7 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
                                     ImGui::PushFont(app->mono_font);
                                     // Is given readonly flag so const_cast is fine
                                     ImGui::InputTextMultiline(
-                                        "##response_body",
-                                        &const_cast<std::string&>(http_result->body),
+                                        "##response_body", &const_cast<std::string&>(tr->res_body),
                                         ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
 
                                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -1203,8 +1202,8 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
             if (ImGui::TreeNode("Variables")) {
                 ImGui::SameLine();
-                hint("To use a variable, write it's name anywhere incapsulated in <>\nexample: "
-                     "<host>/api/test/");
+                hint("To use a variable, write it's name anywhere incapsulated in {}.\nExample:\n"
+                     "{host}/api/test/");
                 partial_dict(app, &group.variables, "variables", vars);
                 ImGui::TreePop();
             }

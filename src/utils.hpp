@@ -109,6 +109,7 @@ template <class Variant, size_t I = 0> constexpr Variant variant_from_index(size
                           : variant_from_index<Variant, I + 1>(index - 1);
     }
     assert(false && "Invalid variant index");
+    return Variant{};
 }
 
 template <class... Args> struct variant_cast_proxy {
