@@ -8,7 +8,6 @@
 #include "gui_tests.hpp"
 
 // TODO: Make dynamic tests work (and with keep alive connection) (very hard)
-// TODO: Add move reordering (very hard)
 //
 //
 // TODO: Add fuzz tests (very very hard)

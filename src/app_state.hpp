@@ -139,7 +139,7 @@ struct AppState {
     constexpr bool can_paste() const noexcept { return this->clipboard.original_size > 0; }
     void paste(Group* group) noexcept;
 
-    void move(Group* group) noexcept;
+    void move(Group* group, size_t idx) noexcept;
     void sort(Group& group) noexcept;
 
     // Returns true when the value should be filtered *OUT*

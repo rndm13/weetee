@@ -492,10 +492,9 @@ void AppState::paste(Group* group) noexcept {
 
     group->flags |= GROUP_OPEN;
     this->tests.merge(to_paste);
-    this->select_with_children(group->id);
 }
 
-void AppState::move(Group* group) noexcept {
+void AppState::move(Group* group, size_t idx) noexcept {
     for (size_t id : this->selected_tests) {
         assert(this->tests.contains(id));
 
@@ -515,7 +514,8 @@ void AppState::move(Group* group) noexcept {
         // Set to new parent
         std::visit(SetParentIDVisitor(group->id), this->tests.at(id));
 
-        group->children_ids.push_back(id);
+        group->children_ids.insert(group->children_ids.begin() + static_cast<uint32_t>(idx), id);
+        idx += 1;
     }
 
     group->flags |= GROUP_OPEN;

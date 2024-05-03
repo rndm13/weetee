@@ -7,6 +7,7 @@
 #include "hello_imgui/runner_params.h"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
 #include "imgui_test_engine/imgui_te_context.h"
@@ -84,7 +85,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                     changed = true;
 
                     assert(std::holds_alternative<Group>(nt));
-                    app->move(&std::get<Group>(nt));
+                    app->move(&std::get<Group>(nt), 0);
                 }
             }
 
@@ -101,19 +102,28 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             app->cut();
         }
 
-        // only groups without tests
-        if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem("Paste", "Ctrl + V", false,
-                                app->can_paste() && analysis.top_selected_count == 1 && !changed)) {
-                changed = true;
+        if (ImGui::MenuItem("Paste", "Ctrl + V", false, app->can_paste() && !changed)) {
+            changed = true;
 
-                NestedTest* nested_test = &app->tests.at(nested_test_id);
-                assert(std::holds_alternative<Group>(*nested_test));
-                auto& selected_group = std::get<Group>(*nested_test);
+            NestedTest* nested_test = &app->tests.at(nested_test_id);
+            if (std::holds_alternative<Group>(*nested_test)) {
+                Group& selected_group = std::get<Group>(*nested_test);
 
                 app->paste(&selected_group);
-            }
+                app->select_with_children(selected_group.id);
+            } else {
+                assert(app->tests.contains(std::visit(ParentIDVisitor(), *nested_test)));
+                assert(std::holds_alternative<Group>(
+                    app->tests.at(std::visit(ParentIDVisitor(), *nested_test))));
+                Group& parent_group =
+                    std::get<Group>(app->tests.at(std::visit(ParentIDVisitor(), *nested_test)));
 
+                app->paste(&parent_group);
+            }
+        }
+
+        // only groups without tests
+        if (analysis.group && !analysis.test) {
             if (ImGui::MenuItem("Sort", nullptr, false,
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
@@ -223,7 +233,51 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
     return false;
 }
 
-bool tree_view_show(AppState* app, Test& test, float indentation) noexcept {
+bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) noexcept {
+    bool changed = false;
+    if (ImGui::BeginDragDropTarget()) {
+        if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
+            changed = true;
+
+            assert(app->tests.contains(nested_test_id));
+            app->move(&std::get<Group>(app->tests.at(nested_test_id)), idx);
+        }
+        ImGui::EndDragDropTarget();
+    }
+    return changed;
+}
+
+bool tree_view_dnd_target_row(AppState* app, size_t nested_test_id, size_t idx,
+                              float indentation) noexcept {
+    ImGui::TableNextRow(ImGuiTableRowFlags_None, 5);
+    ImGui::PushID(static_cast<int32_t>(nested_test_id));
+    ImGui::TableNextColumn();
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 5.0f);
+    // ImGui::Selectable("###drop_target", true, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 5));
+
+    bool changed = tree_view_dnd_target(app, nested_test_id, idx);
+    ImGui::PopID();
+
+    return changed;
+}
+
+bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) noexcept {
+    return point.x > min.x && point.x < max.x && point.y > min.y && point.y < max.y;
+}
+
+bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
+                    float indentation) noexcept {
+    return std::visit(
+        [app, &min, &max, idx, indentation](auto& val) {
+            return tree_view_show(app, val, min, max, idx, indentation);
+        },
+        nt);
+}
+
+bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx,
+                    float indentation) noexcept {
     size_t id = test.id;
     bool changed = false;
 
@@ -275,6 +329,7 @@ bool tree_view_show(AppState* app, Test& test, float indentation) noexcept {
     const bool double_clicked =
         tree_view_selectable(app, id, ("##" + to_string(test.id)).c_str()) &&
         io.MouseDoubleClicked[0];
+
     if (!changed && !app->selected_tests.contains(0) &&
         ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
         if (!app->selected_tests.contains(test.id)) {
@@ -287,15 +342,14 @@ bool tree_view_show(AppState* app, Test& test, float indentation) noexcept {
         ImGui::EndDragDropSource();
     }
 
-    if (!app->selected_tests.contains(test.id) && ImGui::BeginDragDropTarget()) {
-        if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
-            changed = true;
+    min = ImGui::GetItemRectMin();
+    max = ImGui::GetItemRectMax();
+    min.x -= 40;
+    min.y -= 40;
+    max.x += 40;
+    max.y += 40;
 
-            assert(app->tests.contains(test.parent_id));
-            app->move(&std::get<Group>(app->tests.at(test.parent_id)));
-        }
-        ImGui::EndDragDropTarget();
-    }
+    tree_view_dnd_target(app, test.parent_id, idx);
 
     changed |= tree_view_context(app, id);
 
@@ -308,7 +362,8 @@ bool tree_view_show(AppState* app, Test& test, float indentation) noexcept {
     return changed;
 }
 
-bool tree_view_show(AppState* app, Group& group, float indentation) noexcept {
+bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_t idx,
+                    float indentation) noexcept {
     size_t id = group.id;
     bool changed = false;
 
@@ -377,35 +432,44 @@ bool tree_view_show(AppState* app, Group& group, float indentation) noexcept {
         ImGui::EndDragDropSource();
     }
 
-    if (!app->selected_tests.contains(group.id) && ImGui::BeginDragDropTarget()) {
-        if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
-            changed = true;
+    min = ImGui::GetItemRectMin();
+    max = ImGui::GetItemRectMax();
+    min.x -= 40;
+    min.y -= 40;
+    max.x += 40;
+    max.y += 40;
 
-            app->move(&group);
-        }
-        ImGui::EndDragDropTarget();
-    }
+    tree_view_dnd_target(app, group.id, 0);
 
     changed |= tree_view_context(app, id);
 
+    static constexpr float INDENTATION_INCREMENT = 22;
+
+    ImVec2 mouse = ImGui::GetIO().MousePos;
     if (!changed && group.flags & GROUP_OPEN) {
+        size_t index = 1;
         for (size_t child_id : group.children_ids) {
             assert(app->tests.contains(child_id));
-            changed |= tree_view_show(app, app->tests.at(child_id), indentation + 22);
+
+            changed |= tree_view_show(app, app->tests.at(child_id), min, max, index,
+                                      indentation + INDENTATION_INCREMENT);
+
             if (changed) {
                 break;
             }
+            index += 1;
+        }
+
+        // after the opened group
+        if (group.id != 0 && ImGui::IsDragDropActive() && vec2_intersect(mouse, min, max) &&
+            !app->selected_tests.contains(id)) {
+            changed |= tree_view_dnd_target_row(app, group.parent_id, idx, indentation);
         }
     }
 
     ImGui::PopID();
 
     return changed;
-}
-
-bool tree_view_show(AppState* app, NestedTest& nt, float indentation) noexcept {
-    return std::visit(
-        [app, indentation](auto& val) { return tree_view_show(app, val, indentation); }, nt);
 }
 
 void tree_view(AppState* app) noexcept {
@@ -421,7 +485,11 @@ void tree_view(AppState* app) noexcept {
         ImGui::TableSetupColumn("spinner", ImGuiTableColumnFlags_WidthFixed, 15.0f);
         ImGui::TableSetupColumn("enabled", ImGuiTableColumnFlags_WidthFixed, 23.0f);
         ImGui::TableSetupColumn("selectable", ImGuiTableColumnFlags_WidthFixed, 0.0f);
-        changed |= tree_view_show(app, app->tests[0], 0.0f);
+
+        ImVec2 min;
+        ImVec2 max;
+        changed |= tree_view_show(app, app->tests[0], min, max, 0, 0.0f);
+
         ImGui::EndTable();
     }
 
@@ -436,6 +504,7 @@ bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem,
                            const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
+        ImGui::SetNextItemWidth(-1);
         changed |= ImGui::InputText("##data", &elem->data.data);
         tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
@@ -446,6 +515,7 @@ bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem,
                            const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
+        ImGui::SetNextItemWidth(-1);
         changed |= ImGui::InputText("##data", &elem->data.data);
         tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
@@ -456,6 +526,7 @@ bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
                            const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
+        ImGui::SetNextItemWidth(-1);
         changed |= ImGui::InputText("##data", &elem->data.data);
         tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
@@ -466,6 +537,7 @@ bool partial_dict_data_row(AppState* app, Variables*, VariablesElement* elem,
                            const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
+        ImGui::SetNextItemWidth(-1);
         changed |= ImGui::InputText("##data", &elem->data.data);
         tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
@@ -506,10 +578,10 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
     if (ImGui::TableNextColumn()) { // body
         switch (elem->data.type) {
         case MPBD_TEXT: {
-            ImGui::SetNextItemWidth(-1);
             assert(std::holds_alternative<std::string>(elem->data.data));
             auto str = &std::get<std::string>(elem->data.data);
 
+            ImGui::SetNextItemWidth(-1);
             if (ImGui::InputText("##text", str)) {
                 changed = true;
 
@@ -1521,8 +1593,12 @@ void show_gui(AppState* app) noexcept {
         app->selected_tests.clear();
     }
 
+    bool changed = false;
+
     // Opening
     if (app->open_file_dialog.has_value() && app->open_file_dialog->ready()) {
+        changed = true;
+
         auto result = app->open_file_dialog->result();
 
         if (result.size() > 0) {
@@ -1536,6 +1612,8 @@ void show_gui(AppState* app) noexcept {
 
     // Saving
     if (app->save_file_dialog.has_value() && app->save_file_dialog->ready()) {
+        changed = true;
+
         if (app->save_file_dialog->result().size() > 0) {
             app->filename = app->save_file_dialog->result();
             Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
@@ -1547,6 +1625,8 @@ void show_gui(AppState* app) noexcept {
 
     // Importing
     if (app->import_swagger_file_dialog.has_value() && app->import_swagger_file_dialog->ready()) {
+        changed = true;
+
         auto result = app->import_swagger_file_dialog->result();
 
         if (result.size() > 0) {
@@ -1559,6 +1639,8 @@ void show_gui(AppState* app) noexcept {
 
     // Exporting
     if (app->export_swagger_file_dialog.has_value() && app->export_swagger_file_dialog->ready()) {
+        changed = true;
+
         if (app->export_swagger_file_dialog->result().size() > 0) {
             std::string filename = app->export_swagger_file_dialog->result();
             Log(LogLevel::Debug, "filename: %s", filename.c_str());
@@ -1595,15 +1677,30 @@ void show_gui(AppState* app) noexcept {
             app->copy();
         } else if (!app->selected_tests.contains(0) && io.KeyCtrl &&
                    ImGui::IsKeyPressed(ImGuiKey_X)) {
+            changed = true;
+
             app->cut();
         } else if (app->can_paste() && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
-            auto top_layer = app->select_top_layer();
-            if (top_layer.size() == 1) {
-                NestedTest* parent = &app->tests[top_layer[0]];
+            changed = true;
 
-                if (std::holds_alternative<Group>(*parent)) {
-                    app->paste(&std::get<Group>(*parent));
-                    app->undo_history.push_undo_history(app);
+            auto top_layer = app->select_top_layer();
+
+            if (top_layer.size() == 1) {
+                NestedTest* nested_test = &app->tests[top_layer[0]];
+
+                if (std::holds_alternative<Group>(*nested_test)) {
+                    Group& selected_group = std::get<Group>(*nested_test);
+
+                    app->paste(&selected_group);
+                    app->select_with_children(selected_group.id);
+                } else {
+                    assert(app->tests.contains(std::visit(ParentIDVisitor(), *nested_test)));
+                    assert(std::holds_alternative<Group>(
+                        app->tests.at(std::visit(ParentIDVisitor(), *nested_test))));
+                    Group& parent_group =
+                        std::get<Group>(app->tests.at(std::visit(ParentIDVisitor(), *nested_test)));
+
+                    app->paste(&parent_group);
                 }
             }
         }
@@ -1616,10 +1713,15 @@ void show_gui(AppState* app) noexcept {
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+            changed = true;
             if (!app->selected_tests.contains(0)) { // root not selected
                 app->delete_selected();
             }
         }
+    }
+
+    if (changed) {
+        app->undo_history.push_undo_history(app);
     }
 }
 
