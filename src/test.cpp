@@ -3,6 +3,7 @@
 #include "fstream"
 #include "http.hpp"
 #include "partial_dict.hpp"
+#include <httplib.h>
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id) {
     assert(tests.contains(a_id));
@@ -385,6 +386,8 @@ void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noe
             test->variables.elements.push_back({
                 .flags = PARTIAL_DICT_ELEM_ENABLED | PARTIAL_DICT_ELEM_REQUIRED,
                 .key = name,
+                .data = {},
+                .cfs = {},
             });
         } else {
             param->flags = PARTIAL_DICT_ELEM_ENABLED | PARTIAL_DICT_ELEM_REQUIRED;

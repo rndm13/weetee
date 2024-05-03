@@ -60,18 +60,9 @@ struct AppState {
 
     bool tree_view_focused; // Updated every frame
 
-    constexpr Group* root_group() noexcept {
-        assert(this->tests.contains(0));
-        assert(std::holds_alternative<Group>(this->tests[0]));
+    Group* root_group() noexcept;
+    const Group* root_group() const noexcept;
 
-        return &std::get<Group>(this->tests[0]);
-    }
-    constexpr const Group* root_group() const noexcept {
-        assert(this->tests.contains(0));
-        assert(std::holds_alternative<Group>(this->tests.at(0)));
-
-        return &std::get<Group>(this->tests.at(0));
-    }
     bool is_running_tests() const noexcept;
     void stop_test(TestResult& result) noexcept;
     void stop_test(size_t id) noexcept;

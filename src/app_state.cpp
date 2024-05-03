@@ -20,6 +20,20 @@ const Group AppState::root_initial = Group{
     .variables = {},
 };
 
+Group* AppState::root_group() noexcept {
+    assert(this->tests.contains(0));
+    assert(std::holds_alternative<Group>(this->tests[0]));
+
+    return &std::get<Group>(this->tests[0]);
+}
+
+const Group* AppState::root_group() const noexcept {
+    assert(this->tests.contains(0));
+    assert(std::holds_alternative<Group>(this->tests.at(0)));
+
+    return &std::get<Group>(this->tests.at(0));
+}
+
 bool AppState::is_running_tests() const noexcept {
     for (const auto& [id, result] : this->test_results) {
         if (result.running.load()) {

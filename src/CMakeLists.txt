@@ -29,7 +29,7 @@ target_link_libraries(app_state PUBLIC
 
 add_library(gui gui.hpp gui.cpp)
 target_link_libraries(gui PUBLIC 
-    textinputcombo
+    textinputcombo imgui_toggle
     hello_imgui portable_file_dialogs imspinner
     save_state partial_dict test app_state
     json http BS_thread_pool)

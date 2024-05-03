@@ -4,6 +4,7 @@
 #include "imgui_stdlib.h"
 
 #include "app_state.hpp"
+#include "imgui_toggle/imgui_toggle.h"
 #include "partial_dict.hpp"
 #include "test.hpp"
 
@@ -166,7 +167,8 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
             ImGui::PushID(static_cast<int32_t>(i));
 
             uint8_t row_flags = flags | (elem->flags & PARTIAL_DICT_ELEM_REQUIRED
-                                             ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE | PARTIAL_DICT_NO_KEY_CHANGE
+                                             ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE |
+                                                   PARTIAL_DICT_NO_KEY_CHANGE
                                              : PARTIAL_DICT_NONE);
 
             changed |= partial_dict_row(app, pd, elem, vars, row_flags, hints, hint_count);

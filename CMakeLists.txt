@@ -10,7 +10,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op")
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
-set(HTTPLIB_COMPILE ON)
 
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
@@ -46,7 +45,10 @@ target_link_libraries(weetee PRIVATE
 # Add HTTPS
 # ==================
 
-add_subdirectory(external/cpp-httplib)
+find_package(httplib REQUIRED COMPONENTS OpenSSL ZLIB Brotli)
+if (NOT httplib_FOUND) 
+    add_subdirectory(external/cpp-httplib)
+endif()
 
 if (HTTPLIB_IS_USING_OPENSSL)
     set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "CPPHTTPLIB_OPENSSL_SUPPORT=1")
@@ -57,6 +59,10 @@ endif()
 if (HTTPLIB_IS_USING_BROTLI)
     set_target_properties(weetee PROPERTIES COMPILE_DEFINITIONS "CPPHTTPLIB_BROTLI_SUPPORT=1")
 endif()
+
+message("HTTPLIB_IS_USING_OPENSSL = ${HTTPLIB_IS_USING_OPENSSL}")
+message("HTTPLIB_IS_USING_ZLIB = ${HTTPLIB_IS_USING_ZLIB}")
+message("HTTPLIB_IS_USING_BROTLI = ${HTTPLIB_IS_USING_BROTLI}")
 
 # Add json 
 # =============== 
@@ -81,7 +87,7 @@ add_subdirectory(src)
 target_link_libraries(weetee PRIVATE 
     utils textinputcombo
     app_state save_state test 
-    json http
+    json http httplib::httplib
     gui gui_tests)
 
 cotire(weetee)
