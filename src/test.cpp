@@ -3,7 +3,6 @@
 #include "fstream"
 #include "http.hpp"
 #include "partial_dict.hpp"
-#include <httplib.h>
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id) {
     assert(tests.contains(a_id));
@@ -334,13 +333,12 @@ void Group::load(SaveState* save) noexcept {
 
 std::string format_response_body(const std::string& body) noexcept {
     using json = nlohmann::json;
-    try {
-        return json::parse(body).dump(4);
-    } catch (std::exception&) {
-
+   
+    json js = json::parse(body, nullptr, false);
+    if (js.is_discarded()) {
+        return body;
     }
-    // TODO: Escape non utf-8
-    return body;
+    return js.dump(4);        
 }
 
 RequestBodyType request_body_type(const std::string& str) noexcept {
@@ -450,7 +448,7 @@ RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexc
     }
 
     // multi part body
-    std::holds_alternative<MultiPartBody>(test->request.body);
+    assert(std::holds_alternative<MultiPartBody>(test->request.body));
     const auto& mp = std::get<MultiPartBody>(test->request.body);
     httplib::MultipartFormDataItems form;
 

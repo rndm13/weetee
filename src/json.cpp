@@ -2,27 +2,27 @@
 using json = nlohmann::json;
 
 const char* json_format(std::string& input) noexcept {
-    try {
-        input = json::parse(input).dump(4);
-    } catch (json::parse_error& error) {
-        return error.what();
+
+    json js = json::parse(input, nullptr, false);
+    if (js.is_discarded()) {
+        return "Invalid JSON";
     }
+    input = js.dump(4);
     return nullptr;
 }
 
 const char* json_validate(const std::string& expected, const std::string& got) noexcept {
     json json_expected, json_got;
 
-    try {
-        json_expected = json::parse(expected);
-    } catch (json::parse_error& error) {
-        return error.what();
+    
+    json_expected = json::parse(expected, nullptr, false);
+    if (json_expected.is_discarded()) {
+        return "Invalid Expected JSON";
     }
 
-    try {
-        json_got = json::parse(got);
-    } catch (json::parse_error& error) {
-        return error.what();
+    json_got = json::parse(expected, nullptr, false);
+    if (json_got.is_discarded()) {
+        return "Invalid Response JSON";
     }
 
     if (json_expected != json_got) {

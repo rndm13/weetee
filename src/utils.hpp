@@ -1,5 +1,11 @@
 #pragma once
 
+#ifdef WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
+#include <httplib.h>
+
 #include "hello_imgui/hello_imgui_logger.h"
 
 #include "imgui.h"
@@ -11,6 +17,8 @@
 #include "variant"
 #include "vector"
 
+#include <chrono>
+
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
@@ -18,7 +26,7 @@ using std::to_string;
 
 template <typename R> bool is_ready(std::future<R> const& f) noexcept {
     assert(f.valid());
-    return f.wait_until(std::chrono::system_clock::time_point::min()) == std::future_status::ready;
+    return f.wait_until(0) == std::future_status::ready;
 }
 
 template <class... Ts> struct overloaded : Ts... {
@@ -26,7 +34,7 @@ template <class... Ts> struct overloaded : Ts... {
 };
 
 #define GETTER_VISITOR(property)                                                                   \
-    struct {                                                                                       \
+    struct GETVISITOR##property {                                                                  \
         constexpr const auto& operator()(const auto& visitee) const noexcept {                     \
             return visitee.property;                                                               \
         }                                                                                          \
@@ -34,32 +42,33 @@ template <class... Ts> struct overloaded : Ts... {
         auto& operator()(auto& visitee) const noexcept { return visitee.property; }                \
     };
 
-#define COPY_GETTER_VISITOR(property)                                                              \
-    struct {                                                                                       \
+#define COPY_GETTER_VISITOR(property, name)                                                        \
+    struct COPYGETVISITOR##name {                                                                  \
         constexpr auto operator()(const auto& visitee) const noexcept { return visitee.property; } \
     };
 
 #define SETTER_VISITOR(property, type)                                                             \
-    struct {                                                                                       \
+    struct SETVISITOR##property {                                                                  \
         const type new_property;                                                                   \
         type operator()(auto& visitee) const noexcept {                                            \
             return visitee.property = this->new_property;                                          \
         }                                                                                          \
     };
+
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
 
-using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings);
+using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings, cli_settings)
 
-using IDVisitor = COPY_GETTER_VISITOR(id);
-using SetIDVisitor = SETTER_VISITOR(id, size_t);
+using IDVisitor = COPY_GETTER_VISITOR(id, id)
+using SetIDVisitor = SETTER_VISITOR(id, size_t)
 
-using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id);
-using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t);
+using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id, parent_id)
+using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t)
 
-using VariablesVisitor = GETTER_VISITOR(variables);
+using VariablesVisitor = GETTER_VISITOR(variables)
 
-using LabelVisitor = COPY_GETTER_VISITOR(label());
-using EmptyVisitor = COPY_GETTER_VISITOR(empty());
+using LabelVisitor = COPY_GETTER_VISITOR(label(), label)
+using EmptyVisitor = COPY_GETTER_VISITOR(empty(), empty)
 
 template <class T>
 constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {

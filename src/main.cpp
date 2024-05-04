@@ -1,3 +1,5 @@
+#include "utils.hpp"
+
 #include "hello_imgui/internal/hello_imgui_ini_settings.h"
 #include "hello_imgui/runner_params.h"
 
@@ -14,7 +16,7 @@
 
 void post_init(AppState* app) noexcept;
 
-int main() {
+int main(int argc, char** argv) {
     HelloImGui::RunnerParams runner_params;
     auto app = AppState(&runner_params);
 

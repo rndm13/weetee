@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
 project(weetee)
+
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake")
 include(cotire)
+include(ExternalProject)
+
 set(CMAKE_GENERATOR "Ninja")
 # set(CMAKE_CXX_LINK_EXECUTABLE "ld")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op")
+set(CMAKE_CXX_FLAGS "")
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
 
@@ -45,8 +48,8 @@ target_link_libraries(weetee PRIVATE
 # Add HTTPS
 # ==================
 
-find_package(httplib REQUIRED COMPONENTS OpenSSL ZLIB Brotli)
-if (NOT httplib_FOUND) 
+find_package(httplib COMPONENTS OpenSSL ZLIB Brotli)
+if (NOT httplib_FOUND)
     add_subdirectory(external/cpp-httplib)
 endif()
 
@@ -84,10 +87,15 @@ target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}
 # ==================
 
 add_subdirectory(src)
+
 target_link_libraries(weetee PRIVATE 
     utils textinputcombo
     app_state save_state test 
-    json http httplib::httplib
+    json http
     gui gui_tests)
+
+if(WIN32)
+  target_link_libraries(weetee PRIVATE wsock32 ws2_32)
+endif()
 
 cotire(weetee)

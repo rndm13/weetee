@@ -1,8 +1,5 @@
 #include "partial_dict.hpp"
 
-// only include it for find_content_type
-#include "httplib.h"
-
 bool MultiPartBodyElementData::operator==(const MultiPartBodyElementData& other) const noexcept {
     return this->type != other.type && this->data != other.data;
 }

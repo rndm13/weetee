@@ -17,8 +17,6 @@
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
-#include "httplib.h"
-
 #include "app_state.hpp"
 #include "http.hpp"
 #include "partial_dict.hpp"

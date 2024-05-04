@@ -200,6 +200,10 @@ bool AppState::parent_disabled(size_t id) noexcept {
     id = std::visit(ParentIDVisitor(), this->tests.at(id));
 
     while (id != -1ull) {
+        if (!this->tests.contains(id)) {
+            break;
+        }
+
         assert(this->tests.contains(id));
         NestedTest* nt = &this->tests.at(id);
 
@@ -235,6 +239,7 @@ ClientSettings AppState::get_cli_settings(size_t id) const noexcept {
     }
 
     assert(false && "root doesn't have client settings");
+    return {};
 }
 
 std::vector<size_t> AppState::select_top_layer() noexcept {
@@ -409,7 +414,7 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
 }
 
 void AppState::copy() noexcept {
-    std::unordered_map<size_t, NestedTest> to_copy;
+    std::unordered_map<size_t, NestedTest> to_copy = {};
 
     to_copy.reserve(this->selected_tests.size());
     for (auto sel_id : this->selected_tests) {
@@ -429,21 +434,26 @@ void AppState::cut() noexcept {
 }
 
 void AppState::paste(Group* group) noexcept {
-    std::unordered_map<size_t, NestedTest> to_paste;
+    std::unordered_map<size_t, NestedTest> to_paste = {};
     this->clipboard.load(to_paste);
     this->clipboard.reset_load();
 
     // Increments used ids
     // for tests updates id, parent children_idx (if parent present)
     // for groups should also update all children parent_id
-    for (auto it = to_paste.begin(); it != to_paste.end(); it++) {
-        auto& [id, nt] = *it;
+    
+    while (true) {
+        auto it = std::find_if(to_paste.begin(), to_paste.end(),
+                               [this](std::pair<const size_t, NestedTest>& kv) {
+                                   return this->tests.contains(kv.first);
+                               });
 
-        if (!this->tests.contains(id)) {
+        if (it == to_paste.end()) {
             // If the id is free don't do anything
-            continue;
-        }
-
+            break;
+        }        
+        
+        auto& [id, nt] = *it;
         size_t new_id;
         do {
             new_id = ++this->id_counter;
@@ -514,8 +524,12 @@ void AppState::move(Group* group, size_t idx) noexcept {
         // Set to new parent
         std::visit(SetParentIDVisitor(group->id), this->tests.at(id));
 
-        group->children_ids.insert(group->children_ids.begin() + static_cast<uint32_t>(idx), id);
-        idx += 1;
+        if (idx >= group->children_ids.size()) {
+            group->children_ids.push_back(id);
+        } else {
+            group->children_ids.insert(group->children_ids.begin() + static_cast<uint32_t>(idx), id);
+            idx += 1;
+        }
     }
 
     group->flags |= GROUP_OPEN;
@@ -607,7 +621,7 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
 
 bool status_match(const std::string& match, int status) noexcept {
     auto status_str = to_string(status);
-    for (size_t i = 0; i < std::min(match.size(), 3ul); i++) {
+    for (size_t i = 0; i < match.size() && i < 3; i++) {
         if (std::tolower(match[i]) == 'x') {
             continue;
         }

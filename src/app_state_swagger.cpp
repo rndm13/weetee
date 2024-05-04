@@ -201,22 +201,26 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         return;
     }
 
+    nljson swagger = nljson::parse(in, nullptr, false);
+    if (swagger.is_discarded()) {
+            return;
+    }
+
+    this->selected_tests.clear();
+    this->tests = {
+        {0, root_initial},
+    };
+
+    this->filename = std::nullopt;
+    this->id_counter = 0;
+    this->test_results.clear();
+    this->filtered_tests.clear();
+    this->opened_editor_tabs.clear();
+
+    // Pushes initial undo state
+    this->undo_history.reset_undo_history(this);
+
     try {
-        nljson swagger = nljson::parse(in);
-        this->selected_tests.clear();
-        this->tests = {
-            {0, root_initial},
-        };
-
-        this->filename = std::nullopt;
-        this->id_counter = 0;
-        this->test_results.clear();
-        this->filtered_tests.clear();
-        this->opened_editor_tabs.clear();
-
-        // Pushes initial undo state
-        this->undo_history.reset_undo_history(this);
-
         if (swagger.contains("info")) {
             if (swagger["info"].contains("title")) {
                 Group* root = this->root_group();
@@ -237,8 +241,6 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         }
 
         Log(LogLevel::Info, "Successfully imported swagger file '%s'", swagger_file.c_str());
-    } catch (nljson::parse_error& pe) {
-        Log(LogLevel::Error, "Failed to parse file %s: %s", swagger_file.c_str(), pe.what());
     } catch (std::exception& e) {
         Log(LogLevel::Error, "Failed to import swagger: %s", e.what());
     }

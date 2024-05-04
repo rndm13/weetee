@@ -2,8 +2,6 @@
 
 #include "hello_imgui/hello_imgui_logger.h"
 
-#include "httplib.h"
-
 #include "nlohmann/json.hpp"
 
 #include "http.hpp"
@@ -340,8 +338,8 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
         std::string str = std::get<std::string>(test->request.body);
 
         MultiPartBody to_replace = {};
-        try {
-            nlohmann::json j = nlohmann::json::parse(str);
+        nlohmann::json j = nlohmann::json::parse(str, nullptr, false);
+        if (!j.is_discarded()) {
             auto map = j.template get<std::unordered_multimap<std::string, MultiPartBodyData>>();
 
             for (const auto& [key, value] : map) {
@@ -356,8 +354,6 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
                 new_elem.data.resolve_content_type();
                 to_replace.elements.push_back(new_elem);
             }
-        } catch (std::exception& e) {
-            Log(LogLevel::Error, "Failed to convert request body type: %s", e.what());
         }
 
         test->request.body = to_replace;
