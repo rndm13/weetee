@@ -1037,6 +1037,7 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
         if (ImGui::Button("Goto original test", ImVec2(150, 50))) {
             if (app->tests.contains(tr->original_test.id)) {
                 app->editor_open_tab(tr->original_test.id);
+                result = MODAL_CONTINUE;
             } else {
                 Log(LogLevel::Error, "Original test is missing");
             }
