@@ -12,8 +12,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_FLAGS "")
 
-set(OPENSSL_USE_STATIC_LIBS TRUE)
-
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
 
@@ -47,6 +45,8 @@ target_link_libraries(weetee PRIVATE
 
 # Add HTTPS
 # ==================
+
+set(OPENSSL_USE_STATIC_LIBS TRUE)
 
 find_package(httplib COMPONENTS OpenSSL ZLIB Brotli)
 if (NOT httplib_FOUND)

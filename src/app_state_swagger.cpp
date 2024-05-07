@@ -244,6 +244,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     } catch (std::exception& e) {
         Log(LogLevel::Error, "Failed to import swagger: %s", e.what());
     }
+
     // TODO: Add refs to swagger
 }
 

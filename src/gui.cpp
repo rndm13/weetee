@@ -15,6 +15,7 @@
 #include "imgui_test_engine/imgui_te_ui.h"
 
 #include "imspinner/imspinner.h"
+#include "json.hpp"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
 #include "app_state.hpp"
@@ -685,21 +686,23 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
             case REQUEST_PLAIN:
             case REQUEST_OTHER: {
                 ImGui::PushFont(app->mono_font);
+
                 std::string* body = &std::get<std::string>(test.request.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
-                tooltip("%s", replace_variables(vars, *body).c_str());
 
-                // TODO: This crashes when opened with response partial_dicts at the same time
-                // if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem()) {
-                //     if (ImGui::MenuItem("Format")) {
-                //         assert(std::holds_alternative<std::string>(test.request.body));
-                //         const char* error =
-                //         json_format(&std::get<std::string>(test.request.body)); if (error) {
-                //             Log(LogLevel::Error, "Failed to parse json: ", error);
-                //         }
-                //     }
-                //     ImGui::EndPopup();
-                // }
+                if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem("##body_json_context")) {
+                    if (ImGui::MenuItem("Format")) {
+                        assert(std::holds_alternative<std::string>(test.request.body));
+                        const char* error = json_format(std::get<std::string>(test.request.body));
+
+                        if (error) {
+                            Log(LogLevel::Error, "Failed to parse json: ", error);
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+
+                tooltip("%s", replace_variables(vars, *body).c_str());
 
                 ImGui::PopFont();
             } break;
@@ -801,19 +804,20 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
 
                 std::string* body = &std::get<std::string>(test.response.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
-                tooltip("%s", replace_variables(vars, *body).c_str());
 
-                // TODO: This crashes when opened with request partial_dicts at the same time
-                // if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem()) {
-                //     if (ImGui::MenuItem("Format")) {
-                //         assert(std::holds_alternative<std::string>(test.response.body));
-                //         const char* error =
-                //         json_format(&std::get<std::string>(test.response.body)); if (error) {
-                //             Log(LogLevel::Error, "Failed to parse json: ", error);
-                //         }
-                //     }
-                //     ImGui::EndPopup();
-                // }
+                if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem("##body_json_context")) {
+                    if (ImGui::MenuItem("Format")) {
+                        assert(std::holds_alternative<std::string>(test.response.body));
+                        const char* error = json_format(std::get<std::string>(test.response.body));
+
+                        if (error) {
+                            Log(LogLevel::Error, "Failed to parse json: ", error);
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+
+                tooltip("%s", replace_variables(vars, *body).c_str());
 
                 ImGui::PopFont();
 
