@@ -586,6 +586,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
                         elem->data.data = "";
                         elem->data.content_type = "text/plain";
                         if (elem->data.open_file.has_value()) {
+                            std::this_thread::sleep_for(std::chrono::seconds(1));
                             elem->data.open_file->kill();
                             elem->data.open_file.reset();
                         }
@@ -625,6 +626,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
                 elem->data.open_file =
                     pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
+                std::this_thread::sleep_for(std::chrono::seconds(1));
             }
 
             if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -636,6 +638,8 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
             }
 
             if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                
                 changed = true;
 
                 auto result_files = elem->data.open_file->result();
@@ -1461,6 +1465,7 @@ void tabbed_editor(AppState* app) noexcept {
                 tab.name = std::visit(LabelVisitor(), *original);
                 tab.just_opened = true; // to force refocus after
                 app->undo_history.push_undo_history(app);
+                break;
             case TAB_NONE:
                 break;
             }
@@ -1616,6 +1621,7 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
 
 void save_as_file_dialog(AppState* app) noexcept {
     app->save_file_dialog = pfd::save_file("Save To", ".", {"All Files", "*"}, pfd::opt::none);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void save_file_dialog(AppState* app) noexcept {
@@ -1628,16 +1634,19 @@ void save_file_dialog(AppState* app) noexcept {
 
 void open_file_dialog(AppState* app) noexcept {
     app->open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void import_swagger_file_dialog(AppState* app) noexcept {
     app->import_swagger_file_dialog =
         pfd::open_file("Import Swagger JSON File", ".", {"JSON", "*.json"}, pfd::opt::none);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void export_swagger_file_dialog(AppState* app) noexcept {
     app->export_swagger_file_dialog =
         pfd::save_file("Export To", ".", {"JSON", "*.json"}, pfd::opt::none);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 }
 
 void show_menus(AppState* app) noexcept {
@@ -1711,6 +1720,8 @@ void show_gui(AppState* app) noexcept {
 
     // Opening
     if (app->open_file_dialog.has_value() && app->open_file_dialog->ready()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
         changed = true;
 
         auto result = app->open_file_dialog->result();
@@ -1726,6 +1737,8 @@ void show_gui(AppState* app) noexcept {
 
     // Saving
     if (app->save_file_dialog.has_value() && app->save_file_dialog->ready()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
         changed = true;
 
         if (app->save_file_dialog->result().size() > 0) {
@@ -1739,6 +1752,8 @@ void show_gui(AppState* app) noexcept {
 
     // Importing
     if (app->import_swagger_file_dialog.has_value() && app->import_swagger_file_dialog->ready()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
         changed = true;
 
         auto result = app->import_swagger_file_dialog->result();
@@ -1753,6 +1768,8 @@ void show_gui(AppState* app) noexcept {
 
     // Exporting
     if (app->export_swagger_file_dialog.has_value() && app->export_swagger_file_dialog->ready()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
         changed = true;
 
         if (app->export_swagger_file_dialog->result().size() > 0) {

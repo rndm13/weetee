@@ -23,7 +23,7 @@ template <class... Args> struct adl_serializer<std::variant<Args...>> {
 
         try {
             variant = j.template get<Head>();
-        } catch (const json::type_error& e) {
+        } catch (std::exception& e) {
             std::variant<Tail...> eliminated;
             from_json<Tail...>(j, eliminated);
 
