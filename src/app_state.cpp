@@ -442,7 +442,7 @@ void AppState::paste(Group* group) noexcept {
     // for tests updates id, parent children_idx (if parent present)
     // for groups should also update all children parent_id
     
-    while (true) {
+    for (size_t iterations = 0; iterations < to_paste.size(); iterations++) {
         auto it = std::find_if(to_paste.begin(), to_paste.end(),
                                [this](std::pair<const size_t, NestedTest>& kv) {
                                    return this->tests.contains(kv.first);
