@@ -188,6 +188,7 @@ std::string replace_variables(const VariablesMap& vars, const std::string& targe
     }
 
     std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
+
     std::for_each(params_idx.rbegin(), params_idx.rend(),
                   [&result, vars, recursion](std::pair<size_t, size_t> range) {
                       auto [begin, size] = range;

@@ -80,16 +80,22 @@ std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, cha
     std::vector<std::pair<size_t, size_t>> result;
 
     size_t index = 0;
-    do {
-        size_t left_brace = str.find(begin, index);
-        size_t right_brace = str.find(end, left_brace);
-        if (left_brace == std::string::npos || right_brace == std::string::npos) {
-            break;
+    for (char c : str) {
+        if (c == begin) {
+            result.emplace_back(index, std::string::npos);
         }
 
-        result.emplace_back(left_brace, right_brace - left_brace);
-        index = right_brace + 1;
-    } while (index < str.size());
+        if (c == end) {
+            for (auto it = result.rbegin(); it != result.rend(); it++) {
+                if (it->second == std::string::npos) {
+                    it->second = index - it->first;
+                    break;
+                }
+            }
+        }
+
+        index += 1;
+    };
 
     return result;
 }
