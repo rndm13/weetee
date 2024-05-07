@@ -233,6 +233,11 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
 
 bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) noexcept {
     bool changed = false;
+    // Don't allow move into itself
+    if (app->selected_tests.contains(nested_test_id)) {
+        return changed;
+    }
+
     if (ImGui::BeginDragDropTarget()) {
         if (ImGui::AcceptDragDropPayload("MOVE_SELECTED")) {
             changed = true;
@@ -1197,6 +1202,9 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 ImGui::EndCombo();
             }
 
+            hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
+                 "{host}/api/test/");
+            ImGui::SameLine();
             if (ImGui::TreeNode("Variables")) {
                 ImGui::PushFont(app->mono_font);
                 changed = changed | partial_dict(app, &test.variables, "##variables", vars);
@@ -1273,10 +1281,10 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             changed |= ImGui::IsItemDeactivatedAfterEdit();
             tooltip("%s", replace_variables(app->variables(group.id), group.name).c_str());
 
+            hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
+                 "{host}/api/test/");
+            ImGui::SameLine();
             if (ImGui::TreeNode("Variables")) {
-                ImGui::SameLine();
-                hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
-                     "{host}/api/test/");
                 partial_dict(app, &group.variables, "variables", vars);
                 ImGui::TreePop();
             }

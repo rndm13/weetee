@@ -505,6 +505,9 @@ void AppState::paste(Group* group) noexcept {
 }
 
 void AppState::move(Group* group, size_t idx) noexcept {
+    // Not moving into itself
+    assert(!this->selected_tests.contains(group->id));
+
     for (size_t id : this->selected_tests) {
         assert(this->tests.contains(id));
 
