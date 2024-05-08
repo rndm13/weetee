@@ -180,31 +180,32 @@ const char* VariablesElementData::field_labels[field_count] = {
     reinterpret_cast<const char*>("Data"),
 };
 
-std::string replace_variables(const VariablesMap& vars, const std::string& target,
-                              size_t recursion) noexcept {
+std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept {
     std::string result = target;
-    if (recursion > REPLACE_VARIABLES_MAX_NEST) {
-        return result;
+
+    bool changed = true;
+    size_t iterations = 0;
+    while (iterations < REPLACE_VARIABLES_MAX_NEST && changed) {
+        std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
+
+        changed = false;
+        iterations++;
+
+        for (auto [begin, size] : params_idx) {
+            std::string name = result.substr(begin + 1, size - 1);
+
+            if (vars.contains(name)) {
+                changed = true;
+
+                std::string value = vars.at(name);
+                if (value.empty()) {
+                    value = "<empty>";
+                }
+
+                result.replace(begin, size + 1, value);
+            }
+        }
     }
-
-    std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
-
-    std::for_each(params_idx.rbegin(), params_idx.rend(),
-                  [&result, vars, recursion](std::pair<size_t, size_t> range) {
-                      auto [begin, size] = range;
-
-                      std::string name = result.substr(begin + 1, size - 1);
-
-                      if (vars.contains(name)) {
-                          std::string value = vars.at(name);
-                          if (value.empty()) {
-                              value = "<empty>";
-                          }
-
-                          result.replace(begin, size + 1,
-                                         replace_variables(vars, value, recursion + 1));
-                      }
-                  });
 
     return result;
 }

@@ -441,7 +441,7 @@ void AppState::paste(Group* group) noexcept {
     // Increments used ids
     // for tests updates id, parent children_idx (if parent present)
     // for groups should also update all children parent_id
-    
+
     for (size_t iterations = 0; iterations < to_paste.size(); iterations++) {
         auto it = std::find_if(to_paste.begin(), to_paste.end(),
                                [this](std::pair<const size_t, NestedTest>& kv) {
@@ -451,8 +451,8 @@ void AppState::paste(Group* group) noexcept {
         if (it == to_paste.end()) {
             // If the id is free don't do anything
             break;
-        }        
-        
+        }
+
         auto& [id, nt] = *it;
         size_t new_id;
         do {
@@ -530,7 +530,8 @@ void AppState::move(Group* group, size_t idx) noexcept {
         if (idx >= group->children_ids.size()) {
             group->children_ids.push_back(id);
         } else {
-            group->children_ids.insert(group->children_ids.begin() + static_cast<uint32_t>(idx), id);
+            group->children_ids.insert(group->children_ids.begin() + static_cast<uint32_t>(idx),
+                                       id);
             idx += 1;
         }
     }

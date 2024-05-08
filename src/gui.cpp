@@ -690,7 +690,8 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
                 std::string* body = &std::get<std::string>(test.request.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
 
-                if (test.request.body_type == REQUEST_JSON && ImGui::BeginPopupContextItem("##body_json_context")) {
+                if (test.request.body_type == REQUEST_JSON &&
+                    ImGui::BeginPopupContextItem("##body_json_context")) {
                     if (ImGui::MenuItem("Format")) {
                         assert(std::holds_alternative<std::string>(test.request.body));
                         const char* error = json_format(std::get<std::string>(test.request.body));
@@ -805,7 +806,8 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
                 std::string* body = &std::get<std::string>(test.response.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
 
-                if (test.response.body_type == RESPONSE_JSON && ImGui::BeginPopupContextItem("##body_json_context")) {
+                if (test.response.body_type == RESPONSE_JSON &&
+                    ImGui::BeginPopupContextItem("##body_json_context")) {
                     if (ImGui::MenuItem("Format")) {
                         assert(std::holds_alternative<std::string>(test.response.body));
                         const char* error = json_format(std::get<std::string>(test.response.body));

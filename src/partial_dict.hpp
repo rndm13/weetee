@@ -17,11 +17,11 @@ enum PartialDictElementFlags : uint8_t {
     PARTIAL_DICT_ELEM_TO_DELETE = 1 << 2,
 
     // No key change and no delete/disable
-    PARTIAL_DICT_ELEM_REQUIRED = 1 << 3, 
+    PARTIAL_DICT_ELEM_REQUIRED = 1 << 3,
 };
 
 template <typename Data> struct PartialDictElement {
-    uint8_t flags = PARTIAL_DICT_ELEM_ENABLED; 
+    uint8_t flags = PARTIAL_DICT_ELEM_ENABLED;
 
     // save
     std::string key;
@@ -90,7 +90,7 @@ template <typename Data> struct PartialDict {
         return save->can_load(this->elements);
     }
 
-    void load(SaveState* save) noexcept { 
+    void load(SaveState* save) noexcept {
         assert(save);
         return save->load(this->elements);
     }
@@ -199,4 +199,4 @@ using VariablesElement = Variables::ElementType;
 using VariablesMap = std::unordered_map<std::string, std::string>;
 
 static constexpr size_t REPLACE_VARIABLES_MAX_NEST = 10;
-std::string replace_variables(const VariablesMap& vars, const std::string& target, size_t recursion = 0) noexcept;
+std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept;
