@@ -245,7 +245,7 @@ struct TestResult {
     size_t progress_total;
     size_t progress_current;
 
-    TestResult(const Test& _original_test) noexcept : original_test(_original_test) {}
+    TestResult(const Test& _original_test, bool _running) noexcept : running(_running), original_test(_original_test) {}
 };
 
 std::string format_response_body(const std::string& body) noexcept;
@@ -377,3 +377,16 @@ struct RequestBodyResult {
 RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexcept;
 httplib::Headers response_headers(const VariablesMap& vars, const Test* test) noexcept;
 ContentType response_content_type(const Response* response) noexcept;
+
+using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings, cli_settings);
+using SetClientSettingsVisitor = SETTER_VISITOR(cli_settings, std::optional<ClientSettings>);
+
+using IDVisitor = COPY_GETTER_VISITOR(id, id);
+using SetIDVisitor = SETTER_VISITOR(id, size_t);
+
+using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id, parent_id);
+using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t);
+
+using VariablesVisitor = GETTER_VISITOR(variables);
+
+using LabelVisitor = COPY_GETTER_VISITOR(label(), label);

@@ -57,21 +57,10 @@ template <class... Ts> struct overloaded : Ts... {
 
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
 
-using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings, cli_settings)
+using EmptyVisitor = COPY_GETTER_VISITOR(empty(), empty);
 
-    using IDVisitor = COPY_GETTER_VISITOR(id, id) using SetIDVisitor = SETTER_VISITOR(id, size_t)
-
-        using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id, parent_id) using SetParentIDVisitor =
-            SETTER_VISITOR(parent_id, size_t)
-
-                using VariablesVisitor = GETTER_VISITOR(variables)
-
-                    using LabelVisitor = COPY_GETTER_VISITOR(label(), label) using EmptyVisitor =
-                        COPY_GETTER_VISITOR(empty(), empty)
-
-                            template <class T>
-                            constexpr bool operator==(const std::vector<T>& a,
-                                                      const std::vector<T>& b) noexcept {
+template <class T>
+constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
     if (a.size() != b.size()) {
         return false;
     }

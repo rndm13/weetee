@@ -77,7 +77,7 @@ struct AppState {
     void post_undo() noexcept;
     void redo() noexcept;
 
-    VariablesMap variables(size_t id) const noexcept;
+    VariablesMap get_test_variables(size_t id) const noexcept;
     bool parent_disabled(size_t id) noexcept;
     bool parent_selected(size_t id) const noexcept;
     ClientSettings get_cli_settings(size_t id) const noexcept;
@@ -167,8 +167,8 @@ struct AppState {
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept;
 
-template <class It> std::vector<Test> get_tests_to_run(AppState* app, It begin, It end) noexcept {
-    std::vector<Test> tests_to_run;
+template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin, It end) noexcept {
+    std::vector<size_t> tests_to_run;
     for (It it = begin; it != end; it++) {
         assert(app->tests.contains(*it));
 
@@ -176,23 +176,39 @@ template <class It> std::vector<Test> get_tests_to_run(AppState* app, It begin, 
         switch (nested_test->index()) {
 
         case TEST_VARIANT: {
+            if (app->get_cli_settings(*it).flags & CLIENT_DYNAMIC) {
+                continue;
+            }
+
             assert(std::holds_alternative<Test>(*nested_test));
             const auto& test = std::get<Test>(*nested_test);
 
             if (!(test.flags & TEST_DISABLED) && !app->parent_disabled(*it)) {
-                tests_to_run.push_back(test);
+                tests_to_run.push_back(*it);
             }
         } break;
-        case GROUP_VARIANT:
-            // ignore groups
-            break;
+        case GROUP_VARIANT: {
+            assert(std::holds_alternative<Group>(*nested_test));
+            const auto& group = std::get<Group>(*nested_test);
+
+            if (group.cli_settings.has_value() && (group.cli_settings->flags & CLIENT_DYNAMIC)) {
+                if (!(group.flags & GROUP_DISABLED) && !app->parent_disabled(*it)) {
+                    tests_to_run.push_back(*it);
+                }
+            }
+        } break;
         }
     }
     return tests_to_run;
 }
 
-void run_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept;
-void run_tests(AppState* app, std::vector<Test>&& tests) noexcept;
+bool is_parent_id(const AppState* app, size_t group_id, size_t parent_id) noexcept;
+bool iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
+                                  size_t breakpoint_group) noexcept;
+
+void run_test(AppState* app, size_t test_id) noexcept;
+void execute_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept;
+void run_tests(AppState* app, const std::vector<size_t>& tests) noexcept;
 void rerun_test(AppState* app, TestResult* result) noexcept;
 
 void stop_test(TestResult* result) noexcept;
@@ -206,4 +222,3 @@ const char* header_match(const VariablesMap&, const Test* test,
                          const httplib::Result& result) noexcept;
 void test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept;
-

@@ -10,6 +10,10 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
+#include "imgui_test_engine/imgui_te_context.h"
+#include "imgui_test_engine/imgui_te_engine.h"
+#include "imgui_test_engine/imgui_te_ui.h"
+
 #include "imspinner/imspinner.h"
 #include "json.hpp"
 #include "portable_file_dialogs/portable_file_dialogs.h"
@@ -224,10 +228,11 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
         }
 
         if (ImGui::MenuItem("Run tests", nullptr, false, !changed)) {
-            std::vector<Test> tests_to_run = get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
+            std::vector<size_t> tests_to_run =
+                get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
 
             Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
-            run_tests(app, std::move(tests_to_run));
+            run_tests(app, tests_to_run);
         }
 
         ImGui::EndPopup();
@@ -651,7 +656,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
 }
 
 bool editor_test_request(AppState* app, Test& test) noexcept {
-    const VariablesMap& vars = app->variables(test.id);
+    const VariablesMap& vars = app->get_test_variables(test.id);
 
     bool changed = false;
 
@@ -764,7 +769,7 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
 }
 
 bool editor_test_response(AppState* app, Test& test) noexcept {
-    const VariablesMap& vars = app->variables(test.id);
+    const VariablesMap& vars = app->get_test_variables(test.id);
 
     bool changed = false;
 
@@ -917,16 +922,24 @@ bool editor_auth(std::string label, AuthVariant* auth) noexcept {
     return changed;
 }
 
-bool editor_client_settings(ClientSettings* set) noexcept {
+bool editor_client_settings(ClientSettings* set, bool enable_dynamic) noexcept {
     assert(set);
 
     bool changed = false;
 
-    // CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
-    // if (set->flags & CLIENT_DYNAMIC) {
-    //     ImGui::SameLine();
-    //     CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
-    // }
+    ImGui::BeginDisabled(!enable_dynamic);
+
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
+
+    ImGui::SameLine();
+    hint("Dynamic testing enables sequential testing for groups.\nDuring it the received cookies are used in the next tests, and it allows for Keep Alive connetions.");
+
+    if (set->flags & CLIENT_DYNAMIC) {
+        ImGui::SameLine();
+        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
+    }
+
+    ImGui::EndDisabled();
 
     CHECKBOX_FLAG(set->flags, changed, CLIENT_COMPRESSION, "Enable Compression");
 
@@ -1206,7 +1219,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Test>(*edit));
     auto& test = std::get<Test>(*edit);
 
-    VariablesMap vars = app->variables(test.id);
+    VariablesMap vars = app->get_test_variables(test.id);
 
     bool changed = false;
 
@@ -1227,7 +1240,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 changed = true;
-                test_resolve_url_variables(app->variables(test.parent_id), &test);
+                test_resolve_url_variables(app->get_test_variables(test.parent_id), &test);
             }
 
             if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
@@ -1257,20 +1270,34 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::Text("Client Settings");
             ImGui::Separator();
 
-            bool enable_settings = test.cli_settings.has_value() || test.parent_id == -1ull;
-            if (test.parent_id != -1ull && ImGui::Checkbox("Override Parent", &enable_settings)) {
+            ClientSettings cli_settings = app->get_cli_settings(test.id);
+
+            bool parent_dynamic =
+                !test.cli_settings.has_value() && cli_settings.flags & CLIENT_DYNAMIC;
+
+            ImGui::BeginDisabled(parent_dynamic);
+
+            bool override_settings = test.cli_settings.has_value();
+            if (test.parent_id != -1ull && ImGui::Checkbox("Override Parent", &override_settings)) {
                 changed = true;
-                if (enable_settings) {
+
+                if (override_settings) {
                     test.cli_settings = ClientSettings{};
                 } else {
                     test.cli_settings = std::nullopt;
                 }
             }
 
-            ImGui::BeginDisabled(!enable_settings);
+            ImGui::EndDisabled();
 
-            ClientSettings cli_settings = app->get_cli_settings(test.id);
-            if (editor_client_settings(&cli_settings)) {
+            if (parent_dynamic) {
+                ImGui::SameLine();
+                hint("Cannot override settings when parent has dynamic settings enabled");
+            }
+
+            ImGui::BeginDisabled(!test.cli_settings.has_value());
+
+            if (editor_client_settings(&cli_settings, false)) {
                 changed = true;
                 test.cli_settings = cli_settings;
             }
@@ -1300,7 +1327,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     assert(std::holds_alternative<Group>(*edit));
     auto& group = std::get<Group>(*edit);
 
-    VariablesMap vars = app->variables(group.id);
+    VariablesMap vars = app->get_test_variables(group.id);
 
     bool changed = false;
 
@@ -1313,7 +1340,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
             ImGui::InputText("Name", &group.name);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
-            tooltip("%s", replace_variables(app->variables(group.id), group.name).c_str());
+            tooltip("%s", replace_variables(app->get_test_variables(group.id), group.name).c_str());
 
             hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
                  "{host}/api/test/");
@@ -1326,22 +1353,57 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             ImGui::Text("Client Settings");
             ImGui::Separator();
 
-            bool enable_settings = group.cli_settings.has_value() || group.parent_id == -1ull;
-            if (group.parent_id != -1ull && ImGui::Checkbox("Override Parent", &enable_settings)) {
+            ClientSettings cli_settings = app->get_cli_settings(group.id);
+
+            bool parent_dynamic =
+                !group.cli_settings.has_value() && cli_settings.flags & CLIENT_DYNAMIC;
+
+            ImGui::BeginDisabled(parent_dynamic);
+
+            bool override_settings = group.cli_settings.has_value();
+            if (group.parent_id != -1ull &&
+                ImGui::Checkbox("Override Parent", &override_settings)) {
                 changed = true;
-                if (enable_settings) {
+                if (override_settings) {
                     group.cli_settings = ClientSettings{};
                 } else {
                     group.cli_settings = std::nullopt;
                 }
             }
 
-            ImGui::BeginDisabled(!enable_settings);
+            ImGui::EndDisabled();
 
-            ClientSettings cli_settings = app->get_cli_settings(group.id);
-            if (editor_client_settings(&cli_settings)) {
+            if (parent_dynamic) {
+                ImGui::SameLine();
+                hint("Cannot override settings when parent has dynamic settings enabled");
+            }
+
+            ImGui::BeginDisabled(!group.cli_settings.has_value());
+
+            if (editor_client_settings(&cli_settings, true)) {
                 changed = true;
                 group.cli_settings = cli_settings;
+
+                if (cli_settings.flags & CLIENT_DYNAMIC) {
+                    // Remove cli_settings from every child
+
+                    size_t id = group.id;
+                    size_t child_idx = 0;
+                    while (id != group.parent_id && !group.children_ids.empty()) {
+                        assert(app->tests.contains(id));
+                        NestedTest* nt = &app->tests.at(id);
+
+                        assert(std::holds_alternative<Group>(*nt));
+                        Group* iterated_group = &std::get<Group>(*nt);
+
+                        assert(child_idx < iterated_group->children_ids.size());
+                        assert(app->tests.contains(iterated_group->children_ids.at(child_idx)));
+                        std::visit(SetClientSettingsVisitor(std::nullopt),
+                                   app->tests.at(iterated_group->children_ids.at(child_idx)));
+
+                        iterate_over_nested_children(app, &id, &child_idx, group.parent_id);
+                    }
+                }
             }
 
             ImGui::EndDisabled();
@@ -1467,7 +1529,6 @@ void testing_results(AppState* app) noexcept {
                             any_not_running |= !rt.running.load();
                         }
                     }
-
 
                     if (ImGui::MenuItem("Rerun tests", nullptr, false, any_not_running)) {
                         for (auto& [_, rt] : app->test_results) {
@@ -1610,10 +1671,12 @@ void show_menus(AppState* app) noexcept {
 
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (!app->is_running_tests() && arrow("start", ImGuiDir_Right)) {
-        std::vector<Test> tests_to_run = get_tests_to_run(app, MapKeyIterator<size_t, NestedTest>(app->tests.begin()), MapKeyIterator<size_t, NestedTest>(app->tests.end()));
+        std::vector<size_t> tests_to_run =
+            get_tests_to_run(app, MapKeyIterator<size_t, NestedTest>(app->tests.begin()),
+                             MapKeyIterator<size_t, NestedTest>(app->tests.end()));
 
         Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
-        run_tests(app, std::move(tests_to_run));
+        run_tests(app, tests_to_run);
     }
     ImGui::PopStyleColor(1);
 

@@ -228,7 +228,7 @@ enum ModalResult : uint8_t {
 ModalResult unsaved_changes(AppState*) noexcept;
 
 bool editor_auth(std::string label, AuthVariant* auth) noexcept;
-bool editor_client_settings(ClientSettings* set) noexcept;
+bool editor_client_settings(ClientSettings* set, bool show_dynamic) noexcept;
 
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept;
 void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept;

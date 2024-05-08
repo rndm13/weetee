@@ -122,7 +122,7 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
             group_params = params;
         }
 
-        auto group_vars = this->variables(group_id);
+        auto group_vars = this->get_test_variables(group_id);
         const auto& operations = path.value();
         for (auto op = operations.begin(); op != operations.end(); op++) {
             HTTPType type = http_type_from_label(op.key());
@@ -253,7 +253,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
 }
 
 void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {
-    VariablesMap root_vars = this->variables(0);
+    VariablesMap root_vars = this->get_test_variables(0);
     if (root_vars.contains("url")) {
         nljson servers = {};
         servers.emplace_back();                             // Make a single element
