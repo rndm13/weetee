@@ -59,19 +59,19 @@ template <class... Ts> struct overloaded : Ts... {
 
 using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings, cli_settings)
 
-using IDVisitor = COPY_GETTER_VISITOR(id, id)
-using SetIDVisitor = SETTER_VISITOR(id, size_t)
+    using IDVisitor = COPY_GETTER_VISITOR(id, id) using SetIDVisitor = SETTER_VISITOR(id, size_t)
 
-using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id, parent_id)
-using SetParentIDVisitor = SETTER_VISITOR(parent_id, size_t)
+        using ParentIDVisitor = COPY_GETTER_VISITOR(parent_id, parent_id) using SetParentIDVisitor =
+            SETTER_VISITOR(parent_id, size_t)
 
-using VariablesVisitor = GETTER_VISITOR(variables)
+                using VariablesVisitor = GETTER_VISITOR(variables)
 
-using LabelVisitor = COPY_GETTER_VISITOR(label(), label)
-using EmptyVisitor = COPY_GETTER_VISITOR(empty(), empty)
+                    using LabelVisitor = COPY_GETTER_VISITOR(label(), label) using EmptyVisitor =
+                        COPY_GETTER_VISITOR(empty(), empty)
 
-template <class T>
-constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
+                            template <class T>
+                            constexpr bool operator==(const std::vector<T>& a,
+                                                      const std::vector<T>& b) noexcept {
     if (a.size() != b.size()) {
         return false;
     }
@@ -96,9 +96,6 @@ static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS = ImGuiSelectableFlags_Sp
 
 static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
     ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
-
-bool arrow(const char* label, ImGuiDir dir) noexcept;
-void remove_arrow_offset() noexcept;
 
 constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
     return ImVec4(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f,
@@ -140,3 +137,15 @@ std::vector<std::string> split_string(const std::string& str,
 
 std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
                                                             char end) noexcept;
+
+template <typename Key, typename Value>
+using MapIterator = typename std::unordered_map<Key, Value>::iterator;
+
+template <typename Key, typename Value> class MapKeyIterator : public MapIterator<Key, Value> {
+  public:
+    MapKeyIterator() : MapIterator<Key, Value>(){};
+    MapKeyIterator(MapIterator<Key, Value> it_) : MapIterator<Key, Value>(it_){};
+
+    Key* operator->() { return (Key* const)&(MapIterator<Key, Value>::operator->()->first); }
+    Key operator*() { return MapIterator<Key, Value>::operator*().first; }
+};

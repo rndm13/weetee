@@ -64,9 +64,6 @@ struct AppState {
     const Group* root_group() const noexcept;
 
     bool is_running_tests() const noexcept;
-    void stop_test(TestResult& result) noexcept;
-    void stop_test(size_t id) noexcept;
-    void stop_tests() noexcept;
 
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;
@@ -169,8 +166,38 @@ struct AppState {
 };
 
 httplib::Result make_request(AppState* app, const Test* test) noexcept;
+
+template <class It> std::vector<Test> get_tests_to_run(AppState* app, It begin, It end) noexcept {
+    std::vector<Test> tests_to_run;
+    for (It it = begin; it != end; it++) {
+        assert(app->tests.contains(*it));
+
+        const NestedTest* nested_test = &app->tests.at(*it);
+        switch (nested_test->index()) {
+
+        case TEST_VARIANT: {
+            assert(std::holds_alternative<Test>(*nested_test));
+            const auto& test = std::get<Test>(*nested_test);
+
+            if (!(test.flags & TEST_DISABLED) && !app->parent_disabled(*it)) {
+                tests_to_run.push_back(test);
+            }
+        } break;
+        case GROUP_VARIANT:
+            // ignore groups
+            break;
+        }
+    }
+    return tests_to_run;
+}
+
 void run_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept;
-void run_tests(AppState* app, const std::vector<Test>* tests) noexcept;
+void run_tests(AppState* app, std::vector<Test>&& tests) noexcept;
+void rerun_test(AppState* app, TestResult* result) noexcept;
+
+void stop_test(TestResult* result) noexcept;
+void stop_test(AppState* app, size_t id) noexcept;
+void stop_tests(AppState* app) noexcept;
 
 bool status_match(const std::string& match, int status) noexcept;
 const char* body_match(const VariablesMap& vars, const Test* test,
@@ -179,3 +206,4 @@ const char* header_match(const VariablesMap&, const Test* test,
                          const httplib::Result& result) noexcept;
 void test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept;
+

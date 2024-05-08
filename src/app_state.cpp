@@ -44,30 +44,6 @@ bool AppState::is_running_tests() const noexcept {
     return false;
 }
 
-void AppState::stop_test(TestResult& result) noexcept {
-    assert(result.running.load());
-
-    result.status.store(STATUS_CANCELLED);
-    result.running.store(false);
-}
-
-void AppState::stop_test(size_t id) noexcept {
-    assert(this->test_results.contains(id));
-
-    auto& result = this->test_results.at(id);
-    this->stop_test(result);
-}
-
-void AppState::stop_tests() noexcept {
-    for (auto& [id, result] : this->test_results) {
-        if (result.running.load()) {
-            this->stop_test(result);
-        }
-    }
-
-    this->thr_pool.purge();
-}
-
 void AppState::save(SaveState* save) const noexcept {
     assert(save);
 
@@ -853,31 +829,85 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
 }
 
 void run_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept {
+    TestResult* test_result = &app->test_results.at(test->id);
+    test_result->running.store(true);
+    test_result->status.store(STATUS_RUNNING);
+
     httplib::Result result = make_request(app, test);
     if (!app->test_results.contains(test->id)) {
         return;
     }
 
-    TestResult* test_result = &app->test_results.at(test->id);
     test_result->running.store(false);
+
     test_analysis(app, test, test_result, std::move(result), vars);
 }
 
-void run_tests(AppState* app, const std::vector<Test>* tests) noexcept {
+void queue_test(AppState* app, Test* test) noexcept {
+    app->test_results.try_emplace(test->id, *test);
+
+    app->thr_pool.detach_task([app, test = std::move(*test), vars = app->variables(test->id)]() mutable {
+        // Add cli settings from parent to a copy
+        test.cli_settings = app->get_cli_settings(test.id);
+
+        return run_test(app, &test, vars);
+    });
+}
+
+void run_tests(AppState* app, std::vector<Test>&& tests) noexcept {
     app->thr_pool.purge();
     app->test_results.clear();
 
-    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
+    app
+        ->runner_params
+        ->dockingParams.dockableWindowOfName("Results")
+        ->focusWindowAtNextFrame =
         true;
 
-    for (Test test : *tests) {
-        app->test_results.try_emplace(test.id, test);
-
-        // add cli settings from parent to a copy
-        test.cli_settings = app->get_cli_settings(test.id);
-
-        app->thr_pool.detach_task([app, test = std::move(test), vars = app->variables(test.id)]() {
-            return run_test(app, &test, vars);
-        });
+    for (Test test : tests) {
+        queue_test(app, &test);
     }
+}
+
+void rerun_test(AppState* app, TestResult* result) noexcept {
+    if (!app->tests.contains(result->original_test.id)) {
+        Log(LogLevel::Error, "Missing original test");
+        return;
+    }
+
+    if (!std::holds_alternative<Test>(app->tests.at(result->original_test.id))) {
+        Log(LogLevel::Error, "Missing original test");
+        return;
+    }
+
+    Test test = std::get<Test>(app->tests.at(result->original_test.id));
+
+    size_t count = app->test_results.erase(result->original_test.id);
+    assert(count);
+
+    queue_test(app, &test);
+}
+
+void stop_test(TestResult* result) noexcept {
+    assert(result.running.load());
+
+    result->status.store(STATUS_CANCELLED);
+    result->running.store(false);
+}
+
+void stop_test(AppState* app, size_t id) noexcept {
+    assert(app->test_results.contains(id));
+
+    auto& result = app->test_results.at(id);
+    stop_test(&result);
+}
+
+void stop_tests(AppState* app) noexcept {
+    for (auto& [id, result] : app->test_results) {
+        if (result.running.load()) {
+            stop_test(&result);
+        }
+    }
+
+    app->thr_pool.purge();
 }

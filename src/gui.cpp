@@ -10,10 +10,6 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
-#include "imgui_test_engine/imgui_te_context.h"
-#include "imgui_test_engine/imgui_te_engine.h"
-#include "imgui_test_engine/imgui_te_ui.h"
-
 #include "imspinner/imspinner.h"
 #include "json.hpp"
 #include "portable_file_dialogs/portable_file_dialogs.h"
@@ -33,6 +29,33 @@
 #include "string"
 #include "utility"
 #include "variant"
+
+bool arrow(const char* label, ImGuiDir dir) noexcept {
+    assert(label);
+    ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_Border, 0x00000000);
+    ImGui::PushStyleColor(ImGuiCol_BorderShadow, 0x00000000);
+    bool result = ImGui::ArrowButton(label, dir);
+    ImGui::PopStyleColor(5);
+    return result;
+}
+
+bool http_type_button(HTTPType type, ImVec2 size) noexcept {
+    ImGui::PushStyleColor(ImGuiCol_Button, HTTPTypeColor[type]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, HTTPTypeColor[type]);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HTTPTypeColor[type]);
+
+    ImGuiContext& g = *GImGui;
+    float backup_padding_y = g.Style.FramePadding.y;
+    g.Style.FramePadding.y = 0.0f;
+    bool pressed = ImGui::ButtonEx(HTTPTypeLabels[type], size, ImGuiButtonFlags_AlignTextBaseLine);
+    g.Style.FramePadding.y = backup_padding_y;
+
+    ImGui::PopStyleColor(3);
+    return pressed;
+}
 
 template <class... Args> void tooltip(const char* format, Args... args) noexcept {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -191,8 +214,6 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                     app->delete_test(selected_id);
                 }
             }
-
-            ImGui::Separator();
         }
 
         if (analysis.same_parent && ImGui::MenuItem("Group Selected", nullptr, false,
@@ -200,6 +221,13 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             changed = true;
 
             app->group_selected(analysis.parent_id);
+        }
+
+        if (ImGui::MenuItem("Run tests", nullptr, false, !changed)) {
+            std::vector<Test> tests_to_run = get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
+
+            Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
+            run_tests(app, std::move(tests_to_run));
         }
 
         ImGui::EndPopup();
@@ -297,7 +325,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
 
     ImGui::TableNextColumn(); // test
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
-    http_type_button(test.type);
+    http_type_button(test.type, ImVec2(0, 0));
     ImGui::SameLine();
     ImGui::Text("%s", test.endpoint.c_str());
 
@@ -309,10 +337,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
 
     ImGui::TableNextColumn(); // enabled / disabled
 
-    bool pd = app->parent_disabled(id);
-    if (pd) {
-        ImGui::BeginDisabled();
-    }
+    ImGui::BeginDisabled(app->parent_disabled(id));
 
     bool enabled = !(test.flags & TEST_DISABLED);
     if (ImGui::Checkbox("##enabled", &enabled)) {
@@ -325,9 +350,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
         app->undo_history.push_undo_history(app);
     }
 
-    if (pd) {
-        ImGui::EndDisabled();
-    }
+    ImGui::EndDisabled();
 
     ImGui::TableNextColumn(); // selectable
     const bool double_clicked =
@@ -387,7 +410,6 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
         arrow("right", ImGuiDir_Right);
     }
     ImGui::SameLine();
-    remove_arrow_offset();
     ImGui::Text("%s", group.name.c_str());
 
     ImGui::TableNextColumn(); // spinner for running tests
@@ -398,10 +420,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
     ImGui::TableNextColumn(); // enabled / disabled
 
-    bool pd = app->parent_disabled(id);
-    if (pd) {
-        ImGui::BeginDisabled();
-    }
+    ImGui::BeginDisabled(app->parent_disabled(id));
 
     bool enabled = !(group.flags & GROUP_DISABLED);
     if (ImGui::Checkbox("##enabled", &enabled)) {
@@ -414,9 +433,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
         app->undo_history.push_undo_history(app);
     }
 
-    if (pd) {
-        ImGui::EndDisabled();
-    }
+    ImGui::EndDisabled();
 
     ImGui::TableNextColumn(); // selectable
     const bool clicked = tree_view_selectable(app, id, ("##" + to_string(group.id)).c_str());
@@ -1037,7 +1054,7 @@ void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexce
     }
 }
 
-ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
+ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
     if (!ImGui::IsPopupOpen("Test Result Details")) {
         ImGui::OpenPopup("Test Result Details");
     }
@@ -1053,6 +1070,21 @@ ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept {
                 Log(LogLevel::Error, "Original test is missing");
             }
         }
+
+        ImGui::SameLine();
+
+        ImGui::BeginDisabled(tr->running.load());
+
+        if (ImGui::Button("Rerun test", ImVec2(150, 50))) {
+            if (app->tests.contains(tr->original_test.id)) {
+                rerun_test(app, tr);
+                result = MODAL_CONTINUE;
+            } else {
+                Log(LogLevel::Error, "Original test is missing");
+            }
+        }
+
+        ImGui::EndDisabled();
 
         ImGui::Text("%s - %s", TestResultStatusLabels[tr->status.load()], tr->verdict.c_str());
 
@@ -1235,9 +1267,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 }
             }
 
-            if (!enable_settings) {
-                ImGui::BeginDisabled();
-            }
+            ImGui::BeginDisabled(!enable_settings);
 
             ClientSettings cli_settings = app->get_cli_settings(test.id);
             if (editor_client_settings(&cli_settings)) {
@@ -1245,9 +1275,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 test.cli_settings = cli_settings;
             }
 
-            if (!enable_settings) {
-                ImGui::EndDisabled();
-            }
+            ImGui::EndDisabled();
 
             ImGui::EndChild();
         }
@@ -1308,9 +1336,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
                 }
             }
 
-            if (!enable_settings) {
-                ImGui::BeginDisabled();
-            }
+            ImGui::BeginDisabled(!enable_settings);
 
             ClientSettings cli_settings = app->get_cli_settings(group.id);
             if (editor_client_settings(&cli_settings)) {
@@ -1318,9 +1344,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
                 group.cli_settings = cli_settings;
             }
 
-            if (!enable_settings) {
-                ImGui::EndDisabled();
-            }
+            ImGui::EndDisabled();
 
             ImGui::EndChild();
         }
@@ -1435,8 +1459,30 @@ void testing_results(AppState* app) noexcept {
                         }
                     }
 
-                    if (ImGui::MenuItem("Stop")) {
-                        app->stop_tests();
+                    bool any_running = false;
+                    bool any_not_running = false;
+                    for (auto& [_, rt] : app->test_results) {
+                        if (rt.selected) {
+                            any_running |= rt.running.load();
+                            any_not_running |= !rt.running.load();
+                        }
+                    }
+
+
+                    if (ImGui::MenuItem("Rerun tests", nullptr, false, any_not_running)) {
+                        for (auto& [_, rt] : app->test_results) {
+                            if (rt.selected && !rt.running.load()) {
+                                rerun_test(app, &rt);
+                            }
+                        }
+                    }
+
+                    if (ImGui::MenuItem("Stop tests", nullptr, false, any_running)) {
+                        for (auto& [_, rt] : app->test_results) {
+                            if (rt.selected && rt.running.load()) {
+                                stop_test(&rt);
+                            }
+                        }
                     }
 
                     ImGui::EndPopup();
@@ -1564,31 +1610,15 @@ void show_menus(AppState* app) noexcept {
 
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (!app->is_running_tests() && arrow("start", ImGuiDir_Right)) {
-        // find tests to execute
-        std::vector<Test> tests_to_run;
-        for (const auto& [id, nested_test] : app->tests) {
-            switch (nested_test.index()) {
-            case TEST_VARIANT: {
-                assert(std::holds_alternative<Test>(nested_test));
-                const auto& test = std::get<Test>(nested_test);
-
-                if (!(test.flags & TEST_DISABLED) && !app->parent_disabled(id)) {
-                    tests_to_run.push_back(test);
-                }
-            } break;
-            case GROUP_VARIANT:
-                // ignore groups
-                break;
-            }
-        }
+        std::vector<Test> tests_to_run = get_tests_to_run(app, MapKeyIterator<size_t, NestedTest>(app->tests.begin()), MapKeyIterator<size_t, NestedTest>(app->tests.end()));
 
         Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
-        run_tests(app, &tests_to_run);
+        run_tests(app, std::move(tests_to_run));
     }
     ImGui::PopStyleColor(1);
 
     if (app->is_running_tests() && ImGui::Button("Stop")) {
-        app->stop_tests();
+        stop_tests(app);
         Log(LogLevel::Warning, "Stopped testing");
     }
 }

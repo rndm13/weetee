@@ -1,16 +1,8 @@
 #include "http.hpp"
 
-bool http_type_button(HTTPType type) noexcept {
-    ImGui::PushStyleColor(ImGuiCol_Button, HTTPTypeColor[type]);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, HTTPTypeColor[type]);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HTTPTypeColor[type]);
-    bool result = ImGui::SmallButton(HTTPTypeLabels[type]);
-    ImGui::PopStyleColor(3);
-    return result;
-}
-
 HTTPType http_type_from_label(std::string label) noexcept {
-    std::for_each(label.begin(), label.end(), [](char& c) {c = static_cast<char>(std::toupper(c));});
+    std::for_each(label.begin(), label.end(),
+                  [](char& c) { c = static_cast<char>(std::toupper(c)); });
 
     for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); ++i) {
         if (HTTPTypeLabels[i] == label) {

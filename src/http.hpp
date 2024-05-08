@@ -121,7 +121,6 @@ static ImVec4 HTTPTypeColor[] = {
     /* [HTTP_PATCH] = */ rgb_to_ImVec4(99, 22, 90, 255),
 };
 
-bool http_type_button(HTTPType type) noexcept;
 HTTPType http_type_from_label(std::string) noexcept;
 
 static const char* HTTPStatusLabels[] = {

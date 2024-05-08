@@ -38,6 +38,9 @@
         }                                                                                          \
     } while (0);
 
+bool arrow(const char* label, ImGuiDir dir) noexcept;
+bool http_type_button(HTTPType type, ImVec2 size = {0, 0}) noexcept;
+
 bool tree_view_context(AppState* app, size_t nested_test_id) noexcept;
 bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept;
 bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min_selectable_rect, ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
@@ -230,7 +233,7 @@ bool editor_client_settings(ClientSettings* set) noexcept;
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept;
 void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept;
 
-ModalResult open_result_details(AppState* app, const TestResult* tr) noexcept;
+ModalResult open_result_details(AppState* app, TestResult* tr) noexcept;
 
 enum EditorTabResult : uint8_t {
     TAB_NONE,

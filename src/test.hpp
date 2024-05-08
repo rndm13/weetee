@@ -199,6 +199,7 @@ struct Test {
 void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept;
 
 enum TestResultStatus {
+    STATUS_WAITING,
     STATUS_RUNNING,
     STATUS_CANCELLED,
     STATUS_OK,
@@ -206,6 +207,7 @@ enum TestResultStatus {
     STATUS_WARNING,
 };
 static const char* TestResultStatusLabels[] = {
+    /* [STATUS_WAITING] = */ reinterpret_cast<const char*>("Waiting"),
     /* [STATUS_RUNNING] = */ reinterpret_cast<const char*>("Running"),
     /* [STATUS_CANCELLED] = */ reinterpret_cast<const char*>("Cancelled"),
     /* [STATUS_OK] = */ reinterpret_cast<const char*>("Ok"),
@@ -215,9 +217,9 @@ static const char* TestResultStatusLabels[] = {
 
 struct TestResult {
     // Can be written and read from any thread
-    std::atomic_bool running = true;
+    std::atomic_bool running;
     // Main thread writes when stopping tests
-    std::atomic<TestResultStatus> status = STATUS_RUNNING;
+    std::atomic<TestResultStatus> status = STATUS_WAITING;
 
     // Written in draw thread
     bool selected = true;
