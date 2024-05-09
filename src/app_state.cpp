@@ -861,8 +861,9 @@ bool is_parent_id(const AppState* app, size_t group_id, size_t needle) noexcept 
     return false;
 }
 
-// TODO: fix when groups children are empty (important)
-bool iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
+// TODO: Replace existing similar functionality with calls to this function
+// TODO: Add tests for this function
+void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
                                   size_t breakpoint_group) noexcept {
     assert(app->tests.contains(*id));
     const NestedTest& nt = app->tests.at(*id);
@@ -876,17 +877,23 @@ bool iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
         const NestedTest& child_nt = app->tests.at(child_id);
 
         switch (child_nt.index()) {
+        case GROUP_VARIANT: {
+            assert(std::holds_alternative<Group>(child_nt));
+            const Group& child_group = std::get<Group>(child_nt);
+
+            if (!child_group.children_ids.empty()) {
+                *id = child_group.id;
+                *child_idx = 0;
+                return;
+            }
+            // Fallthrough as we can skip entering this group
+        }
         case TEST_VARIANT: {
-            // Decrement if not the last element
+            // Goto the next element if not the last element, otherwise go back to parent
             if (*child_idx < group->children_ids.size() - 1) {
                 (*child_idx)++;
-                return true;
+                return;
             }
-        } break;
-        case GROUP_VARIANT: {
-            *id = std::visit(IDVisitor(), child_nt);
-            *child_idx = 0;
-            return true;
         } break;
         }
     }
@@ -895,8 +902,8 @@ bool iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
     //
     // Iterates while in tests
     // group is always the previously visited group
-    for (*id = group->parent_id; app->tests.contains(*id) && *id != breakpoint_group;
-         group = &std::get<Group>(app->tests.at(*id)), *id = group->parent_id) {
+    *id = group->parent_id;
+    while (app->tests.contains(*id) && *id != breakpoint_group) {
         const NestedTest& parent_nt = app->tests.at(*id);
 
         assert(std::holds_alternative<Group>(parent_nt));
@@ -908,15 +915,90 @@ bool iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
                 *child_idx = i + 1;
                 break;
             }
+
             assert(i < parent_group.children_ids.size() && "Didn't find matching ID");
         }
 
         if (*child_idx < parent_group.children_ids.size()) {
             break;
         }
+
+        group = &std::get<Group>(app->tests.at(*id));
+        *id = group->parent_id;
+    }
+}
+
+void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
+    assert(std::holds_alternative<Group>(nt));
+    const Group& group = std::get<Group>(nt);
+
+    std::vector<size_t> test_queue_ids = {};
+    if (group.children_ids.size() < 0) {
+        return;
     }
 
-    return true;
+    size_t id = group.id;
+    size_t child_idx = 0;
+    while (id != group.parent_id && !group.children_ids.empty()) {
+        assert(app->tests.contains(id));
+        NestedTest* iterated_nt = &app->tests.at(id);
+
+        assert(std::holds_alternative<Group>(*iterated_nt));
+        Group* iterated_group = &std::get<Group>(*iterated_nt);
+
+        assert(child_idx < iterated_group->children_ids.size());
+        assert(app->tests.contains(iterated_group->children_ids.at(child_idx)));
+        NestedTest* child_nt = &app->tests.at(iterated_group->children_ids.at(child_idx));
+
+        if (std::holds_alternative<Test>(*child_nt)) {
+            Test* child_test = &std::get<Test>(*child_nt);
+
+            if (!(child_test->flags & TEST_DISABLED) && !app->parent_disabled(child_test->id)) {
+                test_queue_ids.push_back(iterated_group->children_ids.at(child_idx));
+            }
+        }
+
+        if (std::holds_alternative<Test>(*child_nt) &&
+            !app->parent_disabled(std::get<Test>(*child_nt).id)) {
+        }
+
+        iterate_over_nested_children(app, &id, &child_idx, group.parent_id);
+    }
+
+    std::vector<Test> test_queue = {};
+    test_queue.reserve(test_queue_ids.size());
+
+    std::vector<VariablesMap> test_vars = {};
+    test_vars.reserve(test_queue_ids.size());
+
+    for (size_t queued_test_id : test_queue_ids) {
+        assert(app->tests.contains(queued_test_id));
+        assert(std::holds_alternative<Test>(app->tests.at(queued_test_id)));
+
+        test_queue.push_back(std::get<Test>(app->tests.at(queued_test_id)));
+
+        assert(!app->test_results.contains(queued_test_id));
+        app->test_results.try_emplace(queued_test_id, test_queue.back(), true);
+
+        // Add cli settings from parent to a copy
+        test_queue.back().cli_settings = app->get_cli_settings(queued_test_id);
+
+        test_vars.push_back(app->get_test_variables(queued_test_id));
+    }
+
+    // Copies test queue
+    app->thr_pool.detach_task([app, test_queue, test_vars]() {
+        assert(test_queue.size() == test_vars.size());
+
+        for (size_t idx = 0; idx < test_queue.size(); idx++) {
+            size_t id = test_queue.at(idx).id;
+
+            if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
+                // Can run
+                execute_test(app, &test_queue.at(idx), test_vars.at(idx));
+            }
+        }
+    });
 }
 
 void run_test(AppState* app, size_t test_id) noexcept {
@@ -941,69 +1023,7 @@ void run_test(AppState* app, size_t test_id) noexcept {
             });
     } break;
     case GROUP_VARIANT: {
-        // Dynamic tests
-
-        assert(std::holds_alternative<Group>(nt));
-        Group& group = std::get<Group>(nt);
-
-        std::vector<size_t> test_queue_ids = {};
-        if (group.children_ids.size() < 0) {
-            break;
-        }
-
-        size_t id = group.id;
-        size_t child_idx = 0;
-        while (id != group.parent_id && !group.children_ids.empty()) {
-            assert(app->tests.contains(id));
-            NestedTest* iterated_nt = &app->tests.at(id);
-
-            assert(std::holds_alternative<Group>(*iterated_nt));
-            Group* iterated_group = &std::get<Group>(*iterated_nt);
-
-            assert(child_idx < iterated_group->children_ids.size());
-            assert(app->tests.contains(iterated_group->children_ids.at(child_idx)));
-            if (std::holds_alternative<Test>(
-                    app->tests.at(iterated_group->children_ids.at(child_idx)))) {
-                test_queue_ids.push_back(iterated_group->children_ids.at(child_idx));
-            }
-
-            iterate_over_nested_children(app, &id, &child_idx, group.parent_id);
-        }
-
-        std::vector<Test> test_queue = {};
-        test_queue.reserve(test_queue_ids.size());
-
-        std::vector<VariablesMap> test_vars = {};
-        test_vars.reserve(test_queue_ids.size());
-
-        for (size_t queued_test_id : test_queue_ids) {
-            assert(app->tests.contains(queued_test_id));
-            assert(std::holds_alternative<Test>(app->tests.at(queued_test_id)));
-
-            test_queue.push_back(std::get<Test>(app->tests.at(queued_test_id)));
-
-            assert(!app->test_results.contains(queued_test_id));
-            app->test_results.try_emplace(queued_test_id, test_queue.back(), true);
-
-            // Add cli settings from parent to a copy
-            test_queue.back().cli_settings = app->get_cli_settings(queued_test_id);
-
-            test_vars.push_back(app->get_test_variables(queued_test_id));
-        }
-
-        // Copies test queue
-        app->thr_pool.detach_task([app, test_queue, test_vars]() {
-            assert(test_queue.size() == test_vars.size());
-
-            for (size_t idx = 0; idx < test_queue.size(); idx++) {
-                size_t id = test_queue.at(idx).id;
-
-                if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
-                    // Can run
-                    execute_test(app, &test_queue.at(idx), test_vars.at(idx));
-                }
-            }
-        });
+        run_dynamic_tests(app, nt);
     } break;
     }
 }

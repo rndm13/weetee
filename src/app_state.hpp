@@ -203,7 +203,7 @@ template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin
 }
 
 bool is_parent_id(const AppState* app, size_t group_id, size_t parent_id) noexcept;
-bool iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
+void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
                                   size_t breakpoint_group) noexcept;
 
 void run_test(AppState* app, size_t test_id) noexcept;
