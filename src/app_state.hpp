@@ -165,7 +165,9 @@ struct AppState {
     AppState& operator=(AppState&&) = delete;
 };
 
-httplib::Result make_request(AppState* app, const Test* test) noexcept;
+httplib::Client make_client(const std::string& hostname, const ClientSettings& settings) noexcept;
+
+httplib::Result make_request(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli) noexcept;
 
 template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin, It end) noexcept {
     std::vector<size_t> tests_to_run;
@@ -206,8 +208,9 @@ bool is_parent_id(const AppState* app, size_t group_id, size_t parent_id) noexce
 void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
                                   size_t breakpoint_group) noexcept;
 
+void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept;
 void run_test(AppState* app, size_t test_id) noexcept;
-void execute_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept;
+bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli) noexcept;
 void run_tests(AppState* app, const std::vector<size_t>& tests) noexcept;
 void rerun_test(AppState* app, TestResult* result) noexcept;
 
@@ -220,5 +223,5 @@ const char* body_match(const VariablesMap& vars, const Test* test,
                        const httplib::Result& result) noexcept;
 const char* header_match(const VariablesMap&, const Test* test,
                          const httplib::Result& result) noexcept;
-void test_analysis(AppState*, const Test* test, TestResult* test_result,
+bool test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept;

@@ -676,11 +676,14 @@ const char* header_match(const VariablesMap& vars, const Test* test,
     return nullptr;
 }
 
-void test_analysis(AppState* app, const Test* test, TestResult* test_result,
+bool test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept {
+    bool success = true;
     switch (http_result.error()) {
     case httplib::Error::Success: {
         if (!status_match(test->response.status, http_result->status)) {
+            success = false;
+
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = "Unexpected Response Status";
             break;
@@ -688,6 +691,8 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result,
 
         char const* err = body_match(vars, test, http_result);
         if (err) {
+            success = false;
+
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
             break;
@@ -695,6 +700,8 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result,
 
         err = header_match(vars, test, http_result);
         if (err) {
+            success = false;
+
             test_result->status.store(STATUS_ERROR);
             test_result->verdict = err;
             break;
@@ -704,20 +711,56 @@ void test_analysis(AppState* app, const Test* test, TestResult* test_result,
         test_result->verdict = "Success";
     } break;
     case httplib::Error::Canceled:
+        success = false;
+
         test_result->status.store(STATUS_CANCELLED);
         break;
     default:
+        success = false;
+
         test_result->status.store(STATUS_ERROR);
         test_result->verdict = to_string(http_result.error());
         break;
     }
 
     test_result->http_result = std::forward<httplib::Result>(http_result);
+
+    return success;
 }
 
-httplib::Result make_request(AppState* app, const Test* test) noexcept {
-    auto vars = app->get_test_variables(test->id);
+httplib::Client make_client(const std::string& hostname, const ClientSettings& settings) noexcept {
+    httplib::Client cli(hostname);
 
+    cli.set_compress(settings.flags & CLIENT_COMPRESSION);
+    cli.set_follow_location(settings.flags & CLIENT_FOLLOW_REDIRECTS);
+    cli.set_keep_alive(settings.flags & CLIENT_KEEP_ALIVE);
+
+    std::visit(overloaded{
+                   [](std::monostate) {},
+                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password); },
+                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token); },
+               },
+               settings.auth);
+
+    if (settings.flags & CLIENT_PROXY) {
+        cli.set_proxy(settings.proxy_host, settings.proxy_port);
+        std::visit(overloaded{
+                       [](std::monostate) {},
+                       [&cli](const AuthBasic& auth) {
+                           cli.set_proxy_basic_auth(auth.name, auth.password);
+                       },
+                       [&cli](const AuthBearerToken& auth) {
+                           cli.set_proxy_bearer_token_auth(auth.token);
+                       },
+                   },
+                   settings.proxy_auth);
+    }
+
+    return cli;
+}
+
+httplib::Result make_request(AppState* app, const Test* test, const VariablesMap& vars,
+                             httplib::Client& cli) noexcept {
     const auto params = request_params(vars, test);
     const auto headers = request_headers(vars, test);
 
@@ -757,31 +800,6 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     };
 
     httplib::Result result;
-    httplib::Client cli(host);
-
-    cli.set_compress(test->cli_settings->flags & CLIENT_COMPRESSION);
-    cli.set_follow_location(test->cli_settings->flags & CLIENT_FOLLOW_REDIRECTS);
-
-    std::visit(overloaded{
-                   [&cli](std::monostate) {},
-                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password); },
-                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token); },
-               },
-               test->cli_settings->auth);
-
-    if (test->cli_settings->flags & CLIENT_PROXY) {
-        cli.set_proxy(test->cli_settings->proxy_host, test->cli_settings->proxy_port);
-        std::visit(overloaded{
-                       [&cli](std::monostate) {},
-                       [&cli](const AuthBasic& auth) {
-                           cli.set_proxy_basic_auth(auth.name, auth.password);
-                       },
-                       [&cli](const AuthBearerToken& auth) {
-                           cli.set_proxy_bearer_token_auth(auth.token);
-                       },
-                   },
-                   test->cli_settings->proxy_auth);
-    }
 
     switch (test->type) {
     case HTTP_GET:
@@ -828,19 +846,20 @@ httplib::Result make_request(AppState* app, const Test* test) noexcept {
     return result;
 }
 
-void execute_test(AppState* app, const Test* test, const VariablesMap& vars) noexcept {
+bool execute_test(AppState* app, const Test* test, const VariablesMap& vars,
+                  httplib::Client& cli) noexcept {
     TestResult* test_result = &app->test_results.at(test->id);
     test_result->running.store(true);
     test_result->status.store(STATUS_RUNNING);
 
-    httplib::Result result = make_request(app, test);
+    httplib::Result result = make_request(app, test, vars, cli);
     if (!app->test_results.contains(test->id)) {
-        return;
+        return false;
     }
 
     test_result->running.store(false);
 
-    test_analysis(app, test, test_result, std::move(result), vars);
+    return test_analysis(app, test, test_result, std::move(result), vars);
 }
 
 bool is_parent_id(const AppState* app, size_t group_id, size_t needle) noexcept {
@@ -931,12 +950,15 @@ void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
 void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
     assert(std::holds_alternative<Group>(nt));
     const Group& group = std::get<Group>(nt);
+    assert(group.cli_settings.has_value());
+    assert(group.cli_settings->flags & CLIENT_DYNAMIC);
 
     std::vector<size_t> test_queue_ids = {};
     if (group.children_ids.size() < 0) {
         return;
     }
 
+    // Make a test queue
     size_t id = group.id;
     size_t child_idx = 0;
     while (id != group.parent_id && !group.children_ids.empty()) {
@@ -965,20 +987,22 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
         iterate_over_nested_children(app, &id, &child_idx, group.parent_id);
     }
 
+    if (test_queue_ids.empty()) {
+        return;
+    }
+
     std::vector<Test> test_queue = {};
     test_queue.reserve(test_queue_ids.size());
 
     std::vector<VariablesMap> test_vars = {};
     test_vars.reserve(test_queue_ids.size());
 
+    // Fetch needed data from test queue
     for (size_t queued_test_id : test_queue_ids) {
         assert(app->tests.contains(queued_test_id));
         assert(std::holds_alternative<Test>(app->tests.at(queued_test_id)));
 
         test_queue.push_back(std::get<Test>(app->tests.at(queued_test_id)));
-
-        assert(!app->test_results.contains(queued_test_id));
-        app->test_results.try_emplace(queued_test_id, test_queue.back(), true);
 
         // Add cli settings from parent to a copy
         test_queue.back().cli_settings = app->get_cli_settings(queued_test_id);
@@ -986,16 +1010,56 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
         test_vars.push_back(app->get_test_variables(queued_test_id));
     }
 
-    // Copies test queue
-    app->thr_pool.detach_task([app, test_queue, test_vars]() {
+    // Find a common host to make a cli
+    std::string hostname =
+        split_endpoint(replace_variables(test_vars.at(0), test_queue.at(0).endpoint)).first;
+
+    for (size_t idx = 1; idx < test_queue.size(); idx++) {
+        if (hostname !=
+            split_endpoint(replace_variables(test_vars.at(idx), test_queue.at(idx).endpoint))
+                .first) {
+            Log(LogLevel::Error, "Dynamic tests must all share same host");
+            return;
+        }
+    }
+
+    // Insert test results
+    for (size_t idx = 0; idx < test_queue_ids.size(); idx++) {
+        assert(!app->test_results.contains(test_queue_ids.at(idx)));
+        app->test_results.try_emplace(test_queue_ids.at(idx), test_queue.at(idx), true);
+    }
+
+    // Copies test queue and vars
+    app->thr_pool.detach_task([app, test_queue, test_vars, hostname,
+                               cli_settings = group.cli_settings.value()]() {
         assert(test_queue.size() == test_vars.size());
+
+        // TODO: Keep track of cookies (medium)
+
+        httplib::Client cli = make_client(hostname, cli_settings);
+
+        bool keep_running = true;
 
         for (size_t idx = 0; idx < test_queue.size(); idx++) {
             size_t id = test_queue.at(idx).id;
 
-            if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
-                // Can run
-                execute_test(app, &test_queue.at(idx), test_vars.at(idx));
+            if (app->test_results.contains(id)) {
+                TestResult* result = &app->test_results.at(id);
+
+                if (!keep_running) {
+                    result->running.store(false);
+                    result->status.store(STATUS_CANCELLED);
+                    result->verdict = "Previous test failed";
+                    continue;
+                }
+
+                if (result->running.load()) {
+                    // Can run test
+
+                    keep_running &= execute_test(app, &test_queue.at(idx), test_vars.at(idx), cli);
+                } else {
+                    keep_running = false;
+                }
             }
         }
     });
@@ -1014,13 +1078,13 @@ void run_test(AppState* app, size_t test_id) noexcept {
         app->test_results.try_emplace(test_id, test, true);
 
         // Copies test
-        app->thr_pool.detach_task(
-            [app, test = test, vars = app->get_test_variables(test.id)]() mutable {
-                // Add cli settings from parent to a copy
-                test.cli_settings = app->get_cli_settings(test.id);
-
-                return execute_test(app, &test, vars);
-            });
+        app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
+                                   cli_settings = app->get_cli_settings(test.id)]() {
+            // Add cli settings from parent to a copy
+            std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
+            httplib::Client cli = make_client(host, cli_settings);
+            return execute_test(app, &test, vars, cli);
+        });
     } break;
     case GROUP_VARIANT: {
         run_dynamic_tests(app, nt);
@@ -1058,13 +1122,13 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
     Test test = std::get<Test>(app->tests.at(result->original_test.id));
 
     // Copies test
-    app->thr_pool.detach_task(
-        [app, test = test, vars = app->get_test_variables(test.id)]() mutable {
-            // Add cli settings from parent to a copy
-            test.cli_settings = app->get_cli_settings(test.id);
-
-            return execute_test(app, &test, vars);
-        });
+    app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
+                               cli_settings = app->get_cli_settings(test.id)]() {
+        // Add cli settings from parent to a copy
+        std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
+        httplib::Client cli = make_client(host, cli_settings);
+        return execute_test(app, &test, vars, cli);
+    });
 }
 
 void stop_test(TestResult* result) noexcept {
