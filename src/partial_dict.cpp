@@ -37,21 +37,25 @@ void MultiPartBodyElementData::load(SaveState* save) noexcept {
 }
 
 void MultiPartBodyElementData::resolve_content_type() noexcept {
-    std::visit(overloaded{
-                   [this](const std::string& str) { this->content_type = "text/plain"; },
-                   [this](const std::vector<std::string>& files) {
-                       this->content_type = "";
-                       for (const auto& file : files) {
-                           std::string file_content_type =
-                               httplib::detail::find_content_type(file, {}, "text/plain");
-                           if (!this->content_type.empty()) {
-                               this->content_type += ", ";
-                           }
-                           this->content_type += file_content_type;
-                       }
-                   },
-               },
-               this->data);
+    switch (this->type) {
+    case MPBD_FILES: {
+        assert(std::holds_alternative<std::vector<std::string>>(this->data));
+        auto& files = std::get<std::vector<std::string>>(this->data);
+
+        this->content_type = "";
+        for (const auto& file : files) {
+            std::string file_content_type =
+                httplib::detail::find_content_type(file, {}, "text/plain");
+            if (!this->content_type.empty()) {
+                this->content_type += ", ";
+            }
+            this->content_type += file_content_type;
+        }
+    } break;
+    case MPBD_TEXT: {
+        this->content_type = "text/plain";
+    } break;
+    }
 }
 
 const char* MultiPartBodyElementData::field_labels[field_count] = {

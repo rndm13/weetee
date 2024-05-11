@@ -149,7 +149,7 @@ template <typename Data>
 bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const VariablesMap& vars,
                   uint8_t flags = PARTIAL_DICT_NONE, const char** hints = nullptr,
                   const size_t hint_count = 0) noexcept {
-    using DataType = PartialDict<Data>::DataType;
+    using DataType = typename PartialDict<Data>::DataType;
 
     bool changed = false;
 

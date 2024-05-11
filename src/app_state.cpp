@@ -290,7 +290,7 @@ void AppState::move_children_up(Group* group) noexcept {
         assert(this->tests.contains(child_id));
         auto& child = this->tests.at(child_id);
 
-        std::visit(SetParentIDVisitor(parent_group.id), child);
+        std::visit(SetParentIDVisitor{parent_group.id}, child);
         parent_group.children_ids.push_back(child_id);
     }
 
@@ -379,7 +379,7 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
                       assert(this->tests.contains(test_id));
 
                       if (!this->parent_selected(test_id)) {
-                          std::visit(SetParentIDVisitor(id), this->tests.at(test_id));
+                          std::visit(SetParentIDVisitor{id}, this->tests.at(test_id));
                       }
                   });
 
@@ -454,14 +454,14 @@ void AppState::paste(Group* group) noexcept {
             auto& group_nt = std::get<Group>(nt);
             for (size_t child_id : group_nt.children_ids) {
                 assert(to_paste.contains(child_id));
-                std::visit(SetParentIDVisitor(new_id), to_paste[child_id]);
+                std::visit(SetParentIDVisitor{new_id}, to_paste[child_id]);
             }
         }
 
         // Replace key value in map
         auto node = to_paste.extract(it);
         node.key() = new_id;
-        std::visit(SetIDVisitor(new_id), node.mapped());
+        std::visit(SetIDVisitor{new_id}, node.mapped());
         to_paste.insert(std::move(node));
     }
 
@@ -472,7 +472,7 @@ void AppState::paste(Group* group) noexcept {
         size_t parent_id = std::visit(ParentIDVisitor(), nt);
         if (!to_paste.contains(parent_id)) {
             group->children_ids.push_back(id);
-            std::visit(SetParentIDVisitor(group->id), nt);
+            std::visit(SetParentIDVisitor{group->id}, nt);
         }
     }
 
@@ -501,7 +501,7 @@ void AppState::move(Group* group, size_t idx) noexcept {
         assert(count == 1);
 
         // Set to new parent
-        std::visit(SetParentIDVisitor(group->id), this->tests.at(id));
+        std::visit(SetParentIDVisitor{group->id}, this->tests.at(id));
 
         if (idx >= group->children_ids.size()) {
             group->children_ids.push_back(id);
@@ -735,25 +735,38 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
     cli.set_follow_location(settings.flags & CLIENT_FOLLOW_REDIRECTS);
     cli.set_keep_alive(settings.flags & CLIENT_KEEP_ALIVE);
 
-    std::visit(overloaded{
-                   [](std::monostate) {},
-                   [&cli](const AuthBasic& auth) { cli.set_basic_auth(auth.name, auth.password); },
-                   [&cli](const AuthBearerToken& auth) { cli.set_bearer_token_auth(auth.token); },
-               },
-               settings.auth);
+    switch (settings.auth.index()) {
+    case AUTH_NONE:
+        break;
+    case AUTH_BASIC: {
+        assert(std::holds_alternative<AuthBasic>(settings.auth));
+        const AuthBasic* basic = &std::get<AuthBasic>(settings.auth);
+        cli.set_basic_auth(basic->name, basic->password);
+    } break;
+    case AUTH_BEARER_TOKEN: {
+        assert(std::holds_alternative<AuthBearerToken>(settings.auth));
+        const AuthBearerToken* token = &std::get<AuthBearerToken>(settings.auth);
+        cli.set_bearer_token_auth(token->token);
+    } break;
+    }
 
     if (settings.flags & CLIENT_PROXY) {
         cli.set_proxy(settings.proxy_host, settings.proxy_port);
-        std::visit(overloaded{
-                       [](std::monostate) {},
-                       [&cli](const AuthBasic& auth) {
-                           cli.set_proxy_basic_auth(auth.name, auth.password);
-                       },
-                       [&cli](const AuthBearerToken& auth) {
-                           cli.set_proxy_bearer_token_auth(auth.token);
-                       },
-                   },
-                   settings.proxy_auth);
+
+        switch (settings.proxy_auth.index()) {
+        case AUTH_NONE:
+            break;
+        case AUTH_BASIC: {
+            assert(std::holds_alternative<AuthBasic>(settings.proxy_auth));
+            const AuthBasic* basic = &std::get<AuthBasic>(settings.proxy_auth);
+            cli.set_proxy_basic_auth(basic->name, basic->password);
+        } break;
+        case AUTH_BEARER_TOKEN: {
+            assert(std::holds_alternative<AuthBearerToken>(settings.proxy_auth));
+            const AuthBearerToken* token = &std::get<AuthBearerToken>(settings.proxy_auth);
+            cli.set_proxy_bearer_token_auth(token->token);
+        } break;
+        }
     }
 
     return cli;

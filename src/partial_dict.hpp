@@ -70,7 +70,7 @@ template <typename Data> struct PartialDictElement {
 template <typename Data> struct PartialDict {
     using DataType = Data;
     using ElementType = PartialDictElement<Data>;
-    using SizeType = std::vector<PartialDictElement<Data>>::size_type;
+    using SizeType = typename std::vector<PartialDictElement<Data>>::size_type;
     std::vector<PartialDictElement<Data>> elements;
 
     // Do not save

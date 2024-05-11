@@ -906,18 +906,24 @@ ModalResult unsaved_changes(AppState*) noexcept {
 bool editor_auth(std::string label, AuthVariant* auth) noexcept {
     bool changed = false;
     COMBO_VARIANT(label.c_str(), *auth, changed, AuthTypeLabels, AuthVariant);
-    std::visit(overloaded{
-                   [&changed, &label](std::monostate) {},
-                   [&changed, &label](AuthBasic& basic) {
-                       changed |= ImGui::InputText((label + " Name").c_str(), &basic.name);
-                       changed |= ImGui::InputText((label + " Password").c_str(), &basic.password,
-                                                   ImGuiInputTextFlags_Password);
-                   },
-                   [&changed, &label](AuthBearerToken& token) {
-                       changed |= ImGui::InputText((label + " Token").c_str(), &token.token);
-                   },
-               },
-               *auth);
+    switch (auth->index()) {
+    case AUTH_NONE:
+        break;
+    case AUTH_BASIC: {
+        assert(std::holds_alternative<AuthBasic>(*auth));
+        AuthBasic* basic = &std::get<AuthBasic>(*auth);
+        // TODO: Add variables to name
+        changed |= ImGui::InputText((label + " Name").c_str(), &basic->name);
+        changed |= ImGui::InputText((label + " Password").c_str(), &basic->password,
+                                    ImGuiInputTextFlags_Password);
+    } break;
+    case AUTH_BEARER_TOKEN: {
+        assert(std::holds_alternative<AuthBearerToken>(*auth));
+        AuthBearerToken* token = &std::get<AuthBearerToken>(*auth);
+        // TODO: Maybe add variables?
+        changed |= ImGui::InputText((label + " Token").c_str(), &token->token);
+    } break;
+    }
 
     return changed;
 }
@@ -932,7 +938,8 @@ bool editor_client_settings(ClientSettings* set, bool enable_dynamic) noexcept {
     CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
 
     ImGui::SameLine();
-    hint("Dynamic testing enables sequential testing for groups.\nDuring it the received cookies are used in the next tests, and it allows for Keep Alive connetions.");
+    hint("Dynamic testing enables sequential testing for groups.\nDuring it the received cookies "
+         "are used in the next tests, and it allows for Keep Alive connetions.");
 
     if (set->flags & CLIENT_DYNAMIC) {
         ImGui::SameLine();
@@ -1398,7 +1405,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
                         assert(child_idx < iterated_group->children_ids.size());
                         assert(app->tests.contains(iterated_group->children_ids.at(child_idx)));
-                        std::visit(SetClientSettingsVisitor(std::nullopt),
+                        std::visit(SetClientSettingsVisitor{std::nullopt},
                                    app->tests.at(iterated_group->children_ids.at(child_idx)));
 
                         iterate_over_nested_children(app, &id, &child_idx, group.parent_id);

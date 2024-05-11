@@ -333,12 +333,12 @@ void Group::load(SaveState* save) noexcept {
 
 std::string format_response_body(const std::string& body) noexcept {
     using json = nlohmann::json;
-   
+
     json js = json::parse(body, nullptr, false);
     if (js.is_discarded()) {
         return body;
     }
-    return js.dump(4);        
+    return js.dump(4);
 }
 
 RequestBodyType request_body_type(const std::string& str) noexcept {
@@ -348,7 +348,7 @@ RequestBodyType request_body_type(const std::string& str) noexcept {
         return REQUEST_PLAIN;
     } else if (str == "multipart/form-data") {
         return REQUEST_MULTIPART;
-    } 
+    }
 
     return REQUEST_OTHER;
 }
@@ -393,14 +393,16 @@ void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noe
     }
 
     // Remove required from old ones
-    std::for_each(test->variables.elements.begin(), test->variables.elements.end(), [&param_names, &parent_vars](auto& elem) {
-        auto param = std::find_if(param_names.begin(), param_names.end(),
-                                  [&elem](const std::string& name) { return elem.key == name; });
+    std::for_each(test->variables.elements.begin(), test->variables.elements.end(),
+                  [&param_names, &parent_vars](auto& elem) {
+                      auto param = std::find_if(
+                          param_names.begin(), param_names.end(),
+                          [&elem](const std::string& name) { return elem.key == name; });
 
-        if (param == param_names.end() || parent_vars.contains(elem.key)) {
-            elem.flags &= ~PARTIAL_DICT_ELEM_REQUIRED;
-        }
-    });
+                      if (param == param_names.end() || parent_vars.contains(elem.key)) {
+                          elem.flags &= ~PARTIAL_DICT_ELEM_REQUIRED;
+                      }
+                  });
 }
 
 httplib::Headers request_headers(const VariablesMap& vars, const Test* test) noexcept {
@@ -453,44 +455,50 @@ RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexc
     httplib::MultipartFormDataItems form;
 
     for (const auto& elem : mp.elements) {
-        std::visit(overloaded{
-                       [&form, &elem, vars](const std::string& str) {
-                           httplib::MultipartFormData data = {
-                               .name = elem.key,
-                               .content = replace_variables(vars, str),
-                               .filename = "",
-                               .content_type = replace_variables(vars, elem.data.content_type),
-                           };
-                           form.push_back(data);
-                       },
-                       [&form, &elem, vars](const std::vector<std::string>& files) {
-                           std::vector<std::string> types =
-                               split_string(replace_variables(vars, elem.data.content_type), ",");
 
-                           for (size_t file_idx = 0; file_idx < files.size(); file_idx += 1) {
-                               const auto& file = files.at(file_idx);
+        switch (elem.data.type) {
+        case MPBD_FILES: {
+            assert(std::holds_alternative<std::vector<std::string>>(elem.data.data));
+            auto& files = std::get<std::vector<std::string>>(elem.data.data);
 
-                               std::string content_type = "text/plain";
-                               if (file_idx < types.size()) { // types could be smaller
-                                   content_type = types[file_idx];
-                               }
+            std::vector<std::string> types =
+                split_string(replace_variables(vars, elem.data.content_type), ",");
 
-                               std::ifstream in(file);
-                               if (in) {
-                                   std::string file_content;
-                                   httplib::detail::read_file(file, file_content);
-                                   httplib::MultipartFormData data = {
-                                       .name = elem.key,
-                                       .content = file_content,
-                                       .filename = file_name(file),
-                                       .content_type = content_type,
-                                   };
-                                   form.push_back(data);
-                               }
-                           }
-                       },
-                   },
-                   elem.data.data);
+            for (size_t file_idx = 0; file_idx < files.size(); file_idx += 1) {
+                const auto& file = files.at(file_idx);
+
+                std::string content_type = "text/plain";
+                if (file_idx < types.size()) { // types could be smaller
+                    content_type = types[file_idx];
+                }
+
+                std::ifstream in(file);
+                if (in) {
+                    std::string file_content;
+                    httplib::detail::read_file(file, file_content);
+                    httplib::MultipartFormData data = {
+                        .name = elem.key,
+                        .content = file_content,
+                        .filename = file_name(file),
+                        .content_type = content_type,
+                    };
+                    form.push_back(data);
+                }
+            }
+        } break;
+        case MPBD_TEXT: {
+            assert(std::holds_alternative<std::string>(elem.data.data));
+            auto& str = std::get<std::string>(elem.data.data);
+
+            httplib::MultipartFormData data = {
+                .name = elem.key,
+                .content = replace_variables(vars, str),
+                .filename = "",
+                .content_type = replace_variables(vars, elem.data.content_type),
+            };
+            form.push_back(data);
+        } break;
+        }
     }
 
     const auto& boundary = httplib::detail::make_multipart_data_boundary();
@@ -517,6 +525,7 @@ ContentType response_content_type(const Response* response) noexcept {
     case RESPONSE_OTHER:
         return parse_content_type(response->other_content_type);
     }
+
     assert(false && "Unreachable");
     return {};
 }
