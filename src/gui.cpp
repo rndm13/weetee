@@ -624,9 +624,16 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
                                              : "Selected " + to_string(files.size()) +
                                                    " Files (Hover to see names)";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
-                elem->data.open_file =
-                    pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+                auto open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
+
+                auto result_files = open_file.result();
+                if (result_files.size() > 0) {
+                    changed = true;
+
+                    elem->data.data = result_files;
+                    elem->data.resolve_content_type();
+                    elem->data.open_file = std::nullopt;
+                }
             }
 
             if (!files.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
@@ -635,17 +642,6 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
                     ss << file << '\n';
                 }
                 ImGui::SetTooltip("%s", ss.str().c_str());
-            }
-
-            if (elem->data.open_file.has_value() && elem->data.open_file->ready()) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                
-                changed = true;
-
-                auto result_files = elem->data.open_file->result();
-                elem->data.data = result_files;
-                elem->data.resolve_content_type();
-                elem->data.open_file = std::nullopt;
             }
             break;
         }
@@ -1620,8 +1616,15 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
 }
 
 void save_as_file_dialog(AppState* app) noexcept {
-    app->save_file_dialog = pfd::save_file("Save To", ".", {"All Files", "*"}, pfd::opt::none);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    auto save_file_dialog = pfd::save_file("Save To", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
+
+    std::string result = save_file_dialog.result();
+
+    if (result.size() > 0) {
+        app->filename = result;
+        Log(LogLevel::Debug, "Filename: %s", app->filename.value().c_str());
+        app->save_file();
+    }
 }
 
 void save_file_dialog(AppState* app) noexcept {
@@ -1633,20 +1636,37 @@ void save_file_dialog(AppState* app) noexcept {
 }
 
 void open_file_dialog(AppState* app) noexcept {
-    app->open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    auto open_file_dialog =
+        pfd::open_file("Open File", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
+
+    std::vector<std::string> result = open_file_dialog.result();
+    if (result.size() > 0) {
+        app->filename = result[0];
+        Log(LogLevel::Debug, "Filename: %s", app->filename.value().c_str());
+        app->open_file();
+    }
 }
 
 void import_swagger_file_dialog(AppState* app) noexcept {
-    app->import_swagger_file_dialog =
+    auto import_swagger_file_dialog =
         pfd::open_file("Import Swagger JSON File", ".", {"JSON", "*.json"}, pfd::opt::none);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    std::vector<std::string> result = import_swagger_file_dialog.result();
+    if (result.size() > 0) {
+        Log(LogLevel::Debug, "filename: %s", result[0].c_str());
+        app->import_swagger(result[0]);
+    }
 }
 
 void export_swagger_file_dialog(AppState* app) noexcept {
-    app->export_swagger_file_dialog =
+    auto export_swagger_file_dialog =
         pfd::save_file("Export To", ".", {"JSON", "*.json"}, pfd::opt::none);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    std::string result = export_swagger_file_dialog.result();
+    if (result.size() > 0) {
+        Log(LogLevel::Debug, "filename: %s", result.c_str());
+        app->export_swagger(result);
+    }
 }
 
 void show_menus(AppState* app) noexcept {
@@ -1717,69 +1737,6 @@ void show_gui(AppState* app) noexcept {
     }
 
     bool changed = false;
-
-    // Opening
-    if (app->open_file_dialog.has_value() && app->open_file_dialog->ready()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        changed = true;
-
-        auto result = app->open_file_dialog->result();
-
-        if (result.size() > 0) {
-            app->filename = result[0];
-            Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
-            app->open_file();
-        }
-
-        app->open_file_dialog = std::nullopt;
-    }
-
-    // Saving
-    if (app->save_file_dialog.has_value() && app->save_file_dialog->ready()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        changed = true;
-
-        if (app->save_file_dialog->result().size() > 0) {
-            app->filename = app->save_file_dialog->result();
-            Log(LogLevel::Debug, "filename: %s", app->filename.value().c_str());
-            app->save_file();
-        }
-
-        app->save_file_dialog = std::nullopt;
-    }
-
-    // Importing
-    if (app->import_swagger_file_dialog.has_value() && app->import_swagger_file_dialog->ready()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        changed = true;
-
-        auto result = app->import_swagger_file_dialog->result();
-
-        if (result.size() > 0) {
-            Log(LogLevel::Debug, "filename: %s", result[0].c_str());
-            app->import_swagger(result[0]);
-        }
-
-        app->import_swagger_file_dialog = std::nullopt;
-    }
-
-    // Exporting
-    if (app->export_swagger_file_dialog.has_value() && app->export_swagger_file_dialog->ready()) {
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        changed = true;
-
-        if (app->export_swagger_file_dialog->result().size() > 0) {
-            std::string filename = app->export_swagger_file_dialog->result();
-            Log(LogLevel::Debug, "filename: %s", filename.c_str());
-            app->export_swagger(filename);
-        }
-
-        app->export_swagger_file_dialog = std::nullopt;
-    }
 
     // SHORTCUTS
     //
