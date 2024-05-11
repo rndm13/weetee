@@ -135,6 +135,6 @@ template <typename Key, typename Value> class MapKeyIterator : public MapIterato
     MapKeyIterator() : MapIterator<Key, Value>(){};
     MapKeyIterator(MapIterator<Key, Value> it_) : MapIterator<Key, Value>(it_){};
 
-    Key* operator->() { return (Key* const)&(MapIterator<Key, Value>::operator->()->first); }
+    Key* operator->() { return reinterpret_cast<Key* const>(&MapIterator<Key, Value>::operator->()->first); }
     Key operator*() { return MapIterator<Key, Value>::operator*().first; }
 };
