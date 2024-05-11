@@ -772,10 +772,11 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
     return cli;
 }
 
-httplib::Result make_request(AppState* app, const Test* test, const VariablesMap& vars,
-                             httplib::Client& cli) noexcept {
+bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli,
+                  const std::unordered_map<std::string, std::string>* overload_cookies) noexcept {
+
     const auto params = request_params(vars, test);
-    const auto headers = request_headers(vars, test);
+    const auto headers = request_headers(vars, test, overload_cookies);
 
     const auto req_body = request_body(vars, test);
     std::string content_type = req_body.content_type;
@@ -786,6 +787,9 @@ httplib::Result make_request(AppState* app, const Test* test, const VariablesMap
     std::string params_dest = httplib::append_query_params(dest, params);
 
     TestResult* test_result = &app->test_results.at(test->id);
+
+    test_result->running.store(true);
+    test_result->status.store(STATUS_RUNNING);
     test_result->req_body = body;
     test_result->req_content_type = content_type;
     test_result->req_endpoint = host + params_dest;
@@ -856,16 +860,6 @@ httplib::Result make_request(AppState* app, const Test* test, const VariablesMap
         test_result->res_body = format_response_body(result->body);
     }
 
-    return result;
-}
-
-bool execute_test(AppState* app, const Test* test, const VariablesMap& vars,
-                  httplib::Client& cli) noexcept {
-    TestResult* test_result = &app->test_results.at(test->id);
-    test_result->running.store(true);
-    test_result->status.store(STATUS_RUNNING);
-
-    httplib::Result result = make_request(app, test, vars, cli);
     if (!app->test_results.contains(test->id)) {
         return false;
     }
@@ -1043,11 +1037,11 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
     }
 
     // Copies test queue and vars
-    app->thr_pool.detach_task([app, test_queue, test_vars, hostname,
-                               cli_settings = group.cli_settings.value()]() {
+    // Mutates cookies
+    app->thr_pool.detach_task([app, hostname, test_queue, test_vars,
+                               cookies = std::unordered_map<std::string, std::string>{},
+                               cli_settings = group.cli_settings.value()]() mutable {
         assert(test_queue.size() == test_vars.size());
-
-        // TODO: Keep track of cookies (medium)
 
         httplib::Client cli = make_client(hostname, cli_settings);
 
@@ -1059,6 +1053,12 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
             if (app->test_results.contains(id)) {
                 TestResult* result = &app->test_results.at(id);
 
+                for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
+                    if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                        cookies[cookie.key] = cookie.data.data;
+                    }
+                }
+
                 if (!keep_running) {
                     result->running.store(false);
                     result->status.store(STATUS_CANCELLED);
@@ -1069,7 +1069,22 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                 if (result->running.load()) {
                     // Can run test
 
-                    keep_running &= execute_test(app, &test_queue.at(idx), test_vars.at(idx), cli);
+                    keep_running &=
+                        execute_test(app, &test_queue.at(idx), test_vars.at(idx), cli, &cookies);
+
+                    if (result->http_result.has_value()) {
+                        for (const auto& [key, value] : result->http_result.value()->headers) {
+                            if (key != "Set-Cookie") {
+                                continue;
+                            }
+
+                            size_t key_val_split = value.find("=");
+                            std::string cookie_name = value.substr(0, key_val_split);
+                            std::string cookie_value = value.substr(key_val_split + 1);
+
+                            cookies[cookie_name] = cookie_value;
+                        };
+                    }
                 } else {
                     keep_running = false;
                 }

@@ -366,7 +366,7 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 
 // Prefer request_body output instead
 ContentType request_content_type(const Request* request) noexcept;
-httplib::Headers request_headers(const VariablesMap& vars, const Test* test) noexcept;
+httplib::Headers request_headers(const VariablesMap& vars, const Test* test, const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
 httplib::Params request_params(const VariablesMap& vars, const Test* test) noexcept;
 
 struct RequestBodyResult {

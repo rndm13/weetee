@@ -167,8 +167,6 @@ struct AppState {
 
 httplib::Client make_client(const std::string& hostname, const ClientSettings& settings) noexcept;
 
-httplib::Result make_request(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli) noexcept;
-
 template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin, It end) noexcept {
     std::vector<size_t> tests_to_run;
     for (It it = begin; it != end; it++) {
@@ -210,7 +208,7 @@ void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
 
 void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept;
 void run_test(AppState* app, size_t test_id) noexcept;
-bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli) noexcept;
+bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli, const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
 void run_tests(AppState* app, const std::vector<size_t>& tests) noexcept;
 void rerun_test(AppState* app, TestResult* result) noexcept;
 

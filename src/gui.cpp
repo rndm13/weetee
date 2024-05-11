@@ -999,7 +999,7 @@ void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexce
         ImGui::TableHeadersRow();
         ImGui::PushFont(app->mono_font);
         for (const auto& [key, value] : headers) {
-            if (key != "Set-Cookie") {
+            if (key != "Set-Cookie" && key != "Cookie") {
                 continue;
             }
 
@@ -1054,6 +1054,7 @@ void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexce
                 if (next_pair == std::string::npos) {
                     break;
                 }
+
                 search_idx = next_pair + 1;                  // Skip over semicolon
                 while (std::isspace(value.at(search_idx))) { // Skip over white spaces
                     search_idx += 1;

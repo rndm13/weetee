@@ -405,7 +405,9 @@ void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noe
                   });
 }
 
-httplib::Headers request_headers(const VariablesMap& vars, const Test* test) noexcept {
+httplib::Headers
+request_headers(const VariablesMap& vars, const Test* test,
+                const std::unordered_map<std::string, std::string>* overload_cookies) noexcept {
     httplib::Headers result;
 
     for (const auto& header : test->request.headers.elements) {
@@ -416,12 +418,19 @@ httplib::Headers request_headers(const VariablesMap& vars, const Test* test) noe
                        replace_variables(vars, header.data.data));
     }
 
-    for (const auto& cookie : test->request.cookies.elements) {
-        if (!(cookie.flags & PARTIAL_DICT_ELEM_ENABLED)) {
-            continue;
+    if (overload_cookies != nullptr) {
+        for (const auto& [key, value] : *overload_cookies) {
+            result.emplace("Cookie",
+                           key + "=" + value);
         }
-        result.emplace("Cookie", replace_variables(vars, cookie.key) + "=" +
-                                     replace_variables(vars, cookie.data.data));
+    } else {
+        for (const auto& cookie : test->request.cookies.elements) {
+            if (!(cookie.flags & PARTIAL_DICT_ELEM_ENABLED)) {
+                continue;
+            }
+            result.emplace("Cookie", replace_variables(vars, cookie.key) + "=" +
+                                         replace_variables(vars, cookie.data.data));
+        }
     }
 
     return result;
@@ -455,7 +464,6 @@ RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexc
     httplib::MultipartFormDataItems form;
 
     for (const auto& elem : mp.elements) {
-
         switch (elem.data.type) {
         case MPBD_FILES: {
             assert(std::holds_alternative<std::vector<std::string>>(elem.data.data));
