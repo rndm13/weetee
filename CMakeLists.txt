@@ -10,7 +10,11 @@ set(CMAKE_GENERATOR "Ninja")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if (!WIN32)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op")
+else ()
+set(CMAKE_CXX_FLAGS "")
+endif ()
 
 set(JSON_BuildTests OFF CACHE INTERNAL "")
 set(JSON_MultipleHeaders OFF CACHE INTERNAL "")
