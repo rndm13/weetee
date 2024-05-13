@@ -28,34 +28,44 @@ std::string file_name(const std::string& path) noexcept {
     return path.substr(slash);
 }
 
-std::vector<std::string> split_string(const std::string& str, const std::string& separator) noexcept {
+std::vector<std::string> split_string(const std::string& str,
+                                      const std::string& separator) noexcept {
     std::vector<std::string> result;
-    size_t index = 0;
 
     auto push_result = [&result, &str](size_t begin, size_t end) {
         assert(begin < str.size());
-        assert(end < str.size());
+        assert(end <= str.size());
 
         // Trimming
         while (begin < str.size() && std::isspace(str.at(begin))) {
             begin += 1;
         }
         // End overflows
-        while (end < str.size() && std::isspace(str.at(end))) {
+        while (end - 1 < str.size() && std::isspace(str.at(end - 1))) {
             end -= 1;
         }
 
-        result.push_back(str.substr(begin, end - begin + 1));
+        result.push_back(str.substr(begin, end - begin));
     };
 
+    size_t index = 0;
     do {
-        size_t comma = str.find(separator, index);
-        if (comma == std::string::npos) {
-            push_result(index, str.size() - 1);
+        size_t sep_idx = str.find(separator, index);
+
+        if (sep_idx == index) {
+            // Rare condition when separator is the first character
+            result.push_back("");
+            index = sep_idx;
+            continue;
+        }
+
+        if (sep_idx == std::string::npos) {
+            push_result(index, str.size());
             break;
         }
-        push_result(index, comma - 1);
-        index = comma + 1;
+
+        push_result(index, sep_idx);
+        index = sep_idx + separator.size();
     } while (index < str.size());
 
     return result;

@@ -1,8 +1,12 @@
+#include "fstream"
+
+#include "nlohmann/json.hpp"
+
 #include "app_state.hpp"
 #include "http.hpp"
-#include "nlohmann/json.hpp"
 #include "partial_dict.hpp"
 #include "test.hpp"
+#include "utils.hpp"
 
 using nljson = nlohmann::json;
 
@@ -14,7 +18,7 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
 
     const auto& server = servers[0];
     if (server.contains("url")) {
-        std::string url = server["url"];
+        std::string url = server.at("url");
 
         Group* root = this->root_group();
         root->variables.elements.push_back(VariablesElement{
@@ -26,7 +30,7 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
     }
 
     if (server.contains("variables")) {
-        const nljson& vars = server["variables"];
+        const nljson& vars = server.at("variables");
 
         Group* root = this->root_group();
         for (auto it = vars.begin(); it != vars.end(); it++) {
@@ -37,7 +41,7 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
             if (value.contains("default")) {
                 root->variables.elements.push_back(VariablesElement{
                     .key = it.key(),
-                    .data = {.data = value["default"]},
+                    .data = {.data = value.at("default")},
                 });
             }
         }
@@ -46,24 +50,168 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
     // NOTE: Missing description
 }
 
-std::pair<Variables, Parameters> import_swagger_parameters(const nljson& parameters) noexcept {
+nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) noexcept {
+    if (!relative.contains("$ref")) {
+        return relative;
+    }
+
+    std::string ref = relative.at("$ref");
+    std::string location, local;
+    nljson resolved;
+
+    {
+        size_t separator = ref.find("#/");
+        if (separator != std::string::npos) {
+            location = ref.substr(0, separator);
+            local = ref.substr(separator + 2);
+            resolved = swagger;
+        }
+    }
+
+    {
+        size_t separator = ref.find("~/");
+        if (separator != std::string::npos) {
+            location = ref.substr(0, separator);
+            local = ref.substr(separator + 2);
+            resolved = relative;
+        }
+    }
+
+    resolved.erase("$ref");
+
+    if (location.empty() && local.empty()) {
+        Log(LogLevel::Error, "Failed to resolve swagger Reference '%s'", ref.c_str());
+        return {};
+    }
+
+    if (location.find("//") != std::string::npos) {
+        // URL Reference
+        auto [host, endpoint] = split_endpoint(location);
+        httplib::Client cli(host);
+
+        auto result = cli.Get(endpoint);
+        if (result.error() != httplib::Error::Success) {
+            Log(LogLevel::Error, "Failed to resolve swagger URL Reference '%s' : %s",
+                location.c_str(), to_string(result.error()).c_str());
+            return {};
+        } else {
+            nljson json = nljson::parse(result->body, nullptr, false);
+            if (json.is_discarded()) {
+                Log(LogLevel::Error, "Failed to parse swagger URL Reference '%s'",
+                    location.c_str());
+                return {};
+            }
+
+            resolved = json;
+        }
+    }
+
+    if (!location.empty()) {
+        // File
+
+        std::ifstream in(location);
+        if (!in) {
+            Log(LogLevel::Error, "Failed to open swagger Remote Reference '%s'", location.c_str());
+            return {};
+        }
+
+        nljson json = nljson::parse(in, nullptr, false);
+        if (json.is_discarded()) {
+            Log(LogLevel::Error, "Failed to parse swagger Remote Reference '%s'", location.c_str());
+            return {};
+        }
+
+        resolved = json;
+    }
+
+    std::vector<std::string> locals = split_string(local, "/");
+
+    auto find_and_replace = [](std::string& str, const std::string& to_replace,
+                               const std::string replace_with) noexcept {
+        size_t found = str.find(to_replace);
+        while (found != std::string::npos) {
+            str.replace(found, to_replace.size(), replace_with);
+            found = str.find(to_replace);
+        }
+    };
+
+    for (std::string& name : locals) {
+        find_and_replace(name, "~0", "~");
+        find_and_replace(name, "~1", "/");
+
+        if (resolved.contains(name)) {
+            resolved = resolved.at(name);
+        } else {
+            Log(LogLevel::Error, "Failed to find swagger Reference '%s' for '%s'", name.c_str(),
+                local.c_str());
+            return {};
+        }
+    }
+
+    if (resolved.is_object() && relative.is_object()) {
+        resolved.merge_patch(relative);
+    }
+
+    return resolved;
+}
+
+nljson schema_example(const nljson& schema, const nljson& swagger) noexcept {
+    nljson schema_value = resolve_swagger_ref(schema, swagger);
+
+    if (schema_value.contains("example")) {
+        return schema_value.at("example");
+    }
+
+    if (schema_value.contains("type")) {
+        if (schema_value.at("type") == "object") {
+            std::unordered_map<std::string, nljson> object_example;
+
+            if (schema_value.contains("properties")) {
+                for (auto& [key, value] : schema_value.at("properties").items()) {
+                    object_example.emplace(key, schema_example(value, swagger));
+                }
+            }
+
+            return object_example;
+        }
+
+        if (schema_value.at("type") == "array") {
+            std::vector<nljson> array_example;
+
+            if (schema_value.contains("items")) {
+                array_example.emplace_back(schema_example(schema_value.at("items"), swagger));
+            }
+
+            return array_example;
+        }
+
+        return schema_value.at("type");
+    }
+
+    return schema_value;
+}
+
+std::pair<Variables, Parameters> import_swagger_parameters(const nljson& parameters,
+                                                           const nljson& swagger) noexcept {
     Variables vars;
     Parameters params;
 
     for (const auto& param : parameters) {
-        if (!param.contains("name") || !param.contains("in")) {
+        nljson param_value = resolve_swagger_ref(param, swagger);
+
+        if (!param_value.contains("name") || !param_value.contains("in")) {
             continue;
         }
 
-        std::string name = param.at("name");
-        std::string in = param.at("in");
+        std::string name = param_value.at("name");
+        std::string in = param_value.at("in");
 
         std::string value = "";
 
-        if (param.contains("example")) {
-            value = to_string(param.at("example"));
-        } else if (param.contains("examples")) {
-            const auto& examples = param.at("examples");
+        if (param_value.contains("example")) {
+            value = to_string(param_value.at("example"));
+        } else if (param_value.contains("examples")) {
+            const auto& examples = param_value.at("examples");
             for (auto example = examples.begin(); example != examples.end(); example++) {
                 if (example.value().contains("value")) {
                     value = example.value().at("value");
@@ -72,8 +220,8 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
                 // TODO: Multiple tests for each example
                 break;
             }
-        } else if (param.contains("schema")) {
-            value = to_string(param.at("schema"));
+        } else if (param_value.contains("schema")) {
+            value = to_string(schema_example(param_value.at("schema"), swagger));
         }
 
         // Don't put required on this one as it won't remain required after url
@@ -93,9 +241,11 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
     return {vars, params};
 }
 
-void AppState::import_swagger_paths(const nljson& paths) noexcept {
+void AppState::import_swagger_paths(const nljson& paths, const nljson& swagger) noexcept {
     for (auto path = paths.begin(); path != paths.end(); path++) {
         std::string endpoint = "{url}" + path.key();
+
+        nljson value = resolve_swagger_ref(path.value(), swagger);
 
         auto group_id = ++this->id_counter;
         {
@@ -114,16 +264,16 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
         Group& new_group = std::get<Group>(this->tests.at(group_id));
 
         Parameters group_params;
-        if (path.value().contains("parameters")) {
-            path.value().at("parameters");
+        if (value.contains("parameters")) {
+            value.at("parameters");
 
-            auto [vars, params] = import_swagger_parameters(path.value().at("parameters"));
+            auto [vars, params] = import_swagger_parameters(value.at("parameters"), swagger);
             new_group.variables = vars;
             group_params = params;
         }
 
         auto group_vars = this->get_test_variables(group_id);
-        const auto& operations = path.value();
+        const auto& operations = value;
         for (auto op = operations.begin(); op != operations.end(); op++) {
             HTTPType type = http_type_from_label(op.key());
             if (type == static_cast<HTTPType>(-1)) {
@@ -154,7 +304,8 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
             // Variables/Parameters
 
             if (op.value().contains("parameters")) {
-                auto [vars, params] = import_swagger_parameters(op.value().at("parameters"));
+                auto [vars, params] =
+                    import_swagger_parameters(op.value().at("parameters"), swagger);
                 new_test.variables = vars;
                 std::copy(params.elements.begin(), params.elements.end(),
                           std::back_inserter(new_test.request.parameters.elements));
@@ -165,22 +316,29 @@ void AppState::import_swagger_paths(const nljson& paths) noexcept {
             // Body
 
             if (op.value().contains("requestBody")) {
-                if (op.value().at("requestBody").contains("content")) {
-                    const auto& content = op.value().at("requestBody").at("content");
+                nljson body_value = resolve_swagger_ref(op.value().at("requestBody"), swagger);
+
+                if (body_value.contains("content")) {
+                    const auto& content = body_value.at("content");
                     for (auto it = content.begin(); it != content.end(); it++) {
                         std::string content_type = it.key();
                         const auto& media_type = it.value();
 
                         new_test.request.body_type = request_body_type(content_type);
+
                         if (new_test.request.body_type == REQUEST_OTHER) {
                             new_test.request.other_content_type = content_type;
                         }
 
-                        if (media_type.contains("value")) {
-                            new_test.request.body = media_type.at("value").dump(4);
+                        if (media_type.contains("example")) {
+                            new_test.request.body = media_type.at("example").dump(4);
+
                             if (new_test.request.body_type == REQUEST_MULTIPART) {
                                 request_body_convert<REQUEST_MULTIPART>(&new_test);
                             }
+                        } else if (media_type.contains("schema")) {
+                            new_test.request.body =
+                                to_string(schema_example(media_type.at("schema"), swagger));
                         }
 
                         // TODO: Multiple tests for each content-type
@@ -203,7 +361,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
 
     nljson swagger = nljson::parse(in, nullptr, false);
     if (swagger.is_discarded()) {
-            return;
+        return;
     }
 
     this->selected_tests.clear();
@@ -235,7 +393,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         }
 
         if (swagger.contains("paths")) {
-            import_swagger_paths(swagger["paths"]);
+            import_swagger_paths(swagger.at("paths"), swagger);
         } else {
             Log(LogLevel::Warning, "Failed to import swagger paths");
         }
@@ -244,8 +402,6 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     } catch (std::exception& e) {
         Log(LogLevel::Error, "Failed to import swagger: %s", e.what());
     }
-
-    // TODO: Add refs to swagger
 }
 
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
@@ -304,3 +460,4 @@ void AppState::export_swagger(const std::string& swagger_file) const noexcept {
         Log(LogLevel::Error, "Failed to export swagger: %s", e.what());
     }
 }
+
