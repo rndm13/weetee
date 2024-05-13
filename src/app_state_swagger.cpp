@@ -460,4 +460,3 @@ void AppState::export_swagger(const std::string& swagger_file) const noexcept {
         Log(LogLevel::Error, "Failed to export swagger: %s", e.what());
     }
 }
-

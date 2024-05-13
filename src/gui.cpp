@@ -1728,7 +1728,11 @@ void show_gui(AppState* app) noexcept {
     ImGuiTestEngine* engine = HelloImGui::GetImGuiTestEngine();
     ImGuiTestEngine_ShowTestEngineWindows(engine, nullptr);
 #endif
-    ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
+    static bool first_call = true;
+    if (first_call) {
+        ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
+        first_call = false;
+    }
 
     if (!app->tree_view_focused) {
         app->selected_tests.clear();
