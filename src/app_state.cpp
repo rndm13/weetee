@@ -649,7 +649,7 @@ const char* body_match(const VariablesMap& vars, const Test* test,
     return nullptr;
 }
 
-// TODO: add wildcards to header matching (easy)
+// TODO: Add wildcards to header matching (easy)
 const char* header_match(const VariablesMap& vars, const Test* test,
                          const httplib::Result& result) noexcept {
     httplib::Headers headers = response_headers(vars, test);
@@ -1072,7 +1072,7 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                     keep_running &=
                         execute_test(app, &test_queue.at(idx), test_vars.at(idx), cli, &cookies);
 
-                    if (result->http_result.has_value()) {
+                    if (result->http_result.has_value() && result->http_result->error() == httplib::Error::Success) {
                         for (const auto& [key, value] : result->http_result.value()->headers) {
                             if (key != "Set-Cookie") {
                                 continue;

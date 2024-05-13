@@ -245,7 +245,8 @@ struct TestResult {
     size_t progress_total;
     size_t progress_current;
 
-    TestResult(const Test& _original_test, bool _running) noexcept : running(_running), original_test(_original_test) {}
+    TestResult(const Test& _original_test, bool _running) noexcept
+        : running(_running), original_test(_original_test) {}
 };
 
 std::string format_response_body(const std::string& body) noexcept;
@@ -307,7 +308,7 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
         break;
     }
 
-    // unreachable
+    assert(false && "Unreachable");
     return false;
 }
 
@@ -342,6 +343,7 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
         MultiPartBody to_replace = {};
         nlohmann::json j = nlohmann::json::parse(str, nullptr, false);
         if (!j.is_discarded()) {
+            // TODO: This crashes on windows build
             auto map = j.template get<std::unordered_multimap<std::string, MultiPartBodyData>>();
 
             for (const auto& [key, value] : map) {
@@ -366,7 +368,9 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 
 // Prefer request_body output instead
 ContentType request_content_type(const Request* request) noexcept;
-httplib::Headers request_headers(const VariablesMap& vars, const Test* test, const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
+httplib::Headers request_headers(
+    const VariablesMap& vars, const Test* test,
+    const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
 httplib::Params request_params(const VariablesMap& vars, const Test* test) noexcept;
 
 struct RequestBodyResult {

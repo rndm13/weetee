@@ -912,7 +912,6 @@ bool editor_auth(std::string label, AuthVariant* auth) noexcept {
     case AUTH_BASIC: {
         assert(std::holds_alternative<AuthBasic>(*auth));
         AuthBasic* basic = &std::get<AuthBasic>(*auth);
-        // TODO: Add variables to name
         changed |= ImGui::InputText((label + " Name").c_str(), &basic->name);
         changed |= ImGui::InputText((label + " Password").c_str(), &basic->password,
                                     ImGuiInputTextFlags_Password);
@@ -920,7 +919,6 @@ bool editor_auth(std::string label, AuthVariant* auth) noexcept {
     case AUTH_BEARER_TOKEN: {
         assert(std::holds_alternative<AuthBearerToken>(*auth));
         AuthBearerToken* token = &std::get<AuthBearerToken>(*auth);
-        // TODO: Maybe add variables?
         changed |= ImGui::InputText((label + " Token").c_str(), &token->token);
     } break;
     }
@@ -1126,7 +1124,7 @@ ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
                                 hint("Expected: %s", tr->original_test.response.status.c_str());
 
                                 {
-                                    // TODO: add a diff like view (very very hard)
+                                    // TODO: Add a diff like view (very very hard)
                                     ImGui::PushFont(app->mono_font);
                                     // Is given readonly flag so const_cast is fine
                                     ImGui::InputTextMultiline(
@@ -1152,12 +1150,12 @@ ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
                                 ImGui::EndTabItem();
                             }
                             if (ImGui::BeginTabItem("Cookies")) {
-                                // TODO: add expected cookies in split window (hard)
+                                // TODO: Add expected cookies in split window (hard)
                                 show_httplib_cookies(app, http_result->headers);
                                 ImGui::EndTabItem();
                             }
                             if (ImGui::BeginTabItem("Headers")) {
-                                // TODO: add expected headers in split window (hard)
+                                // TODO: Add expected headers in split window (hard)
                                 show_httplib_headers(app, http_result->headers);
 
                                 ImGui::EndTabItem();
