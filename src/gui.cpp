@@ -654,11 +654,6 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
                     case MPBD_TEXT:
                         elem->data.data = "";
                         elem->data.content_type = "text/plain";
-                        if (elem->data.open_file.has_value()) {
-                            std::this_thread::sleep_for(std::chrono::seconds(1));
-                            elem->data.open_file->kill();
-                            elem->data.open_file.reset();
-                        }
                         break;
                     case MPBD_FILES:
                         elem->data.data = std::vector<std::string>{};
@@ -702,7 +697,6 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
 
                     elem->data.data = result_files;
                     elem->data.resolve_content_type();
-                    elem->data.open_file = std::nullopt;
                 }
             }
 

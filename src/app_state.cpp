@@ -156,19 +156,21 @@ VariablesMap AppState::get_test_variables(size_t id) const noexcept {
     while (this->tests.contains(id)) {
         const auto& test = this->tests.at(id);
         const Variables& vars_input = std::visit(VariablesVisitor(), test);
-        std::for_each(vars_input.elements.begin(), vars_input.elements.end(),
-                      [&result](const VariablesElement& elem) {
-                          if (elem.flags & PARTIAL_DICT_ELEM_ENABLED &&
-                              !result.contains(elem.key)) {
+        std::for_each(
+            vars_input.elements.begin(), vars_input.elements.end(),
+            [&result](const VariablesElement& elem) {
+                if (elem.flags & PARTIAL_DICT_ELEM_ENABLED && !result.contains(elem.key)) {
 
-                              if (!elem.data.separator.has_value()) {
-                                  result.emplace(elem.key, elem.data.data);
-                              } else {
-                                  std::vector<std::string> possible_values = split_string(elem.data.data, std::string{elem.data.separator.value()});
-                                  result.emplace(elem.key, possible_values.at(rand() % possible_values.size()));
-                              }
-                          }
-                      });
+                    if (!elem.data.separator.has_value()) {
+                        result.emplace(elem.key, elem.data.data);
+                    } else {
+                        std::vector<std::string> possible_values =
+                            split_string(elem.data.data, std::string{elem.data.separator.value()});
+                        result.emplace(elem.key,
+                                       possible_values.at(rand() % possible_values.size()));
+                    }
+                }
+            });
 
         id = std::visit(ParentIDVisitor(), test);
     }

@@ -3,8 +3,6 @@
 #include "save_state.hpp"
 #include "textinputcombo.hpp"
 
-#include "portable_file_dialogs/portable_file_dialogs.h"
-
 #include "cmath"
 #include "optional"
 #include "string"
@@ -119,9 +117,6 @@ struct MultiPartBodyElementData {
     MultiPartBodyDataType type;
     MultiPartBodyData data;
     std::string content_type;
-
-    // do not save
-    std::optional<pfd::open_file> open_file;
 
     static constexpr size_t field_count = 3;
     static const char* field_labels[field_count];

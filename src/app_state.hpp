@@ -44,11 +44,6 @@ struct AppState {
     UndoHistory undo_history;
 
     // Don't save
-
-    std::optional<pfd::open_file> open_file_dialog;
-    std::optional<pfd::open_file> import_swagger_file_dialog;
-    std::optional<pfd::save_file> save_file_dialog;
-    std::optional<pfd::save_file> export_swagger_file_dialog;
     std::optional<std::string> filename;
 
     BS::thread_pool thr_pool;
