@@ -601,14 +601,21 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
 
             elem->data.separator = '\n';
         }
-        if (ImGui::MenuItem("|", nullptr, elem->data.separator == '|')) {
+
+        char separator[2] = "";
+        if (elem->data.separator.has_value() && elem->data.separator != '\n') {
+            separator[0] = elem->data.separator.value();
+            separator[1] = '\0';
+        }
+
+        if (ImGui::InputText("##separator", separator, ARRAY_SIZE(separator))) {
             changed = true;
 
             if (elem->data.separator.has_value()) {
-                find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, "|");
+                find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, separator);
             }
 
-            elem->data.separator = '|';
+            elem->data.separator = *separator;
         }
 
         ImGui::EndMenu();

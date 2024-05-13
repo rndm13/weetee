@@ -4,6 +4,7 @@
 #include "fstream"
 #include "hello_imgui/hello_imgui_logger.h"
 #include "http.hpp"
+#include "imgui_stdlib.h"
 #include "iterator"
 #include "partial_dict.hpp"
 #include "test.hpp"
