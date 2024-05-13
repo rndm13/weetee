@@ -126,15 +126,6 @@ nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) noexce
 
     std::vector<std::string> locals = split_string(local, "/");
 
-    auto find_and_replace = [](std::string& str, const std::string& to_replace,
-                               const std::string replace_with) noexcept {
-        size_t found = str.find(to_replace);
-        while (found != std::string::npos) {
-            str.replace(found, to_replace.size(), replace_with);
-            found = str.find(to_replace);
-        }
-    };
-
     for (std::string& name : locals) {
         find_and_replace(name, "~0", "~");
         find_and_replace(name, "~1", "/");

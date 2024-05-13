@@ -55,7 +55,7 @@ std::vector<std::string> split_string(const std::string& str,
         if (sep_idx == index) {
             // Rare condition when separator is the first character
             result.push_back("");
-            index = sep_idx;
+            index = sep_idx + separator.size();
             continue;
         }
 
@@ -95,3 +95,12 @@ std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, cha
 
     return result;
 }
+
+void find_and_replace(std::string& str, const std::string& to_replace,
+                      const std::string& replace_with) noexcept {
+    size_t found = str.find(to_replace);
+    while (found != std::string::npos) {
+        str.replace(found, to_replace.size(), replace_with);
+        found = str.find(to_replace);
+    }
+};

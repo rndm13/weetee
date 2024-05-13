@@ -157,13 +157,17 @@ const char* HeadersElementData::field_labels[field_count] = {
 void VariablesElementData::save(SaveState* save) const noexcept {
     assert(save);
 
-    save->save(data);
+    save->save(this->data);
+    save->save(this->separator);
 }
 
 bool VariablesElementData::can_load(SaveState* save) const noexcept {
     assert(save);
 
-    if (!save->can_load(data)) {
+    if (!save->can_load(this->data)) {
+        return false;
+    }
+    if (!save->can_load(this->separator)) {
         return false;
     }
 
@@ -173,7 +177,8 @@ bool VariablesElementData::can_load(SaveState* save) const noexcept {
 void VariablesElementData::load(SaveState* save) noexcept {
     assert(save);
 
-    save->load(data);
+    save->load(this->data);
+    save->load(this->separator);
 }
 
 bool VariablesElementData::operator!=(const VariablesElementData& other) const noexcept {

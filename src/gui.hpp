@@ -10,6 +10,18 @@
 
 #include "cmath"
 
+static constexpr ImGuiTableFlags TABLE_FLAGS =
+    ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV | ImGuiTableFlags_Hideable |
+    ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
+    ImGuiTableFlags_Resizable;
+
+static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS = ImGuiSelectableFlags_SpanAllColumns |
+                                                         ImGuiSelectableFlags_AllowOverlap |
+                                                         ImGuiSelectableFlags_AllowDoubleClick;
+
+static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
+    ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
+
 #define CHECKBOX_FLAG(flags, changed, flag_name, flag_label)                                       \
     do {                                                                                           \
         bool flag = (flags) & (flag_name);                                                         \
@@ -43,9 +55,12 @@ bool http_type_button(HTTPType type, ImVec2 size = {0, 0}) noexcept;
 
 bool tree_view_context(AppState* app, size_t nested_test_id) noexcept;
 bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept;
-bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min_selectable_rect, ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
-bool tree_view_show(AppState* app, Test& test, ImVec2& min_selectable_rect, ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
-bool tree_view_show(AppState* app, Group& group, ImVec2& min_selectable_rect, ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
+bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min_selectable_rect,
+                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
+bool tree_view_show(AppState* app, Test& test, ImVec2& min_selectable_rect,
+                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
+bool tree_view_show(AppState* app, Group& group, ImVec2& min_selectable_rect,
+                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
 void tree_view(AppState* app) noexcept;
 
 template <typename Data>
@@ -84,7 +99,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 select_only_this();
             }
 
-            if (!(flags & PARTIAL_DICT_NO_DELETE) && ImGui::MenuItem("Delete")) {
+            if (ImGui::MenuItem("Delete", nullptr, false, !(flags & PARTIAL_DICT_NO_DELETE))) {
                 changed = true;
 
                 for (auto& e : pd->elements) {
@@ -94,7 +109,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 }
             }
 
-            if (!(flags & PARTIAL_DICT_NO_ENABLE) && ImGui::MenuItem("Enable")) {
+            if ( ImGui::MenuItem("Enable", nullptr, false, !(flags & PARTIAL_DICT_NO_ENABLE))) {
                 for (auto& e : pd->elements) {
                     if (e.flags & PARTIAL_DICT_ELEM_SELECTED) {
                         e.flags |= PARTIAL_DICT_ELEM_ENABLED;
@@ -102,12 +117,17 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 }
             }
 
-            if (!(flags & PARTIAL_DICT_NO_ENABLE) && ImGui::MenuItem("Disable")) {
+            if (ImGui::MenuItem("Disable", nullptr, false, !(flags & PARTIAL_DICT_NO_ENABLE))) {
                 for (auto& e : pd->elements) {
                     if (e.flags & PARTIAL_DICT_ELEM_SELECTED) {
                         e.flags &= ~PARTIAL_DICT_ELEM_ENABLED;
                     }
                 }
+            }
+
+            if constexpr (requires { partial_dict_data_context(app, pd, elem, vars); }) {
+                ImGui::Separator();
+                changed |= partial_dict_data_context(app, pd, elem, vars);
             }
 
             ImGui::EndPopup();
@@ -141,6 +161,8 @@ bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem,
                            const VariablesMap&) noexcept;
 bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem, const VariablesMap&) noexcept;
 bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem,
+                           const VariablesMap&) noexcept;
+bool partial_dict_data_context(AppState*, Variables*, VariablesElement* elem,
                            const VariablesMap&) noexcept;
 bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem,
                            const VariablesMap&) noexcept;

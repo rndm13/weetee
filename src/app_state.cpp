@@ -159,7 +159,13 @@ VariablesMap AppState::get_test_variables(size_t id) const noexcept {
                       [&result](const VariablesElement& elem) {
                           if (elem.flags & PARTIAL_DICT_ELEM_ENABLED &&
                               !result.contains(elem.key)) {
-                              result.emplace(elem.key, elem.data.data);
+
+                              if (!elem.data.separator.has_value()) {
+                                  result.emplace(elem.key, elem.data.data);
+                              } else {
+                                  std::vector<std::string> possible_values = split_string(elem.data.data, std::string{elem.data.separator.value()});
+                                  result.emplace(elem.key, possible_values.at(rand() % possible_values.size()));
+                              }
                           }
                       });
 
@@ -735,6 +741,8 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
     cli.set_follow_location(settings.flags & CLIENT_FOLLOW_REDIRECTS);
     cli.set_keep_alive(settings.flags & CLIENT_KEEP_ALIVE);
 
+    cli.set_connection_timeout(settings.seconds_timeout);
+
     switch (settings.auth.index()) {
     case AUTH_NONE:
         break;
@@ -1072,7 +1080,8 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                     keep_running &=
                         execute_test(app, &test_queue.at(idx), test_vars.at(idx), cli, &cookies);
 
-                    if (result->http_result.has_value() && result->http_result->error() == httplib::Error::Success) {
+                    if (result->http_result.has_value() &&
+                        result->http_result->error() == httplib::Error::Success) {
                         for (const auto& [key, value] : result->http_result.value()->headers) {
                             if (key != "Set-Cookie") {
                                 continue;

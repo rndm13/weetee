@@ -156,10 +156,14 @@ enum ClientSettingsFlags : uint16_t {
 
 struct ClientSettings {
     uint16_t flags = CLIENT_NONE;
+
     AuthVariant auth;
+
     std::string proxy_host;
     int proxy_port;
     AuthVariant proxy_auth;
+
+    size_t seconds_timeout = 10;
 
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;

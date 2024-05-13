@@ -559,14 +559,76 @@ bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Variables*, VariablesElement* elem,
+bool partial_dict_data_row(AppState* app, Variables* vars_pd, VariablesElement* elem,
                            const VariablesMap& vars) noexcept {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
-        changed |= ImGui::InputText("##data", &elem->data.data);
+        if (elem->data.separator == '\n') {
+            changed |= ImGui::InputTextMultiline("##data", &elem->data.data);
+        } else {
+            changed |= ImGui::InputText("##data", &elem->data.data);
+        }
+
+        if (ImGui::BeginPopupContextItem()) {
+            partial_dict_data_context(app, vars_pd, elem, vars);
+            ImGui::EndPopup();
+        }
+
         tooltip("%s", replace_variables(vars, elem->data.data).c_str());
     }
+    return changed;
+}
+
+bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem,
+                               const VariablesMap& vars) noexcept {
+    bool changed = false;
+
+    if (ImGui::BeginMenu("Fuzzing Separator")) {
+        if (ImGui::MenuItem("None", nullptr, elem->data.separator == std::nullopt)) {
+            changed = true;
+
+            find_and_replace(elem->data.data, "\n", " ");
+
+            elem->data.separator = std::nullopt;
+        }
+        if (ImGui::MenuItem("New Line", nullptr, elem->data.separator == '\n')) {
+            changed = true;
+
+            if (elem->data.separator.has_value()) {
+                find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, "\n");
+            }
+
+            elem->data.separator = '\n';
+        }
+        if (ImGui::MenuItem("|", nullptr, elem->data.separator == '|')) {
+            changed = true;
+
+            if (elem->data.separator.has_value()) {
+                find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, "|");
+            }
+
+            elem->data.separator = '|';
+        }
+
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::MenuItem("Load from file")) {
+        changed = true;
+        auto open_file_dialog =
+            pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
+
+        std::vector<std::string> result = open_file_dialog.result();
+        if (result.size() > 0) {
+            httplib::detail::read_file(result.at(0), elem->data.data);
+        }
+
+        if (elem->data.data.find("\n") != std::string::npos) {
+            elem->data.separator = '\n';
+        }
+    }
+
     return changed;
 }
 
@@ -624,7 +686,8 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
                                              : "Selected " + to_string(files.size()) +
                                                    " Files (Hover to see names)";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
-                auto open_file = pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
+                auto open_file =
+                    pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
 
                 auto result_files = open_file.result();
                 if (result_files.size() > 0) {
@@ -957,6 +1020,9 @@ bool editor_client_settings(ClientSettings* set, bool enable_dynamic) noexcept {
         changed |= ImGui::InputInt("Proxy Port", &set->proxy_port);
         changed |= editor_auth("Proxy Authentication", &set->proxy_auth);
     }
+
+    size_t step = 1;
+    changed |= ImGui::InputScalar("Timeout (Seconds)", ImGuiDataType_U64, &set->seconds_timeout, &step);
 
     return changed;
 }
@@ -1614,7 +1680,8 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
 }
 
 void save_as_file_dialog(AppState* app) noexcept {
-    auto save_file_dialog = pfd::save_file("Save To", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
+    auto save_file_dialog =
+        pfd::save_file("Save To", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
 
     std::string result = save_file_dialog.result();
 
@@ -1634,8 +1701,8 @@ void save_file_dialog(AppState* app) noexcept {
 }
 
 void open_file_dialog(AppState* app) noexcept {
-    auto open_file_dialog =
-        pfd::open_file("Open File", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
+    auto open_file_dialog = pfd::open_file(
+        "Open File", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
 
     std::vector<std::string> result = open_file_dialog.result();
     if (result.size() > 0) {
@@ -1728,6 +1795,7 @@ void show_gui(AppState* app) noexcept {
     ImGuiTestEngine* engine = HelloImGui::GetImGuiTestEngine();
     ImGuiTestEngine_ShowTestEngineWindows(engine, nullptr);
 #endif
+
     static bool first_call = true;
     if (first_call) {
         ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);

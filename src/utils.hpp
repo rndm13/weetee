@@ -17,8 +17,6 @@
 #include "variant"
 #include "vector"
 
-#include <chrono>
-
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
@@ -74,22 +72,13 @@ constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noex
     return true;
 }
 
-static constexpr ImGuiTableFlags TABLE_FLAGS =
-    ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersV | ImGuiTableFlags_Hideable |
-    ImGuiTableFlags_BordersOuter | ImGuiTableFlags_RowBg | ImGuiTableFlags_Reorderable |
-    ImGuiTableFlags_Resizable;
-
-static constexpr ImGuiSelectableFlags SELECTABLE_FLAGS = ImGuiSelectableFlags_SpanAllColumns |
-                                                         ImGuiSelectableFlags_AllowOverlap |
-                                                         ImGuiSelectableFlags_AllowDoubleClick;
-
-static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
-    ImGuiDragDropFlags_SourceNoDisableHover | ImGuiDragDropFlags_SourceNoHoldToOpenOthers;
-
 constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
     return ImVec4(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f,
                   static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
 }
+
+void find_and_replace(std::string& str, const std::string& to_replace,
+                      const std::string& replace_with) noexcept;
 
 // Case insensitive string comparison
 bool contains(const std::string& haystack, const std::string& needle) noexcept;
@@ -135,6 +124,8 @@ template <typename Key, typename Value> class MapKeyIterator : public MapIterato
     MapKeyIterator() : MapIterator<Key, Value>(){};
     MapKeyIterator(MapIterator<Key, Value> it_) : MapIterator<Key, Value>(it_){};
 
-    Key* operator->() { return reinterpret_cast<Key* const>(&MapIterator<Key, Value>::operator->()->first); }
+    Key* operator->() {
+        return reinterpret_cast<Key* const>(&MapIterator<Key, Value>::operator->()->first);
+    }
     Key operator*() { return MapIterator<Key, Value>::operator*().first; }
 };

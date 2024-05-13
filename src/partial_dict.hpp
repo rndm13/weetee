@@ -183,6 +183,7 @@ using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
 
 struct VariablesElementData {
+    std::optional<char> separator;
     std::string data;
 
     static constexpr size_t field_count = 1;

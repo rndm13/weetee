@@ -223,11 +223,14 @@ void ClientSettings::save(SaveState* save) const noexcept {
     assert(save);
 
     save->save(this->flags);
-    // NOTE: can disable save when CLIENT_PROXY isn't set
+
     save->save(this->auth);
+    // NOTE: can disable save when CLIENT_PROXY isn't set
     save->save(this->proxy_host);
     save->save(this->proxy_port);
     save->save(this->proxy_auth);
+
+    save->save(this->seconds_timeout);
 }
 
 bool ClientSettings::can_load(SaveState* save) const noexcept {
@@ -253,6 +256,10 @@ bool ClientSettings::can_load(SaveState* save) const noexcept {
         return false;
     }
 
+    if (!save->can_load(this->seconds_timeout)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -260,10 +267,14 @@ void ClientSettings::load(SaveState* save) noexcept {
     assert(save);
 
     save->load(this->flags);
+
     save->load(this->auth);
+
     save->load(this->proxy_host);
     save->load(this->proxy_port);
     save->load(this->proxy_auth);
+
+    save->load(this->seconds_timeout);
 }
 
 std::string Test::label() const noexcept { return this->endpoint + "##" + to_string(this->id); }
