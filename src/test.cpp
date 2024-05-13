@@ -24,6 +24,58 @@ bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id,
     return label_a > label_b;
 }
 
+MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcept {
+    if (json.is_discarded()) {
+        return {};
+    }
+
+    if (!json.is_object()) {
+        return {};
+    }
+
+    MultiPartBody to_replace = {};
+
+    for (const auto& [key, value] : json.items()) {
+        MultiPartBodyElement new_elem;
+        if (value.is_string()) {
+            new_elem = MultiPartBodyElement{
+                .key = key,
+                .data =
+                    MultiPartBodyElementData{
+                        .type = MPBD_TEXT,
+                        .data = value.template get<std::string>(),
+                    },
+            };
+        } else if (value.is_array()) {
+            std::vector<std::string> files;
+
+            for (const auto& file : value.items()) {
+                if (file.value().is_string()) {
+                    files.push_back(file.value());
+                } else {
+                    return {}; // Not MultiPartBody
+                }
+            }
+
+            new_elem = MultiPartBodyElement{
+                .key = key,
+                .data =
+                    MultiPartBodyElementData{
+                        .type = MPBD_FILES,
+                        .data = files,
+                    },
+            };
+        } else {
+            return {}; // Not MultiPartBody
+        }
+
+        new_elem.data.resolve_content_type();
+        to_replace.elements.push_back(new_elem);
+    }
+
+    return to_replace;
+}
+
 void Request::save(SaveState* save) const noexcept {
     assert(save);
 
@@ -420,8 +472,7 @@ request_headers(const VariablesMap& vars, const Test* test,
 
     if (overload_cookies != nullptr) {
         for (const auto& [key, value] : *overload_cookies) {
-            result.emplace("Cookie",
-                           key + "=" + value);
+            result.emplace("Cookie", key + "=" + value);
         }
     } else {
         for (const auto& cookie : test->request.cookies.elements) {

@@ -314,7 +314,11 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id);
 
+MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcept;
+
 template <RequestBodyType to_type> void request_body_convert(Test* test) noexcept {
+    using nljson = nlohmann::json;
+
     if (test->request.body.index() == request_body_index<to_type>()) {
         // If it's the same type don't convert
         return;
@@ -332,7 +336,7 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
             map.emplace(elem.key, elem.data.data);
         }
 
-        nlohmann::json map_json = map;
+        nljson map_json = map;
         test->request.body = map_json.dump(4);
     }
 
@@ -340,27 +344,9 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
         assert(std::holds_alternative<std::string>(test->request.body));
         std::string str = std::get<std::string>(test->request.body);
 
-        MultiPartBody to_replace = {};
-        nlohmann::json j = nlohmann::json::parse(str, nullptr, false);
-        if (!j.is_discarded()) {
-            // TODO: This crashes on windows build
-            auto map = j.template get<std::unordered_multimap<std::string, MultiPartBodyData>>();
+        nljson j = nljson::parse(str, nullptr, false);
 
-            for (const auto& [key, value] : map) {
-                auto new_elem = MultiPartBodyElement{
-                    .key = key,
-                    .data =
-                        MultiPartBodyElementData{
-                            .type = static_cast<MultiPartBodyDataType>(value.index()),
-                            .data = value,
-                        },
-                };
-                new_elem.data.resolve_content_type();
-                to_replace.elements.push_back(new_elem);
-            }
-        }
-
-        test->request.body = to_replace;
+        test->request.body = request_multipart_convert_json(j);
     }
 
     test->request.body_type = to_type;
