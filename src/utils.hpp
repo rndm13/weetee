@@ -129,3 +129,20 @@ template <typename Key, typename Value> class MapKeyIterator : public MapIterato
     }
     Key operator*() { return MapIterator<Key, Value>::operator*().first; }
 };
+
+template <typename T> struct copy_atomic {
+    std::atomic<T> value;
+
+    copy_atomic() noexcept : value() {}
+    copy_atomic(const T& _value) noexcept : value(_value) {}
+
+    copy_atomic(const std::atomic<T>& a) noexcept : value(a.load()) {}
+    copy_atomic(const copy_atomic& other) noexcept : value(other.value.load()) {}
+    copy_atomic& operator=(const copy_atomic& other) noexcept {
+        value.store(other.value.load());
+        return *this;
+    }
+
+    T load() const noexcept { return this->value.load(); }
+    void store(const T& new_value) noexcept { return this->value.store(new_value); }
+};

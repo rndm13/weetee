@@ -394,7 +394,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
 
     ImGui::TableNextColumn(); // spinner for running tests
 
-    if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
+    if (is_test_running(app, id)) {
         ImSpinner::SpinnerIncDots("running", 5, 1);
     }
 
@@ -505,7 +505,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
     ImGui::TableNextColumn(); // Spinner
 
-    if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
+    if (is_test_running(app, id)) {
         ImSpinner::SpinnerIncDots("running", 5, 1);
     }
 
@@ -1634,8 +1634,10 @@ void testing_results(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     auto deselect_all = [app]() {
-        for (auto& [_, rt] : app->test_results) {
-            rt.selected = false;
+        for (auto& [_, results] : app->test_results) {
+            for (auto& result : results) {
+                result.selected = false;
+            }
         }
     };
 
@@ -1645,97 +1647,106 @@ void testing_results(AppState* app) noexcept {
         ImGui::TableSetupColumn("Verdict");
         ImGui::TableHeadersRow();
 
-        for (auto& [id, result] : app->test_results) {
+        for (auto& [id, results] : app->test_results) {
             ImGui::TableNextRow();
-            ImGui::PushID(static_cast<int32_t>(result.original_test.id));
+            if (results.size() <= 1) { // TODO: Nested test results
+                TestResult& result = results.at(0);
+                ImGui::PushID(static_cast<int32_t>(result.original_test.id));
 
-            // Test type and Name
-            if (ImGui::TableNextColumn()) {
-                http_type_button(result.original_test.type);
-                ImGui::SameLine();
+                // Test type and Name
+                if (ImGui::TableNextColumn()) {
+                    http_type_button(result.original_test.type);
+                    ImGui::SameLine();
 
-                if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
-                                      SELECTABLE_FLAGS, ImVec2(0, 0))) {
-                    if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
-                        result.open = true;
-                    }
-                    if (ImGui::GetIO().KeyCtrl) {
-                        result.selected = !result.selected;
-                    } else {
-                        deselect_all();
-                        result.selected = true;
-                    }
-                }
-
-                if (ImGui::BeginPopupContextItem()) {
-                    if (!result.selected) {
-                        deselect_all();
-                        result.selected = true;
-                    }
-
-                    if (ImGui::MenuItem("Details")) {
-                        result.open = true;
-                    }
-
-                    if (ImGui::MenuItem("Goto original test")) {
-                        if (app->tests.contains(result.original_test.id)) {
-                            app->editor_open_tab(result.original_test.id);
+                    if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
+                                          SELECTABLE_FLAGS, ImVec2(0, 0))) {
+                        if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
+                            result.open = true;
+                        }
+                        if (ImGui::GetIO().KeyCtrl) {
+                            result.selected = !result.selected;
                         } else {
-                            Log(LogLevel::Error, "Original test is missing");
+                            deselect_all();
+                            result.selected = true;
                         }
                     }
 
-                    bool any_running = false;
-                    bool any_not_running = false;
-                    for (auto& [_, rt] : app->test_results) {
-                        if (rt.selected) {
-                            any_running |= rt.running.load();
-                            any_not_running |= !rt.running.load();
+                    if (ImGui::BeginPopupContextItem()) {
+                        if (!result.selected) {
+                            deselect_all();
+                            result.selected = true;
                         }
-                    }
 
-                    if (ImGui::MenuItem("Rerun tests", nullptr, false, any_not_running)) {
-                        for (auto& [_, rt] : app->test_results) {
-                            if (rt.selected && !rt.running.load()) {
-                                rerun_test(app, &rt);
+                        if (ImGui::MenuItem("Details")) {
+                            result.open = true;
+                        }
+
+                        if (ImGui::MenuItem("Goto original test")) {
+                            if (app->tests.contains(result.original_test.id)) {
+                                app->editor_open_tab(result.original_test.id);
+                            } else {
+                                Log(LogLevel::Error, "Original test is missing");
                             }
                         }
-                    }
 
-                    if (ImGui::MenuItem("Stop tests", nullptr, false, any_running)) {
-                        for (auto& [_, rt] : app->test_results) {
-                            if (rt.selected && rt.running.load()) {
-                                stop_test(&rt);
+                        bool any_running = false;
+                        bool any_not_running = false;
+                        for (auto& [_, results] : app->test_results) {
+                            for (auto& rt : results) {
+                                if (rt.selected) {
+                                    any_running |= rt.running.load();
+                                    any_not_running |= !rt.running.load();
+                                }
                             }
                         }
+
+                        if (ImGui::MenuItem("Rerun tests", nullptr, false, any_not_running)) {
+                            for (auto& [_, results] : app->test_results) {
+                                for (auto& rt : results) {
+                                    if (rt.selected && !rt.running.load()) {
+                                        rerun_test(app, &rt);
+                                    }
+                                }
+                            }
+                        }
+
+                        if (ImGui::MenuItem("Stop tests", nullptr, false, any_running)) {
+                            for (auto& [_, results] : app->test_results) {
+                                for (auto& rt : results) {
+                                    if (rt.selected && rt.running.load()) {
+                                        stop_test(&rt);
+                                    }
+                                }
+                            }
+                        }
+
+                        ImGui::EndPopup();
                     }
-
-                    ImGui::EndPopup();
                 }
-            }
 
-            // Status
-            if (ImGui::TableNextColumn()) {
-                ImGui::Text("%s", TestResultStatusLabels[result.status.load()]);
-            }
-
-            // Verdict
-            if (ImGui::TableNextColumn()) {
-                if (result.status.load() == STATUS_RUNNING) {
-                    ImGui::ProgressBar(result.progress_total == 0
-                                           ? 0
-                                           : static_cast<float>(result.progress_current) /
-                                                 result.progress_total);
-                } else {
-                    ImGui::Text("%s", result.verdict.c_str());
+                // Status
+                if (ImGui::TableNextColumn()) {
+                    ImGui::Text("%s", TestResultStatusLabels[result.status.load()]);
                 }
-            }
 
-            ImGui::PopID();
+                // Verdict
+                if (ImGui::TableNextColumn()) {
+                    if (result.status.load() == STATUS_RUNNING) {
+                        ImGui::ProgressBar(result.progress_total == 0
+                                               ? 0
+                                               : static_cast<float>(result.progress_current) /
+                                                     result.progress_total);
+                    } else {
+                        ImGui::Text("%s", result.verdict.c_str());
+                    }
+                }
 
-            if (result.open) {
-                auto modal = open_result_details(app, &result);
-                result.open &= modal == MODAL_NONE;
+                ImGui::PopID();
+
+                if (result.open) {
+                    auto modal = open_result_details(app, &result);
+                    result.open &= modal == MODAL_NONE;
+                }
             }
         }
 

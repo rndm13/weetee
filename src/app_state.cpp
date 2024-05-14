@@ -36,9 +36,11 @@ const Group* AppState::root_group() const noexcept {
 }
 
 bool AppState::is_running_tests() const noexcept {
-    for (const auto& [id, result] : this->test_results) {
-        if (result.running.load()) {
-            return true;
+    for (const auto& [id, results] : this->test_results) {
+        for (const auto& result : results) {
+            if (result.running.load()) {
+                return true;
+            }
         }
     }
 
@@ -811,7 +813,8 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
     return cli;
 }
 
-bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli,
+bool execute_test(AppState* app, const Test* test, size_t test_result_idx, const VariablesMap& vars,
+                  httplib::Client& cli,
                   const std::unordered_map<std::string, std::string>* overload_cookies) noexcept {
 
     const auto params = request_params(vars, test);
@@ -825,7 +828,9 @@ bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, htt
 
     std::string params_dest = httplib::append_query_params(dest, params);
 
-    TestResult* test_result = &app->test_results.at(test->id);
+    assert(app->test_results.contains(test->id));
+    assert(app->test_results.at(test->id).size() > test_result_idx);
+    TestResult* test_result = &app->test_results.at(test->id).at(test_result_idx);
 
     test_result->running.store(true);
     test_result->status.store(STATUS_RUNNING);
@@ -837,6 +842,10 @@ bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, htt
     auto progress = [app, test, test_result](size_t current, size_t total) -> bool {
         // Missing
         if (!app->test_results.contains(test->id)) {
+            return false;
+        }
+
+        if (app->test_results.at(test->id).size() <= test_result->test_result_idx) {
             return false;
         }
 
@@ -901,6 +910,10 @@ bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, htt
     }
 
     if (!app->test_results.contains(test->id)) {
+        return false;
+    }
+
+    if (app->test_results.at(test->id).size() <= test_result_idx) {
         return false;
     }
 
@@ -1073,7 +1086,12 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
     // Insert test results
     for (size_t idx = 0; idx < test_queue_ids.size(); idx++) {
         assert(!app->test_results.contains(test_queue_ids.at(idx)));
-        app->test_results.try_emplace(test_queue_ids.at(idx), test_queue.at(idx), true);
+
+        // TODO: Insert multiple tests
+        std::vector<TestResult> results = {};
+        results.emplace_back(test_queue.at(idx), 0, true);
+
+        app->test_results.try_emplace(test_queue_ids.at(idx), std::move(results));
     }
 
     // Copies test queue and vars
@@ -1087,11 +1105,12 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
 
         bool keep_running = true;
 
+        // TODO: make it rerun dynamic test suite multiple times
         for (size_t idx = 0; idx < test_queue.size(); idx++) {
             size_t id = test_queue.at(idx).id;
 
             if (app->test_results.contains(id)) {
-                TestResult* result = &app->test_results.at(id);
+                TestResult* result = &app->test_results.at(id).at(0);
 
                 for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
                     if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
@@ -1110,7 +1129,7 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                     // Can run test
 
                     keep_running &=
-                        execute_test(app, &test_queue.at(idx), test_vars.at(idx), cli, &cookies);
+                        execute_test(app, &test_queue.at(idx), 0, test_vars.at(idx), cli, &cookies);
 
                     if (result->http_result.has_value() &&
                         result->http_result->error() == httplib::Error::Success) {
@@ -1144,7 +1163,12 @@ void run_test(AppState* app, size_t test_id) noexcept {
         Test& test = std::get<Test>(nt);
 
         assert(!app->test_results.contains(test_id));
-        app->test_results.try_emplace(test_id, test, true);
+
+        // TODO: Insert multiple tests
+        std::vector<TestResult> results = {};
+        results.emplace_back(test, 0, true);
+
+        app->test_results.try_emplace(test_id, std::move(results));
 
         // Copies test
         app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
@@ -1152,7 +1176,7 @@ void run_test(AppState* app, size_t test_id) noexcept {
             // Add cli settings from parent to a copy
             std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
             httplib::Client cli = make_client(host, cli_settings);
-            return execute_test(app, &test, vars, cli);
+            return execute_test(app, &test, 0, vars, cli);
         });
     } break;
     case GROUP_VARIANT: {
@@ -1187,17 +1211,33 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
 
     result->status = STATUS_WAITING;
     result->verdict = "";
+    result->progress_total = 0;
+    result->progress_current = 0;
 
     Test test = std::get<Test>(app->tests.at(result->original_test.id));
 
     // Copies test
     app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
-                               cli_settings = app->get_cli_settings(test.id)]() {
+                               result = result, cli_settings = app->get_cli_settings(test.id)]() {
         // Add cli settings from parent to a copy
         std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
         httplib::Client cli = make_client(host, cli_settings);
-        return execute_test(app, &test, vars, cli);
+        return execute_test(app, &test, result->test_result_idx, vars, cli);
     });
+}
+
+bool is_test_running(AppState* app, size_t id) noexcept {
+    if (!app->test_results.contains(id)) {
+        return false;
+    }
+
+    for (auto& result : app->test_results.at(id)) {
+        if (result.running.load()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void stop_test(TestResult* result) noexcept {
@@ -1210,14 +1250,17 @@ void stop_test(TestResult* result) noexcept {
 void stop_test(AppState* app, size_t id) noexcept {
     assert(app->test_results.contains(id));
 
-    auto& result = app->test_results.at(id);
-    stop_test(&result);
+    for (auto& result : app->test_results.at(id)) {
+        stop_test(&result);
+    }
 }
 
 void stop_tests(AppState* app) noexcept {
-    for (auto& [id, result] : app->test_results) {
-        if (result.running.load()) {
-            stop_test(&result);
+    for (auto& [id, results] : app->test_results) {
+        for (auto& result : results) {
+            if (result.running.load()) {
+                stop_test(&result);
+            }
         }
     }
 

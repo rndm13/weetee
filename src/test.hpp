@@ -221,9 +221,9 @@ static const char* TestResultStatusLabels[] = {
 
 struct TestResult {
     // Can be written and read from any thread
-    std::atomic_bool running;
+    copy_atomic<bool> running;
     // Main thread writes when stopping tests
-    std::atomic<TestResultStatus> status = STATUS_WAITING;
+    copy_atomic<TestResultStatus> status = STATUS_WAITING;
 
     // Written in draw thread
     bool selected = true;
@@ -232,6 +232,8 @@ struct TestResult {
     bool open;
 
     Test original_test;
+    size_t test_result_idx;
+
     std::optional<httplib::Result> http_result;
 
     // Written only in test_run threads
@@ -249,8 +251,8 @@ struct TestResult {
     size_t progress_total = 0;
     size_t progress_current = 0;
 
-    TestResult(const Test& _original_test, bool _running) noexcept
-        : running(_running), original_test(_original_test) {}
+    TestResult(const Test& _original_test, size_t _test_result_idx, bool _running) noexcept
+        : running(_running), test_result_idx(_test_result_idx), original_test(_original_test) {}
 };
 
 std::string format_response_body(const std::string& body) noexcept;

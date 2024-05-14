@@ -40,7 +40,7 @@ struct AppState {
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
 
     // Keys are test ids
-    std::unordered_map<size_t, TestResult> test_results;
+    std::unordered_map<size_t, std::vector<TestResult>> test_results;
 
     SaveState clipboard;
     UndoHistory undo_history;
@@ -207,9 +207,11 @@ void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
 
 void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept;
 void run_test(AppState* app, size_t test_id) noexcept;
-bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, httplib::Client& cli, const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
+bool execute_test(AppState* app, const Test* test, size_t test_result_idx, const VariablesMap& vars, httplib::Client& cli, const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
 void run_tests(AppState* app, const std::vector<size_t>& tests) noexcept;
 void rerun_test(AppState* app, TestResult* result) noexcept;
+
+bool is_test_running(AppState* app, size_t id) noexcept;
 
 void stop_test(TestResult* result) noexcept;
 void stop_test(AppState* app, size_t id) noexcept;
