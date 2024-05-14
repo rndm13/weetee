@@ -31,6 +31,8 @@ struct AppState {
     std::unordered_map<size_t, NestedTest> tests = {
         {0, root_initial},
     };
+
+    size_t tree_view_last_selected;
     std::string tree_view_filter;
     std::unordered_set<size_t> filtered_tests = {};
 

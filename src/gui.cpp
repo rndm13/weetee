@@ -250,18 +250,56 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept {
     bool item_is_selected = app->selected_tests.contains(id);
     if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
-        if (ImGui::GetIO().KeyCtrl) {
+        auto io = ImGui::GetIO();
+        if (io.KeyCtrl) {
             if (item_is_selected) {
                 app->select_with_children<false>(id);
             } else {
                 app->select_with_children(id);
             }
+        } else if (io.KeyShift) {
+            app->selected_tests.clear();
+
+            bool selection_start = false;
+            size_t it_group_id = 0, it_idx = 0;
+            const Group* root = app->root_group();
+            while (it_group_id != root->parent_id && !root->children_ids.empty()) {
+                assert(app->tests.contains(it_group_id));
+                NestedTest* it_group_nt = &app->tests.at(it_group_id);
+
+                assert(std::holds_alternative<Group>(*it_group_nt));
+                Group* it_group = &std::get<Group>(*it_group_nt);
+
+                assert(it_idx < it_group->children_ids.size());
+                assert(app->tests.contains(it_group->children_ids.at(it_idx)));
+
+                NestedTest* it_nt = &app->tests.at(it_group->children_ids.at(it_idx));
+
+                size_t it_id = std::visit(IDVisitor(), *it_nt);
+
+                if (it_id == app->tree_view_last_selected || it_id == id) {
+                    selection_start = !selection_start;
+                }
+
+                if (selection_start || it_id == app->tree_view_last_selected || it_id == id) {
+                    app->select_with_children<true>(it_id);
+                } else {
+                    app->select_with_children<false>(it_id);
+                }
+
+                iterate_over_nested_children(app, &it_group_id, &it_idx, root->parent_id);
+            }
         } else {
             app->selected_tests.clear();
+
             app->select_with_children(id);
-            return true;
         }
+
+        app->tree_view_last_selected = id;
+
+        return true;
     }
+
     return false;
 }
 
@@ -409,11 +447,13 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
     ImGui::TableNextColumn(); // test
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + indentation);
+
     if (group.flags & GROUP_OPEN) {
         arrow("down", ImGuiDir_Down);
     } else {
         arrow("right", ImGuiDir_Right);
     }
+
     ImGui::SameLine();
     ImGui::Text("%s", group.name.c_str());
 
@@ -442,7 +482,9 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
     ImGui::TableNextColumn(); // selectable
     const bool clicked = tree_view_selectable(app, id, ("##" + to_string(group.id)).c_str());
-    if (clicked) {
+
+    auto& io = ImGui::GetIO();
+    if (clicked && !io.KeyShift && !io.KeyCtrl) {
         group.flags ^= GROUP_OPEN; // toggle
     }
 
@@ -612,7 +654,8 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
             changed = true;
 
             if (elem->data.separator.has_value()) {
-                find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, separator);
+                find_and_replace(elem->data.data, std::string{elem->data.separator.value()},
+                                 separator);
             }
 
             elem->data.separator = *separator;
@@ -1023,7 +1066,8 @@ bool editor_client_settings(ClientSettings* set, bool enable_dynamic) noexcept {
     }
 
     size_t step = 1;
-    changed |= ImGui::InputScalar("Timeout (Seconds)", ImGuiDataType_U64, &set->seconds_timeout, &step);
+    changed |=
+        ImGui::InputScalar("Timeout (Seconds)", ImGuiDataType_U64, &set->seconds_timeout, &step);
 
     return changed;
 }
