@@ -207,7 +207,9 @@ void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
 
 void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept;
 void run_test(AppState* app, size_t test_id) noexcept;
-bool execute_test(AppState* app, const Test* test, size_t test_result_idx, const VariablesMap& vars, httplib::Client& cli, const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
+bool execute_test(
+    AppState* app, const Test* test, size_t test_result_idx, httplib::Client& cli,
+    const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
 void run_tests(AppState* app, const std::vector<size_t>& tests) noexcept;
 void rerun_test(AppState* app, TestResult* result) noexcept;
 

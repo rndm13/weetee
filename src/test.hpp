@@ -233,6 +233,7 @@ struct TestResult {
 
     Test original_test;
     size_t test_result_idx;
+    VariablesMap variables;
 
     std::optional<httplib::Result> http_result;
 
@@ -247,12 +248,14 @@ struct TestResult {
 
     std::string res_body;
 
-    // progress
+    // Progress
     size_t progress_total = 0;
     size_t progress_current = 0;
 
-    TestResult(const Test& _original_test, size_t _test_result_idx, bool _running) noexcept
-        : running(_running), test_result_idx(_test_result_idx), original_test(_original_test) {}
+    TestResult(const Test& _original_test, size_t _test_result_idx, bool _running,
+               const VariablesMap& _variables) noexcept
+        : running(_running), test_result_idx(_test_result_idx), original_test(_original_test),
+          variables(_variables) {}
 };
 
 std::string format_response_body(const std::string& body) noexcept;

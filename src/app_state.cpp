@@ -1,15 +1,16 @@
 #include "app_state.hpp"
 
-#include "algorithm"
-#include "fstream"
 #include "hello_imgui/hello_imgui_logger.h"
+
 #include "http.hpp"
-#include "imgui_stdlib.h"
-#include "iterator"
 #include "partial_dict.hpp"
 #include "test.hpp"
 #include "utility"
 #include "utils.hpp"
+
+#include "algorithm"
+#include "fstream"
+#include "iterator"
 
 const Group AppState::root_initial = Group{
     .parent_id = static_cast<size_t>(-1),
@@ -813,24 +814,23 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
     return cli;
 }
 
-bool execute_test(AppState* app, const Test* test, size_t test_result_idx, const VariablesMap& vars,
-                  httplib::Client& cli,
+bool execute_test(AppState* app, const Test* test, size_t test_result_idx, httplib::Client& cli,
                   const std::unordered_map<std::string, std::string>* overload_cookies) noexcept {
+    TestResult* test_result = &app->test_results.at(test->id).at(test_result_idx);
 
-    const auto params = request_params(vars, test);
-    const auto headers = request_headers(vars, test, overload_cookies);
+    const auto params = request_params(test_result->variables, test);
+    const auto headers = request_headers(test_result->variables, test, overload_cookies);
 
-    const auto req_body = request_body(vars, test);
+    const auto req_body = request_body(test_result->variables, test);
     std::string content_type = req_body.content_type;
     std::string body = req_body.body;
 
-    auto [host, dest] = split_endpoint(replace_variables(vars, test->endpoint));
+    auto [host, dest] = split_endpoint(replace_variables(test_result->variables, test->endpoint));
 
     std::string params_dest = httplib::append_query_params(dest, params);
 
     assert(app->test_results.contains(test->id));
     assert(app->test_results.at(test->id).size() > test_result_idx);
-    TestResult* test_result = &app->test_results.at(test->id).at(test_result_idx);
 
     test_result->running.store(true);
     test_result->status.store(STATUS_RUNNING);
@@ -858,9 +858,6 @@ bool execute_test(AppState* app, const Test* test, size_t test_result_idx, const
 
         test_result->progress_current = current;
         test_result->progress_total = total;
-
-        // test_result->verdict =
-        //     to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
 
         return true;
     };
@@ -919,7 +916,7 @@ bool execute_test(AppState* app, const Test* test, size_t test_result_idx, const
 
     test_result->running.store(false);
 
-    return test_analysis(app, test, test_result, std::move(result), vars);
+    return test_analysis(app, test, test_result, std::move(result), test_result->variables);
 }
 
 bool is_parent_id(const AppState* app, size_t group_id, size_t needle) noexcept {
@@ -1054,9 +1051,6 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
     std::vector<Test> test_queue = {};
     test_queue.reserve(test_queue_ids.size());
 
-    std::vector<VariablesMap> test_vars = {};
-    test_vars.reserve(test_queue_ids.size());
-
     // Fetch needed data from test queue
     for (size_t queued_test_id : test_queue_ids) {
         assert(app->tests.contains(queued_test_id));
@@ -1066,22 +1060,12 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
 
         // Add cli settings from parent to a copy
         test_queue.back().cli_settings = app->get_cli_settings(queued_test_id);
-
-        test_vars.push_back(app->get_test_variables(queued_test_id));
     }
+
+    std::unordered_map<size_t, std::vector<TestResult>> new_test_results;
 
     // Find a common host to make a cli
-    std::string hostname =
-        split_endpoint(replace_variables(test_vars.at(0), test_queue.at(0).endpoint)).first;
-
-    for (size_t idx = 1; idx < test_queue.size(); idx++) {
-        if (hostname !=
-            split_endpoint(replace_variables(test_vars.at(idx), test_queue.at(idx).endpoint))
-                .first) {
-            Log(LogLevel::Error, "Dynamic tests must all share same host");
-            return;
-        }
-    }
+    std::string hostname = "";
 
     // Insert test results
     for (size_t idx = 0; idx < test_queue_ids.size(); idx++) {
@@ -1089,18 +1073,30 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
 
         // TODO: Insert multiple tests
         std::vector<TestResult> results = {};
-        results.emplace_back(test_queue.at(idx), 0, true);
+        Test* test = &test_queue.at(idx);
+        VariablesMap vars = app->get_test_variables(test->id);
 
-        app->test_results.try_emplace(test_queue_ids.at(idx), std::move(results));
+        std::string new_hostname = split_endpoint(replace_variables(vars, test_queue.at(0).endpoint)).first;
+
+        if (hostname == "") {
+            hostname = new_hostname;
+        } else if (hostname != new_hostname) {
+            Log(LogLevel::Error, "Dynamic tests must all share same host");
+            return;
+        }
+
+        results.emplace_back(*test, 0, true, vars);
+
+        new_test_results.try_emplace(test_queue_ids.at(idx), std::move(results));
     }
+
+    app->test_results.merge(new_test_results);
 
     // Copies test queue and vars
     // Mutates cookies
-    app->thr_pool.detach_task([app, hostname, test_queue, test_vars,
+    app->thr_pool.detach_task([app, hostname, test_queue,
                                cookies = std::unordered_map<std::string, std::string>{},
                                cli_settings = group.cli_settings.value()]() mutable {
-        assert(test_queue.size() == test_vars.size());
-
         httplib::Client cli = make_client(hostname, cli_settings);
 
         bool keep_running = true;
@@ -1128,8 +1124,7 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                 if (result->running.load()) {
                     // Can run test
 
-                    keep_running &=
-                        execute_test(app, &test_queue.at(idx), 0, test_vars.at(idx), cli, &cookies);
+                    keep_running &= execute_test(app, &test_queue.at(idx), 0, cli, &cookies);
 
                     if (result->http_result.has_value() &&
                         result->http_result->error() == httplib::Error::Success) {
@@ -1163,20 +1158,21 @@ void run_test(AppState* app, size_t test_id) noexcept {
         Test& test = std::get<Test>(nt);
 
         assert(!app->test_results.contains(test_id));
+        VariablesMap vars = app->get_test_variables(test.id);
 
         // TODO: Insert multiple tests
         std::vector<TestResult> results = {};
-        results.emplace_back(test, 0, true);
+        results.emplace_back(test, 0, true, vars);
 
         app->test_results.try_emplace(test_id, std::move(results));
 
         // Copies test
-        app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
+        app->thr_pool.detach_task([app, test = test, &vars,
                                    cli_settings = app->get_cli_settings(test.id)]() {
             // Add cli settings from parent to a copy
             std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
             httplib::Client cli = make_client(host, cli_settings);
-            return execute_test(app, &test, 0, vars, cli);
+            return execute_test(app, &test, 0, cli);
         });
     } break;
     case GROUP_VARIANT: {
@@ -1217,12 +1213,12 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
     Test test = std::get<Test>(app->tests.at(result->original_test.id));
 
     // Copies test
-    app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
+    app->thr_pool.detach_task([app, test = test, 
                                result = result, cli_settings = app->get_cli_settings(test.id)]() {
         // Add cli settings from parent to a copy
-        std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
+        std::string host = split_endpoint(replace_variables(result->variables, test.endpoint)).first;
         httplib::Client cli = make_client(host, cli_settings);
-        return execute_test(app, &test, result->test_result_idx, vars, cli);
+        return execute_test(app, &test, result->test_result_idx, cli);
     });
 }
 
