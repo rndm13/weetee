@@ -125,6 +125,8 @@ struct AppState {
     void delete_test(size_t id) noexcept;
     void delete_selected() noexcept;
 
+    void enable_selected(bool enable = true) noexcept;
+
     void group_selected(size_t common_parent_id) noexcept;
 
     void copy() noexcept;

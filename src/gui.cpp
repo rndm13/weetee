@@ -97,6 +97,18 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             app->delete_selected();
         }
 
+        if (ImGui::MenuItem("Enable", nullptr, false, !changed)) {
+            changed = true;
+
+            app->enable_selected(true);
+        }
+
+        if (ImGui::MenuItem("Disable", nullptr, false, !changed)) {
+            changed = true;
+
+            app->enable_selected(false);
+        }
+
         if (ImGui::BeginMenu("Move", !changed && !analysis.selected_root)) {
             for (auto& [id, nt] : app->tests) {
                 // skip if not a group or same parent for selected or selected group

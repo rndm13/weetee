@@ -351,6 +351,34 @@ void AppState::delete_selected() noexcept {
     }
 }
 
+void AppState::enable_selected(bool enable) noexcept {
+    for (size_t it_idx : this->selected_tests) {
+        assert(this->tests.contains(it_idx));
+        NestedTest* it_nt = &this->tests.at(it_idx);
+
+        switch (it_nt->index()) {
+        case TEST_VARIANT: {
+            assert(std::holds_alternative<Test>(*it_nt));
+            Test* it_test = &std::get<Test>(*it_nt);
+            if (enable) {
+                it_test->flags &= ~TEST_DISABLED;
+            } else {
+                it_test->flags |= TEST_DISABLED;
+            }
+        } break;
+        case GROUP_VARIANT: {
+            assert(std::holds_alternative<Group>(*it_nt));
+            Group* it_group = &std::get<Group>(*it_nt);
+            if (enable) {
+                it_group->flags &= ~GROUP_DISABLED;
+            } else {
+                it_group->flags |= GROUP_DISABLED;
+            }
+        } break;
+        }
+    }
+}
+
 void AppState::group_selected(size_t common_parent_id) noexcept {
     assert(this->tests.contains(common_parent_id));
     auto* parent_test = &this->tests[common_parent_id];
