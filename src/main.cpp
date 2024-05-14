@@ -9,7 +9,7 @@
 #include "gui.hpp"
 #include "gui_tests.hpp"
 
-// TODO: Add fuzz tests (very very hard)
+// TODO: Add repeating tests (very very hard)
 // TODO: Add a better icon
 
 void post_init(AppState* app) noexcept;

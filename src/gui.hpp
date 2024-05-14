@@ -87,11 +87,29 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         ImGui::SameLine();
         if (ImGui::Selectable("##element", elem->flags & PARTIAL_DICT_ELEM_SELECTED,
                               SELECTABLE_FLAGS, ImVec2(0, 0))) {
-            if (ImGui::GetIO().KeyCtrl) {
+            auto& io = ImGui::GetIO();
+            if (io.KeyCtrl) {
                 elem->flags ^= PARTIAL_DICT_ELEM_SELECTED;
+            } else if (io.KeyShift) {
+                bool selection_start = false;
+                for (size_t e_idx = 0; e_idx < pd->elements.size(); e_idx++) {
+                    PartialDictElement<Data>* it_elem = &pd->elements.at(e_idx);
+                    if (it_elem == elem || e_idx == pd->last_selected_idx) {
+                        selection_start = !selection_start;
+                    }
+
+                    if (selection_start || it_elem == elem || e_idx == pd->last_selected_idx) {
+                        it_elem->flags |= PARTIAL_DICT_ELEM_SELECTED;
+                    } else {
+                        it_elem->flags &= ~PARTIAL_DICT_ELEM_SELECTED;
+                    }
+                }
             } else {
                 select_only_this();
             }
+
+            // Get index using pointer math
+            pd->last_selected_idx = elem - pd->elements.data();
         }
 
         if (ImGui::BeginPopupContextItem()) {
@@ -283,3 +301,4 @@ void show_gui(AppState* app) noexcept;
 // Program leaks those fonts
 // can't do much I guess and not a big deal
 void load_fonts(AppState* app) noexcept;
+

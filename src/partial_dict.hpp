@@ -73,6 +73,7 @@ template <typename Data> struct PartialDict {
 
     // Do not save
     PartialDictElement<Data> add_element;
+    size_t last_selected_idx = 0;
 
     bool operator==(const PartialDict& other) const noexcept {
         return this->elements == other.elements;
