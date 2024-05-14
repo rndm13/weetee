@@ -1591,7 +1591,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
-    if (ImGui::BeginTabBar("editor")) {
+    if (ImGui::BeginTabBar("editor", ImGuiTabBarFlags_Reorderable)) {
         size_t closed_id = -1ull;
         for (auto& [id, tab] : app->opened_editor_tabs) {
             NestedTest* original = &app->tests[tab.original_idx];
