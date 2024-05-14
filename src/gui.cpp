@@ -14,18 +14,18 @@
 #include "imgui_test_engine/imgui_te_engine.h"
 #include "imgui_test_engine/imgui_te_ui.h"
 
+#include "hello_imgui/icons_font_awesome_4.h"
 #include "imspinner/imspinner.h"
-#include "json.hpp"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
 #include "app_state.hpp"
 #include "http.hpp"
+#include "json.hpp"
 #include "partial_dict.hpp"
 #include "test.hpp"
 #include "textinputcombo.hpp"
 #include "utils.hpp"
 
-#include "algorithm"
 #include "cmath"
 #include "cstdint"
 #include "optional"
@@ -34,15 +34,23 @@
 #include "utility"
 #include "variant"
 
-bool arrow(const char* label, ImGuiDir dir) noexcept {
-    assert(label);
+void begin_transparent_button() noexcept {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_Border, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_BorderShadow, 0x00000000);
+}
+
+void end_transparent_button() noexcept { ImGui::PopStyleColor(5); }
+
+bool arrow(const char* label, ImGuiDir dir) noexcept {
+    assert(label);
+
+    begin_transparent_button();
     bool result = ImGui::ArrowButton(label, dir);
-    ImGui::PopStyleColor(5);
+    end_transparent_button();
+
     return result;
 }
 
@@ -468,8 +476,34 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
     ImGui::SameLine();
     ImGui::Text("%s", group.name.c_str());
+    ImGui::SameLine();
+    // Add test button
+    begin_transparent_button();
 
-    ImGui::TableNextColumn(); // spinner for running tests
+    ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
+    if (ImGui::Button(ICON_FA_PLUS_CIRCLE "##add")) {
+        group.flags |= GROUP_OPEN;
+
+        auto id = ++app->id_counter;
+        app->tests[id] = Test{
+            .parent_id = group.id,
+            .id = id,
+            .flags = TEST_NONE,
+            .type = HTTP_GET,
+            .endpoint = "https://example.com",
+            .request = {},
+            .response = {},
+            .cli_settings = {},
+        };
+
+        group.children_ids.push_back(id);
+        app->editor_open_tab(id);
+    }
+    ImGui::PopStyleColor(1);
+
+    end_transparent_button();
+
+    ImGui::TableNextColumn(); // Spinner 
 
     if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
         ImSpinner::SpinnerIncDots("running", 5, 1);
