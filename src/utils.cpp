@@ -33,7 +33,7 @@ std::vector<std::string> split_string(const std::string& str,
     std::vector<std::string> result;
 
     auto push_result = [&result, &str](size_t begin, size_t end) {
-        assert(begin < str.size());
+        assert(begin <= str.size());
         assert(end <= str.size());
 
         // Trimming
