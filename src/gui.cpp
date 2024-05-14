@@ -503,7 +503,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
     end_transparent_button();
 
-    ImGui::TableNextColumn(); // Spinner 
+    ImGui::TableNextColumn(); // Spinner
 
     if (app->test_results.contains(id) && app->test_results.at(id).running.load()) {
         ImSpinner::SpinnerIncDots("running", 5, 1);
@@ -1649,7 +1649,7 @@ void testing_results(AppState* app) noexcept {
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(result.original_test.id));
 
-            // test type and name
+            // Test type and Name
             if (ImGui::TableNextColumn()) {
                 http_type_button(result.original_test.type);
                 ImGui::SameLine();
@@ -1714,14 +1714,21 @@ void testing_results(AppState* app) noexcept {
                 }
             }
 
-            // status
+            // Status
             if (ImGui::TableNextColumn()) {
                 ImGui::Text("%s", TestResultStatusLabels[result.status.load()]);
             }
 
-            // verdict
+            // Verdict
             if (ImGui::TableNextColumn()) {
-                ImGui::Text("%s", result.verdict.c_str());
+                if (result.status.load() == STATUS_RUNNING) {
+                    ImGui::ProgressBar(result.progress_total == 0
+                                           ? 0
+                                           : static_cast<float>(result.progress_current) /
+                                                 result.progress_total);
+                } else {
+                    ImGui::Text("%s", result.verdict.c_str());
+                }
             }
 
             ImGui::PopID();

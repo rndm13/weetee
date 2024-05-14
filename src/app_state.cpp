@@ -847,10 +847,11 @@ bool execute_test(AppState* app, const Test* test, const VariablesMap& vars, htt
             return false;
         }
 
-        test_result->progress_total = total;
         test_result->progress_current = current;
-        test_result->verdict =
-            to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
+        test_result->progress_total = total;
+
+        // test_result->verdict =
+        //     to_string(static_cast<float>(current * 100) / static_cast<float>(total)) + "% ";
 
         return true;
     };
@@ -1185,7 +1186,7 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
     }
 
     result->status = STATUS_WAITING;
-    result->verdict = "0%";
+    result->verdict = "";
 
     Test test = std::get<Test>(app->tests.at(result->original_test.id));
 

@@ -235,7 +235,7 @@ struct TestResult {
     std::optional<httplib::Result> http_result;
 
     // Written only in test_run threads
-    std::string verdict = "0%";
+    std::string verdict = "";
 
     // Request
     std::string req_body;
@@ -246,8 +246,8 @@ struct TestResult {
     std::string res_body;
 
     // progress
-    size_t progress_total;
-    size_t progress_current;
+    size_t progress_total = 0;
+    size_t progress_current = 0;
 
     TestResult(const Test& _original_test, bool _running) noexcept
         : running(_running), original_test(_original_test) {}

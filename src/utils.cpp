@@ -13,7 +13,7 @@ bool contains(const std::string& haystack, const std::string& needle) noexcept {
     return false;
 }
 
-std::string file_name(const std::string& path) noexcept {
+std::string get_filename(const std::string& path) noexcept {
 #ifdef WIN32
     size_t slash = path.rfind("/");
 #else
