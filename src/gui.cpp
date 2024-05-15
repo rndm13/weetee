@@ -251,7 +251,6 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             std::vector<size_t> tests_to_run =
                 get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
 
-            Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
             run_tests(app, tests_to_run);
         }
 
@@ -1931,15 +1930,18 @@ void show_menus(AppState* app) noexcept {
             get_tests_to_run(app, MapKeyIterator<size_t, NestedTest>(app->tests.begin()),
                              MapKeyIterator<size_t, NestedTest>(app->tests.end()));
 
-        Log(LogLevel::Info, "Started testing for %d tests", tests_to_run.size());
         run_tests(app, tests_to_run);
     }
     ImGui::PopStyleColor(1);
 
-    if (app->is_running_tests() && ImGui::Button("Stop")) {
+    begin_transparent_button();
+    ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_DELETE]);
+    if (app->is_running_tests() && ImGui::Button(ICON_FA_STOP)) {
         stop_tests(app);
-        Log(LogLevel::Warning, "Stopped testing");
+        Log(LogLevel::Info, "Stopped testing");
     }
+    ImGui::PopStyleColor(1);
+    end_transparent_button();
 }
 
 void show_gui(AppState* app) noexcept {
