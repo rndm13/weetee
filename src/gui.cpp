@@ -885,7 +885,7 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
 
             case REQUEST_MULTIPART:
                 auto& mpb = std::get<MultiPartBody>(test.request.body);
-                changed |= partial_dict(app, &mpb, "##body", vars);
+                changed |= partial_dict(app, &mpb, "body", vars);
                 break;
             }
             ImGui::EndTabItem();
@@ -893,21 +893,21 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Parameters")) {
             ImGui::PushFont(app->mono_font);
-            changed |= partial_dict(app, &test.request.parameters, "##parameters", vars);
+            changed |= partial_dict(app, &test.request.parameters, "parameters", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Cookies")) {
             ImGui::PushFont(app->mono_font);
-            changed |= partial_dict(app, &test.request.cookies, "##cookies", vars);
+            changed |= partial_dict(app, &test.request.cookies, "cookies", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.headers, "##headers", vars,
+            changed = changed | partial_dict(app, &test.request.headers, "headers", vars,
                                              PARTIAL_DICT_NONE, RequestHeadersLabels,
                                              ARRAY_SIZE(RequestHeadersLabels));
             ImGui::PopFont();
@@ -1005,16 +1005,15 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
 
         if (ImGui::BeginTabItem("Set Cookies")) {
             ImGui::PushFont(app->mono_font);
-            changed |= partial_dict(app, &test.response.cookies, "##cookies", vars);
+            changed |= partial_dict(app, &test.response.cookies, "cookies", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Headers")) {
             ImGui::PushFont(app->mono_font);
-            changed |=
-                partial_dict(app, &test.response.headers, "##headers", vars, PARTIAL_DICT_NONE,
-                             ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
+            changed |= partial_dict(app, &test.response.headers, "headers", vars, PARTIAL_DICT_NONE,
+                                    ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1308,11 +1307,13 @@ ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
 
                                 ImGui::EndTabItem();
                             }
+
                             if (ImGui::BeginTabItem("Cookies")) {
                                 // TODO: Add expected cookies in split window (hard)
                                 show_httplib_cookies(app, http_result->headers);
                                 ImGui::EndTabItem();
                             }
+
                             if (ImGui::BeginTabItem("Headers")) {
                                 // TODO: Add expected headers in split window (hard)
                                 show_httplib_headers(app, http_result->headers);
@@ -1423,7 +1424,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::SameLine();
             if (ImGui::TreeNode("Variables")) {
                 ImGui::PushFont(app->mono_font);
-                changed = changed | partial_dict(app, &test.variables, "##variables", vars);
+                changed = changed | partial_dict(app, &test.variables, "variables", vars);
                 ImGui::PopFont();
 
                 ImGui::TreePop();
@@ -1629,6 +1630,7 @@ void tabbed_editor(AppState* app) noexcept {
         }
         ImGui::EndTabBar();
     }
+
     ImGui::PopFont();
 }
 
@@ -1651,7 +1653,6 @@ void testing_results(AppState* app) noexcept {
 
         for (auto& [id, results] : app->test_results) {
             ImGui::TableNextRow();
-            // TODO: Nested test results
             ImGui::PushID(static_cast<int32_t>(id));
             for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
                 TestResult& result = results.at(result_idx);

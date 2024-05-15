@@ -223,47 +223,36 @@ void register_tests(AppState* app) noexcept {
     //     ctx->ItemClick(root_selectable, ImGuiMouseButton_Right);
     //     ctx->ItemClick("**/Add a new test");
     //     IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 1);
+
     //     ctx->SetRef("");
 
-    //     ctx->Yield();
-    //     IM_CHECK_NE(ctx->ItemInfo("Editor"), nullptr); // window
+    //     ctx->ItemClick("**/Type");
+    //     ctx->ItemClick("**/Type/POST");
 
-    //     ctx->ItemOpen("/**/Type");
-    //     ctx->ItemClick("/**/Type/POST");
-
-    //     ctx->ItemInput("/**/Endpoint");
+    //     ctx->ItemInput("Endpoint");
     //     ctx->KeyCharsReplace("127.0.0.1:8000/api/param/{id}");
 
     //     ctx->Yield();
 
-    //     ctx->SetRef("**/Request");
+    //     ctx->ItemOpen("Request/request/Parameters");
 
-    //     ctx->ItemOpen("/**/URL Parameters");
-    //     ctx->SetRef("/**/Request/URL Parameters");
-    //     ctx->ItemInput("/**/$$0/##data");
-    //     ctx->KeyCharsReplace("123");
-
-    //     ctx->SetRef("/**/Request");
-    //     ctx->ItemOpen("/**/Parameters");
-    //     ctx->SetRef("/**/Request/Parameters");
-
-    //     ctx->ItemInput("/**/$$0/##name");
+    //     ctx->ItemInput("$$0/##name");
     //     ctx->KeyCharsReplace("key");
-    //     ctx->ItemInput("/**/$$0/##data");
+    //     ctx->ItemInput("$$0/##data");
     //     ctx->KeyCharsReplace("value");
 
-    //     ctx->ItemClick("/**/$$0/##element", ImGuiMouseButton_Right);
-    //     ctx->ItemClick("/**/Disable");
-    //     IM_CHECK(!ctx->ItemIsChecked("/**/$$0/##enabled"));
+    //     ctx->ItemClick("$$0/##element", ImGuiMouseButton_Right);
+    //     ctx->ItemClick("Disable");
+    //     IM_CHECK(!ctx->ItemIsChecked("$$0/##enabled"));
 
-    //     ctx->ItemClick("/**/$$0/##element", ImGuiMouseButton_Right);
-    //     ctx->ItemClick("/**/Enable");
-    //     IM_CHECK(ctx->ItemIsChecked("/**/$$0/##enabled"));
+    //     ctx->ItemClick("$$0/##element", ImGuiMouseButton_Right);
+    //     ctx->ItemClick("Enable");
+    //     IM_CHECK(ctx->ItemIsChecked("$$0/##enabled"));
 
-    //     ctx->ItemClick("/**/$$0/##element", ImGuiMouseButton_Right);
-    //     ctx->ItemClick("/**/Delete");
+    //     ctx->ItemClick("$$0/##element", ImGuiMouseButton_Right);
+    //     ctx->ItemClick("Delete");
 
-    //     ctx->TabClose("/**/example.com");
+    //     ctx->TabClose(("$$" + to_string(std::get<Group>(app->tests[0]).children_ids[0])).c_str());
 
     //     ctx->SetRef("Tests");
     //     tree_view__delete_all(ctx);

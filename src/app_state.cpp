@@ -1098,10 +1098,11 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
 
     // Copies test queue and vars
     // Mutates cookies
-    app->thr_pool.detach_task([app, hostname, test_queue, cli_settings = cli_settings]() {
-        bool keep_running = true;
 
-        for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
+    for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
+        app->thr_pool.detach_task([app, hostname, test_queue, cli_settings = cli_settings,
+                                   rerun]() {
+            bool keep_running = true;
             httplib::Client cli = make_client(hostname, cli_settings);
             std::unordered_map<std::string, std::string> cookies = {};
 
@@ -1127,7 +1128,8 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                     if (result->running.load()) {
                         // Can run test
 
-                        keep_running &= execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
+                        keep_running &=
+                            execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
 
                         if (result->http_result.has_value() &&
                             result->http_result->error() == httplib::Error::Success) {
@@ -1148,8 +1150,8 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
                     }
                 }
             }
-        }
-    });
+        });
+    }
 }
 
 void run_test(AppState* app, size_t test_id) noexcept {
@@ -1167,22 +1169,21 @@ void run_test(AppState* app, size_t test_id) noexcept {
         for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
             VariablesMap vars = app->get_test_variables(test.id);
 
-            results.emplace_back(test, 0, true, vars);
+            results.emplace_back(test, rerun, true, vars);
         }
 
         assert(!app->test_results.contains(test_id));
         app->test_results.try_emplace(test_id, std::move(results));
 
-        // Copies test
-        app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
-                                   cli_settings = cli_settings]() {
-            // Add cli settings from parent to a copy
-            std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
-            httplib::Client cli = make_client(host, cli_settings);
-            for (size_t idx = 0; idx < cli_settings.test_reruns; idx++) {
-                execute_test(app, &test, idx, cli);
-            }
-        });
+        for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
+            // Copies test and ClientSettings
+            app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
+                                       cli_settings = cli_settings, rerun]() {
+                std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
+                httplib::Client cli = make_client(host, cli_settings);
+                execute_test(app, &test, rerun, cli);
+            });
+        }
     } break;
     case GROUP_VARIANT: {
         run_dynamic_tests(app, nt);
@@ -1218,17 +1219,19 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
     result->verdict = "";
     result->progress_total = 0;
     result->progress_current = 0;
-
-    Test test = std::get<Test>(app->tests.at(result->original_test.id));
+    result->original_test = std::get<Test>(app->tests.at(result->original_test.id));
 
     // Copies test
     app->thr_pool.detach_task(
-        [app, test = test, result = result, cli_settings = app->get_cli_settings(test.id)]() {
+        [app, result, cli_settings = app->get_cli_settings(result->original_test.id)]() {
             // Add cli settings from parent to a copy
             std::string host =
-                split_endpoint(replace_variables(result->variables, test.endpoint)).first;
+                split_endpoint(replace_variables(result->variables, result->original_test.endpoint))
+                    .first;
             httplib::Client cli = make_client(host, cli_settings);
-            return execute_test(app, &test, result->test_result_idx, cli);
+            Log(LogLevel::Debug, "Execute Test: %zu %zu", result->original_test.id,
+                result->test_result_idx);
+            execute_test(app, &result->original_test, result->test_result_idx, cli);
         });
 }
 
