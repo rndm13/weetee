@@ -1068,25 +1068,29 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
     std::string hostname = "";
 
     // Insert test results
+    const ClientSettings& cli_settings = group.cli_settings.value();
     for (size_t idx = 0; idx < test_queue_ids.size(); idx++) {
-        assert(!app->test_results.contains(test_queue_ids.at(idx)));
-
-        // TODO: Insert multiple tests
-        std::vector<TestResult> results = {};
         Test* test = &test_queue.at(idx);
-        VariablesMap vars = app->get_test_variables(test->id);
 
-        std::string new_hostname = split_endpoint(replace_variables(vars, test_queue.at(0).endpoint)).first;
+        std::vector<TestResult> results = {};
+        for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
+            VariablesMap vars = app->get_test_variables(test->id);
 
-        if (hostname == "") {
-            hostname = new_hostname;
-        } else if (hostname != new_hostname) {
-            Log(LogLevel::Error, "Dynamic tests must all share same host");
-            return;
+            std::string new_hostname =
+                split_endpoint(replace_variables(vars, test_queue.at(0).endpoint)).first;
+
+            if (hostname == "") {
+                hostname = new_hostname;
+            } else if (hostname != new_hostname) {
+                Log(LogLevel::Error, "Dynamic tests must all share same host");
+                return;
+            }
+
+            results.emplace_back(*test, rerun, true, vars);
         }
 
-        results.emplace_back(*test, 0, true, vars);
-
+        assert(!app->test_results.contains(test_queue_ids.at(idx)) &&
+               !new_test_results.contains(test_queue_ids.at(idx)));
         new_test_results.try_emplace(test_queue_ids.at(idx), std::move(results));
     }
 
@@ -1094,54 +1098,54 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
 
     // Copies test queue and vars
     // Mutates cookies
-    app->thr_pool.detach_task([app, hostname, test_queue,
-                               cookies = std::unordered_map<std::string, std::string>{},
-                               cli_settings = group.cli_settings.value()]() mutable {
-        httplib::Client cli = make_client(hostname, cli_settings);
-
+    app->thr_pool.detach_task([app, hostname, test_queue, cli_settings = cli_settings]() {
         bool keep_running = true;
 
-        // TODO: make it rerun dynamic test suite multiple times
-        for (size_t idx = 0; idx < test_queue.size(); idx++) {
-            size_t id = test_queue.at(idx).id;
+        for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
+            httplib::Client cli = make_client(hostname, cli_settings);
+            std::unordered_map<std::string, std::string> cookies = {};
 
-            if (app->test_results.contains(id)) {
-                TestResult* result = &app->test_results.at(id).at(0);
+            for (size_t idx = 0; idx < test_queue.size(); idx++) {
+                size_t id = test_queue.at(idx).id;
 
-                for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
-                    if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
-                        cookies[cookie.key] = cookie.data.data;
+                if (app->test_results.contains(id)) {
+                    TestResult* result = &app->test_results.at(id).at(rerun);
+
+                    for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
+                        if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                            cookies[cookie.key] = cookie.data.data;
+                        }
                     }
-                }
 
-                if (!keep_running) {
-                    result->running.store(false);
-                    result->status.store(STATUS_CANCELLED);
-                    result->verdict = "Previous test failed";
-                    continue;
-                }
-
-                if (result->running.load()) {
-                    // Can run test
-
-                    keep_running &= execute_test(app, &test_queue.at(idx), 0, cli, &cookies);
-
-                    if (result->http_result.has_value() &&
-                        result->http_result->error() == httplib::Error::Success) {
-                        for (const auto& [key, value] : result->http_result.value()->headers) {
-                            if (key != "Set-Cookie") {
-                                continue;
-                            }
-
-                            size_t key_val_split = value.find("=");
-                            std::string cookie_name = value.substr(0, key_val_split);
-                            std::string cookie_value = value.substr(key_val_split + 1);
-
-                            cookies[cookie_name] = cookie_value;
-                        };
+                    if (!keep_running) {
+                        result->running.store(false);
+                        result->status.store(STATUS_CANCELLED);
+                        result->verdict = "Previous test failed";
+                        continue;
                     }
-                } else {
-                    keep_running = false;
+
+                    if (result->running.load()) {
+                        // Can run test
+
+                        keep_running &= execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
+
+                        if (result->http_result.has_value() &&
+                            result->http_result->error() == httplib::Error::Success) {
+                            for (const auto& [key, value] : result->http_result.value()->headers) {
+                                if (key != "Set-Cookie") {
+                                    continue;
+                                }
+
+                                size_t key_val_split = value.find("=");
+                                std::string cookie_name = value.substr(0, key_val_split);
+                                std::string cookie_value = value.substr(key_val_split + 1);
+
+                                cookies[cookie_name] = cookie_value;
+                            };
+                        }
+                    } else {
+                        keep_running = false;
+                    }
                 }
             }
         }
@@ -1157,22 +1161,27 @@ void run_test(AppState* app, size_t test_id) noexcept {
         assert(std::holds_alternative<Test>(nt));
         Test& test = std::get<Test>(nt);
 
-        assert(!app->test_results.contains(test_id));
-        VariablesMap vars = app->get_test_variables(test.id);
+        const ClientSettings& cli_settings = app->get_cli_settings(test.id);
 
-        // TODO: Insert multiple tests
         std::vector<TestResult> results = {};
-        results.emplace_back(test, 0, true, vars);
+        for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
+            VariablesMap vars = app->get_test_variables(test.id);
 
+            results.emplace_back(test, 0, true, vars);
+        }
+
+        assert(!app->test_results.contains(test_id));
         app->test_results.try_emplace(test_id, std::move(results));
 
         // Copies test
-        app->thr_pool.detach_task([app, test = test, &vars,
-                                   cli_settings = app->get_cli_settings(test.id)]() {
+        app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
+                                   cli_settings = cli_settings]() {
             // Add cli settings from parent to a copy
             std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
             httplib::Client cli = make_client(host, cli_settings);
-            return execute_test(app, &test, 0, cli);
+            for (size_t idx = 0; idx < cli_settings.test_reruns; idx++) {
+                execute_test(app, &test, idx, cli);
+            }
         });
     } break;
     case GROUP_VARIANT: {
@@ -1213,13 +1222,14 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
     Test test = std::get<Test>(app->tests.at(result->original_test.id));
 
     // Copies test
-    app->thr_pool.detach_task([app, test = test, 
-                               result = result, cli_settings = app->get_cli_settings(test.id)]() {
-        // Add cli settings from parent to a copy
-        std::string host = split_endpoint(replace_variables(result->variables, test.endpoint)).first;
-        httplib::Client cli = make_client(host, cli_settings);
-        return execute_test(app, &test, result->test_result_idx, cli);
-    });
+    app->thr_pool.detach_task(
+        [app, test = test, result = result, cli_settings = app->get_cli_settings(test.id)]() {
+            // Add cli settings from parent to a copy
+            std::string host =
+                split_endpoint(replace_variables(result->variables, test.endpoint)).first;
+            httplib::Client cli = make_client(host, cli_settings);
+            return execute_test(app, &test, result->test_result_idx, cli);
+        });
 }
 
 bool is_test_running(AppState* app, size_t id) noexcept {

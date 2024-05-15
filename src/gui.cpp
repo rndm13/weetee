@@ -1112,6 +1112,8 @@ bool editor_client_settings(ClientSettings* set, bool enable_dynamic) noexcept {
     }
 
     size_t step = 1;
+    changed |= ImGui::InputScalar("Test Reruns", ImGuiDataType_U64, &set->test_reruns, &step);
+
     changed |=
         ImGui::InputScalar("Timeout (Seconds)", ImGuiDataType_U64, &set->seconds_timeout, &step);
 
@@ -1649,9 +1651,11 @@ void testing_results(AppState* app) noexcept {
 
         for (auto& [id, results] : app->test_results) {
             ImGui::TableNextRow();
-            if (results.size() <= 1) { // TODO: Nested test results
-                TestResult& result = results.at(0);
-                ImGui::PushID(static_cast<int32_t>(result.original_test.id));
+            // TODO: Nested test results
+            ImGui::PushID(static_cast<int32_t>(id));
+            for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
+                TestResult& result = results.at(result_idx);
+                ImGui::PushID(static_cast<int32_t>(result_idx));
 
                 // Test type and Name
                 if (ImGui::TableNextColumn()) {
@@ -1748,6 +1752,7 @@ void testing_results(AppState* app) noexcept {
                     result.open &= modal == MODAL_NONE;
                 }
             }
+            ImGui::PopID();
         }
 
         ImGui::EndTable();

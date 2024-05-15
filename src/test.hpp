@@ -164,6 +164,7 @@ struct ClientSettings {
     AuthVariant proxy_auth;
 
     size_t seconds_timeout = 10;
+    size_t test_reruns = 1;
 
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;

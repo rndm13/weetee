@@ -231,6 +231,7 @@ void ClientSettings::save(SaveState* save) const noexcept {
     save->save(this->proxy_auth);
 
     save->save(this->seconds_timeout);
+    save->save(this->test_reruns);
 }
 
 bool ClientSettings::can_load(SaveState* save) const noexcept {
@@ -260,6 +261,10 @@ bool ClientSettings::can_load(SaveState* save) const noexcept {
         return false;
     }
 
+    if (!save->can_load(this->test_reruns)) {
+        return false;
+    }
+
     return true;
 }
 
@@ -275,6 +280,7 @@ void ClientSettings::load(SaveState* save) noexcept {
     save->load(this->proxy_auth);
 
     save->load(this->seconds_timeout);
+    save->load(this->test_reruns);
 }
 
 std::string Test::label() const noexcept { return this->endpoint + "##" + to_string(this->id); }
