@@ -1219,6 +1219,7 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
     result->verdict = "";
     result->progress_total = 0;
     result->progress_current = 0;
+    result->open = false;
     result->original_test = std::get<Test>(app->tests.at(result->original_test.id));
 
     // Copies test

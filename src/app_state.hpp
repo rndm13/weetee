@@ -42,6 +42,8 @@ struct AppState {
     std::unordered_map<size_t, std::vector<TestResult>> test_results;
     size_t test_results_last_selected_id = 0;
     size_t test_results_last_selected_idx = 0;
+    TestResultStatus test_results_filter = STATUS_OK;
+    bool test_results_filter_cumulative = true;
 
     SaveState clipboard;
     UndoHistory undo_history;

@@ -1637,6 +1637,17 @@ void tabbed_editor(AppState* app) noexcept {
 void testing_results(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
+    if (ImGui::BeginCombo("Filter", TestResultStatusLabels[app->test_results_filter])) {
+        for (size_t i = 0; i < ARRAY_SIZE(TestResultStatusLabels); i++) {
+            if (ImGui::Selectable(TestResultStatusLabels[i], i == app->test_results_filter)) {
+                app->test_results_filter = static_cast<TestResultStatus>(i);
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::Checkbox("Cumulative", &app->test_results_filter_cumulative);
+
     auto deselect_all = [app]() {
         for (auto& [_, results] : app->test_results) {
             for (auto& result : results) {
@@ -1652,12 +1663,18 @@ void testing_results(AppState* app) noexcept {
         ImGui::TableHeadersRow();
 
         for (auto& [result_id, results] : app->test_results) {
-            ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(result_id));
             for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
                 TestResult& result = results.at(result_idx);
-                ImGui::PushID(static_cast<int32_t>(result_idx));
 
+                if (!(result.status.load() == app->test_results_filter ||
+                      (result.status.load() > app->test_results_filter &&
+                       app->test_results_filter_cumulative))) {
+                    continue;
+                }
+
+                ImGui::TableNextRow();
+                ImGui::PushID(static_cast<int32_t>(result_idx));
                 // Test type and Name
                 if (ImGui::TableNextColumn()) {
                     http_type_button(result.original_test.type);

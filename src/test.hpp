@@ -204,20 +204,20 @@ struct Test {
 void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept;
 
 enum TestResultStatus {
+    STATUS_OK,
     STATUS_WAITING,
     STATUS_RUNNING,
     STATUS_CANCELLED,
-    STATUS_OK,
-    STATUS_ERROR,
     STATUS_WARNING,
+    STATUS_ERROR,
 };
 static const char* TestResultStatusLabels[] = {
+    /* [STATUS_OK] = */ reinterpret_cast<const char*>("Ok"),
     /* [STATUS_WAITING] = */ reinterpret_cast<const char*>("Waiting"),
     /* [STATUS_RUNNING] = */ reinterpret_cast<const char*>("Running"),
     /* [STATUS_CANCELLED] = */ reinterpret_cast<const char*>("Cancelled"),
-    /* [STATUS_OK] = */ reinterpret_cast<const char*>("Ok"),
-    /* [STATUS_ERROR] = */ reinterpret_cast<const char*>("Error"),
     /* [STATUS_WARNING] = */ reinterpret_cast<const char*>("Warning"),
+    /* [STATUS_ERROR] = */ reinterpret_cast<const char*>("Error"),
 };
 
 struct TestResult {
@@ -230,7 +230,7 @@ struct TestResult {
     bool selected = true;
 
     // Is info opened in a modal
-    bool open;
+    bool open = false;
 
     Test original_test;
     size_t test_result_idx;
