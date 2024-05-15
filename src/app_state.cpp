@@ -51,7 +51,7 @@ bool AppState::is_running_tests() const noexcept {
 void AppState::save(SaveState* save) const noexcept {
     assert(save);
 
-    // this save is obviously going to be pretty big so reserve instantly for speed
+    // This save is obviously going to be pretty big so reserve instantly for speed
     save->original_buffer.reserve(4096);
 
     save->save(this->id_counter);

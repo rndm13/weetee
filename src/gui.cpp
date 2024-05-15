@@ -297,11 +297,11 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
 
                 size_t it_id = std::visit(IDVisitor(), *it_nt);
 
-                if (it_id == app->tree_view_last_selected || it_id == id) {
+                if (it_id == app->tree_view_last_selected_idx || it_id == id) {
                     selection_start = !selection_start;
                 }
 
-                if (selection_start || it_id == app->tree_view_last_selected || it_id == id) {
+                if (selection_start || it_id == app->tree_view_last_selected_idx || it_id == id) {
                     app->select_with_children<true>(it_id);
                 } else {
                     app->select_with_children<false>(it_id);
@@ -315,7 +315,7 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
             app->select_with_children(id);
         }
 
-        app->tree_view_last_selected = id;
+        app->tree_view_last_selected_idx = id;
 
         return true;
     }
@@ -1651,9 +1651,9 @@ void testing_results(AppState* app) noexcept {
         ImGui::TableSetupColumn("Verdict");
         ImGui::TableHeadersRow();
 
-        for (auto& [id, results] : app->test_results) {
+        for (auto& [result_id, results] : app->test_results) {
             ImGui::TableNextRow();
-            ImGui::PushID(static_cast<int32_t>(id));
+            ImGui::PushID(static_cast<int32_t>(result_id));
             for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
                 TestResult& result = results.at(result_idx);
                 ImGui::PushID(static_cast<int32_t>(result_idx));
@@ -1668,12 +1668,34 @@ void testing_results(AppState* app) noexcept {
                         if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
                             result.open = true;
                         }
-                        if (ImGui::GetIO().KeyCtrl) {
+                        auto& io = ImGui::GetIO();
+                        if (io.KeyCtrl) {
                             result.selected = !result.selected;
+                        } else if (io.KeyShift) {
+                            bool selection_start = false;
+
+                            for (auto& [sel_result_id, sel_results] : app->test_results) {
+                                for (size_t sel_result_idx = 0; sel_result_idx < sel_results.size();
+                                     sel_result_idx++) {
+                                    TestResult& sel_result = results.at(sel_result_idx);
+                                    sel_result.selected = selection_start;
+
+                                    if ((sel_result_id == app->test_results_last_selected_id &&
+                                         sel_result_idx == app->test_results_last_selected_idx) ||
+                                        (sel_result_id == result_id &&
+                                         sel_result_idx == result_idx)) {
+                                        selection_start = !selection_start;
+                                        sel_result.selected = true;
+                                    }
+                                }
+                            }
                         } else {
                             deselect_all();
                             result.selected = true;
                         }
+
+                        app->test_results_last_selected_id = result_id;
+                        app->test_results_last_selected_idx = result_idx;
                     }
 
                     if (ImGui::BeginPopupContextItem()) {

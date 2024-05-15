@@ -31,21 +31,21 @@ struct AppState {
     std::unordered_map<size_t, NestedTest> tests = {
         {0, root_initial},
     };
+    size_t tree_view_last_selected_idx = 0;
 
-    size_t tree_view_last_selected;
     std::string tree_view_filter;
     std::unordered_set<size_t> filtered_tests = {};
 
     std::unordered_set<size_t> selected_tests = {};
     std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
 
-    // Keys are test ids
     std::unordered_map<size_t, std::vector<TestResult>> test_results;
+    size_t test_results_last_selected_id = 0;
+    size_t test_results_last_selected_idx = 0;
 
     SaveState clipboard;
     UndoHistory undo_history;
 
-    // Don't save
     std::optional<std::string> filename;
 
     BS::thread_pool thr_pool;
