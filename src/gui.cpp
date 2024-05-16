@@ -717,7 +717,14 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
 
         std::vector<std::string> result = open_file_dialog.result();
         if (result.size() > 0) {
-            httplib::detail::read_file(result.at(0), elem->data.data);
+            std::ifstream in(result.at(0));
+            if (in) {
+                std::stringstream ss;
+                ss << in.rdbuf();
+                elem->data.data = ss.str();
+            }
+
+            // httplib::detail::read_file(result.at(0), elem->data.data);
         }
 
         if (elem->data.data.find("\n") != std::string::npos) {
@@ -1872,7 +1879,7 @@ void import_swagger_file_dialog(AppState* app) noexcept {
 
     std::vector<std::string> result = import_swagger_file_dialog.result();
     if (result.size() > 0) {
-        Log(LogLevel::Debug, "filename: %s", result[0].c_str());
+        Log(LogLevel::Debug, "Filename: %s", result[0].c_str());
         app->import_swagger(result[0]);
     }
 }
@@ -1883,7 +1890,7 @@ void export_swagger_file_dialog(AppState* app) noexcept {
 
     std::string result = export_swagger_file_dialog.result();
     if (result.size() > 0) {
-        Log(LogLevel::Debug, "filename: %s", result.c_str());
+        Log(LogLevel::Debug, "Filename: %s", result.c_str());
         app->export_swagger(result);
     }
 }

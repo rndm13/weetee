@@ -200,7 +200,8 @@ std::string replace_variables(const VariablesMap& vars, const std::string& targe
         changed = false;
         iterations++;
 
-        for (auto [begin, size] : params_idx) {
+        for (auto it = params_idx.rbegin(); it != params_idx.rend(); it++) {
+            auto [begin, size] = *it;
             std::string name = result.substr(begin + 1, size - 1);
 
             if (vars.contains(name)) {

@@ -9,8 +9,6 @@
 #include "gui.hpp"
 #include "gui_tests.hpp"
 
-// TODO: Fix a crash on completely hiding child of editor tab bar
-// TODO: Fix a crash editing text after loading variable from a file
 // TODO: Add a better icon
 
 void post_init(AppState* app) noexcept;

@@ -93,6 +93,10 @@ std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, cha
         index += 1;
     };
 
+    // Erase unescaped
+    std::erase_if(
+        result, [](const std::pair<size_t, size_t>& it) {  return it.second == std::string::npos; });
+
     return result;
 }
 

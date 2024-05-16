@@ -127,7 +127,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                 }
             }
 
-            if ( ImGui::MenuItem("Enable", nullptr, false, !(flags & PARTIAL_DICT_NO_ENABLE))) {
+            if (ImGui::MenuItem("Enable", nullptr, false, !(flags & PARTIAL_DICT_NO_ENABLE))) {
                 for (auto& e : pd->elements) {
                     if (e.flags & PARTIAL_DICT_ELEM_SELECTED) {
                         e.flags |= PARTIAL_DICT_ELEM_ENABLED;
@@ -163,10 +163,9 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
             changed |= ComboFilter("##name", &elem->key, hints, hint_count, &elem->cfs.value());
         } else {
             ImGui::SetNextItemWidth(-1);
-            changed |=
-                ImGui::InputText("##name", &elem->key,
-                                 (flags & PARTIAL_DICT_NO_KEY_CHANGE) ? ImGuiInputTextFlags_ReadOnly
-                                                                      : ImGuiInputTextFlags_None);
+            ImGui::BeginDisabled(flags & PARTIAL_DICT_NO_KEY_CHANGE);
+            changed |= ImGui::InputText("##name", &elem->key);
+            ImGui::EndDisabled();
         }
     }
 
@@ -181,7 +180,7 @@ bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem, const Vari
 bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem,
                            const VariablesMap&) noexcept;
 bool partial_dict_data_context(AppState*, Variables*, VariablesElement* elem,
-                           const VariablesMap&) noexcept;
+                               const VariablesMap&) noexcept;
 bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem,
                            const VariablesMap&) noexcept;
 
@@ -301,4 +300,3 @@ void show_gui(AppState* app) noexcept;
 // Program leaks those fonts
 // can't do much I guess and not a big deal
 void load_fonts(AppState* app) noexcept;
-
