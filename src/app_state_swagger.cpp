@@ -398,13 +398,32 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
 struct Parameter {
     std::string name;
     std::string in;
+    std::optional<nljson> example;
 };
+
+void to_json(nljson& j, const Parameter& param) noexcept {
+    j.emplace("name", param.name);
+    j.emplace("in", param.in);
+    j.emplace("required", true);
+    if (param.example.has_value()) {
+        j.emplace("example", param.example.value());
+    }
+}
 
 struct Operation {
     std::string path;
     HTTPType type;
     std::vector<Parameter> parameters;
 };
+
+nljson export_example(const std::string& value_str) noexcept {
+    auto value = nljson::parse(value_str, nullptr, false);
+    if (value.is_discarded()) {
+        return value_str; // String
+    } else {
+        return value; // Any
+    }
+}
 
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
     std::unordered_map<std::string, Operation> paths;
@@ -440,8 +459,81 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                 find_and_replace(name, "{", "");
                 find_and_replace(name, "}", "");
 
-                Operation op = {.path = path, .type = it_test->type};
-                paths.insert_or_assign(name, op);
+                if (!paths.contains(name)) {
+                    Operation op = {.path = path, .type = it_test->type};
+
+                    // Url params
+                    std::vector<std::string> params = parse_url_params(path);
+
+                    for (auto& param : params) {
+                        std::optional<nljson> example = std::nullopt;
+
+                        if (vars.contains(param)) {
+                            example = export_example(vars.at(param));
+                        }
+
+                        op.parameters.push_back({
+                            .name = param,
+                            .in = "path",
+                            .example = example,
+                        });
+                    }
+
+                    // Header params
+                    for (auto& header : it_test->request.headers.elements) {
+                        if (header.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                            bool common = false;
+
+                            for (size_t i = 0; i < ARRAY_SIZE(RequestHeadersLabels); i++) {
+                                if (header.key == RequestHeadersLabels[i]) {
+                                    common = true;
+                                    break;
+                                }
+                            }
+
+                            if (!common) {
+                                nljson example =
+                                    export_example(replace_variables(vars, header.data.data));
+
+                                op.parameters.push_back({
+                                    .name = header.key,
+                                    .in = "header",
+                                    .example = example,
+                                });
+                            }
+                        }
+                    }
+
+                    // Query params
+                    for (auto& query : it_test->request.parameters.elements) {
+                        if (query.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                            nljson example =
+                                export_example(replace_variables(vars, query.data.data));
+
+                            op.parameters.push_back({
+                                .name = query.key,
+                                .in = "query",
+                                .example = example,
+                            });
+                        }
+                    }
+
+                    // Cookie params
+                    for (auto& cookie : it_test->request.cookies.elements) {
+                        if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                            nljson example =
+                                export_example(replace_variables(vars, cookie.data.data));
+
+                            op.parameters.push_back({
+                                .name = cookie.key,
+                                .in = "cookie",
+                                .example = example,
+                            });
+                        }
+                    }
+
+                    paths.emplace(name, op);
+                }
             }
         }
 
@@ -453,6 +545,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
         nljson operation = {};
 
         operation.emplace("operationId", id);
+        operation.emplace("parameters", op.parameters);
 
         swagger.at("paths").emplace(op.path, nljson{});
         swagger.at("paths").at(op.path).emplace(lower_http_type_label(op.type), operation);
