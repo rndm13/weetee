@@ -395,6 +395,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     }
 }
 
+namespace swagger {
 struct Parameter {
     std::string name;
     std::string in;
@@ -410,10 +411,23 @@ void to_json(nljson& j, const Parameter& param) noexcept {
     }
 }
 
+struct RequestBody {
+    std::string media_type;
+    std::optional<nljson> example;
+};
+
+void to_json(nljson& j, const RequestBody& request_body) noexcept {
+    j.emplace("content", nljson::object());
+    if (request_body.example.has_value()) {
+        j.at("content").emplace(request_body.media_type, request_body.example.value());
+    }
+}
+
 struct Operation {
     std::string path;
     HTTPType type;
     std::vector<Parameter> parameters;
+    std::optional<RequestBody> request_body;
 };
 
 nljson export_example(const std::string& value_str) noexcept {
@@ -424,8 +438,10 @@ nljson export_example(const std::string& value_str) noexcept {
         return value; // Any
     }
 }
+} // namespace swagger
 
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
+    using namespace swagger;
     std::unordered_map<std::string, Operation> paths;
 
     size_t it_id = 0, it_idx = 0;
@@ -532,6 +548,19 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                         }
                     }
 
+                    // Request body
+                    if (!std::visit(EmptyVisitor(), it_test->request.body)) {
+                        std::string media_type = to_string(request_content_type(&it_test->request));
+                        std::optional<nljson> example = std::nullopt;
+                        if (std::holds_alternative<std::string>(it_test->request.body)) {
+                            example = export_example(replace_variables(
+                                vars, std::get<std::string>(it_test->request.body)));
+                        }
+
+                        op.request_body =
+                            swagger::RequestBody{.media_type = media_type, .example = example};
+                    }
+
                     paths.emplace(name, op);
                 }
             }
@@ -540,14 +569,17 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
         iterate_over_nested_children(this, &it_id, &it_idx, -1);
     }
 
-    swagger.emplace("paths", nljson{});
+    swagger.emplace("paths", nljson::object());
     for (const auto& [id, op] : paths) {
         nljson operation = {};
 
         operation.emplace("operationId", id);
         operation.emplace("parameters", op.parameters);
+        if (op.request_body.has_value()) {
+            operation.emplace("requestBody", op.request_body.value());
+        }
 
-        swagger.at("paths").emplace(op.path, nljson{});
+        swagger.at("paths").emplace(op.path, nljson::object());
         swagger.at("paths").at(op.path).emplace(lower_http_type_label(op.type), operation);
     }
 }
@@ -559,7 +591,7 @@ void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {
         servers.emplace_back();                             // Make a single element
         servers.back().emplace("url", root_vars.at("url")); // Add to it a url
 
-        nljson variables = {};
+        nljson variables = nljson::object();
         for (const auto& [key, value] : root_vars) {
             if (key == "url") {
                 continue;
