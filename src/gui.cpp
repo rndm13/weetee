@@ -679,6 +679,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
 
             elem->data.separator = std::nullopt;
         }
+
         if (ImGui::MenuItem("New Line", nullptr, elem->data.separator == '\n')) {
             changed = true;
 
@@ -1468,9 +1469,9 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             }
 
             ImGui::EndDisabled();
-
-            ImGui::EndChild();
         }
+
+        ImGui::EndChild();
 
         ImGui::EndTabItem();
     }
@@ -1572,9 +1573,9 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             }
 
             ImGui::EndDisabled();
-
-            ImGui::EndChild();
         }
+
+        ImGui::EndChild();
 
         ImGui::EndTabItem();
     }
