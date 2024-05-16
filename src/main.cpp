@@ -10,6 +10,7 @@
 #include "gui_tests.hpp"
 
 // TODO: Add a better icon
+// TODO: Add Head, Options, Trace
 
 void post_init(AppState* app) noexcept;
 

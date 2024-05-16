@@ -395,8 +395,68 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     }
 }
 
+struct Parameter {
+    std::string name;
+    std::string in;
+};
+
+struct Operation {
+    std::string path;
+    HTTPType type;
+    std::vector<Parameter> parameters;
+};
+
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
-    // TODO: Export swagger paths
+    std::unordered_map<std::string, Operation> paths;
+
+    size_t it_id = 0, it_idx = 0;
+
+    auto lower_http_type_label = [](HTTPType type) -> std::string {
+        std::string label = HTTPTypeLabels[type];
+        std::for_each(label.begin(), label.end(), [](char& c) { c = std::tolower(c); });
+        return label;
+    };
+
+    while (it_id != -1 && !this->root_group()->children_ids.empty()) {
+        assert(this->tests.contains(it_id));
+        const NestedTest* iterated_nt = &this->tests.at(it_id);
+
+        assert(std::holds_alternative<Group>(*iterated_nt));
+        const Group* iterated_group = &std::get<Group>(*iterated_nt);
+
+        assert(it_idx < iterated_group->children_ids.size());
+        assert(this->tests.contains(iterated_group->children_ids.at(it_idx)));
+        const NestedTest* it_nt = &this->tests.at(iterated_group->children_ids.at(it_idx));
+
+        if (std::holds_alternative<Test>(*it_nt)) {
+            const Test* it_test = &std::get<Test>(*it_nt);
+            if (!(it_test->flags & TEST_DISABLED) && !this->parent_disabled(it_test->id)) {
+                const VariablesMap& vars = this->get_test_variables(it_test->id);
+
+                std::string path = split_endpoint(it_test->endpoint).second;
+
+                std::string name = lower_http_type_label(it_test->type) + "_" + path;
+                find_and_replace(name, "/", "_");
+                find_and_replace(name, "{", "");
+                find_and_replace(name, "}", "");
+
+                Operation op = {.path = path, .type = it_test->type};
+                paths.insert_or_assign(name, op);
+            }
+        }
+
+        iterate_over_nested_children(this, &it_id, &it_idx, -1);
+    }
+
+    swagger.emplace("paths", nljson{});
+    for (const auto& [id, op] : paths) {
+        nljson operation = {};
+
+        operation.emplace("operationId", id);
+
+        swagger.at("paths").emplace(op.path, nljson{});
+        swagger.at("paths").at(op.path).emplace(lower_http_type_label(op.type), operation);
+    }
 }
 
 void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {

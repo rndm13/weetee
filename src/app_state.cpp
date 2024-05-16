@@ -181,7 +181,7 @@ VariablesMap AppState::get_test_variables(size_t id) const noexcept {
     return result;
 }
 
-bool AppState::parent_disabled(size_t id) noexcept {
+bool AppState::parent_disabled(size_t id) const noexcept {
     // OPTIM: maybe add some cache for every test that clears every frame?
     // if performance becomes a problem
     assert(this->tests.contains(id));
@@ -193,7 +193,7 @@ bool AppState::parent_disabled(size_t id) noexcept {
         }
 
         assert(this->tests.contains(id));
-        NestedTest* nt = &this->tests.at(id);
+        const NestedTest* nt = &this->tests.at(id);
 
         assert(std::holds_alternative<Group>(*nt));
         const Group& group = std::get<Group>(*nt);
@@ -1028,17 +1028,12 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
         assert(child_idx < iterated_group->children_ids.size());
         assert(app->tests.contains(iterated_group->children_ids.at(child_idx)));
         NestedTest* child_nt = &app->tests.at(iterated_group->children_ids.at(child_idx));
-
         if (std::holds_alternative<Test>(*child_nt)) {
             Test* child_test = &std::get<Test>(*child_nt);
 
             if (!(child_test->flags & TEST_DISABLED) && !app->parent_disabled(child_test->id)) {
                 test_queue_ids.push_back(iterated_group->children_ids.at(child_idx));
             }
-        }
-
-        if (std::holds_alternative<Test>(*child_nt) &&
-            !app->parent_disabled(std::get<Test>(*child_nt).id)) {
         }
 
         iterate_over_nested_children(app, &id, &child_idx, group.parent_id);
