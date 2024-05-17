@@ -15,6 +15,7 @@
 #include "imgui_test_engine/imgui_te_ui.h"
 
 #include "hello_imgui/icons_font_awesome_4.h"
+#include "imgui_md_wrapper/imgui_md_wrapper.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
@@ -1601,9 +1602,27 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 void tabbed_editor(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
+    static bool show_homepage = true;
+
+    if (app->editor_open_tabs.size() <= 0) {
+        show_homepage = true;
+    }
+
     if (ImGui::BeginTabBar("editor", ImGuiTabBarFlags_Reorderable)) {
+        if (ImGui::BeginTabItem("Home",
+                                app->editor_open_tabs.size() > 0 ? &show_homepage : nullptr)) {
+            ImGuiMd::Render(R"md(
+# Welcome to Weetee!
+Weetee is a GUI tool for testing web APIs and applications.
+To begin work press on the )md" ICON_FA_PLUS_CIRCLE R"md( icon near the "root" group.
+
+Ocassionally you will see buttons with question mark, hover over them to receive hints about features.
+            )md");
+            ImGui::EndTabItem();
+        }
+
         size_t closed_id = -1ull;
-        for (auto& [id, tab] : app->opened_editor_tabs) {
+        for (auto& [id, tab] : app->editor_open_tabs) {
             NestedTest* original = &app->tests[tab.original_idx];
             EditorTabResult result;
             switch (app->tests[tab.original_idx].index()) {
@@ -1633,7 +1652,7 @@ void tabbed_editor(AppState* app) noexcept {
         }
 
         if (closed_id != -1ull) {
-            app->opened_editor_tabs.erase(closed_id);
+            app->editor_open_tabs.erase(closed_id);
         }
         ImGui::EndTabBar();
     }

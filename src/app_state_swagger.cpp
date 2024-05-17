@@ -370,7 +370,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     this->id_counter = 0;
     this->test_results.clear();
     this->filtered_tests.clear();
-    this->opened_editor_tabs.clear();
+    this->editor_open_tabs.clear();
 
     // Pushes initial undo state
     this->undo_history.reset_undo_history(this);
@@ -465,7 +465,7 @@ nljson export_schema(const nljson& example) {
         result.emplace("type", "array");
         result.emplace("items", nljson::object());
 
-        if (example.array().size() > 0) {
+        if (example.size() > 0) {
             result.at("items").emplace(export_schema(example.at(0)));
         } else {
             result.at("items").emplace("type", "string");
@@ -476,7 +476,6 @@ nljson export_schema(const nljson& example) {
 
     return result;
 }
-
 } // namespace swagger_export
 
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {

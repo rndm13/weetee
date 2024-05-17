@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     runner_params.appWindowParams.windowTitle = "weetee";
 
     runner_params.imGuiWindowParams.showMenuBar = true;
-    runner_params.imGuiWindowParams.showStatusBar = true;
+    runner_params.imGuiWindowParams.showStatusBar = false;
     runner_params.imGuiWindowParams.rememberTheme = true;
 
     runner_params.imGuiWindowParams.defaultImGuiWindowType =
@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     runner_params.useImGuiTestEngine = true;
 
     ImmApp::AddOnsParams addOnsParams;
+    addOnsParams.withMarkdown = true;
     ImmApp::Run(runner_params, addOnsParams);
     return 0;
 }
@@ -60,6 +61,6 @@ void post_init(AppState* app) noexcept {
     Log(LogLevel::Warning, "Compiled without Brotli support! Brotli compression will not work!");
 #endif
 
-    // NOTE: You have to do this in show_gui instead because imgui is stupid
+    // NOTE: You have to do this in show_gui instead because hello_imgui is stupid
     // ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }

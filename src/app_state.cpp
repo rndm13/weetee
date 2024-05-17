@@ -83,10 +83,10 @@ void AppState::editor_open_tab(size_t id) noexcept {
 
     this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame =
         true;
-    if (this->opened_editor_tabs.contains(id)) {
-        this->opened_editor_tabs[id].just_opened = true;
+    if (this->editor_open_tabs.contains(id)) {
+        this->editor_open_tabs[id].just_opened = true;
     } else {
-        this->opened_editor_tabs[id] = EditorTab{
+        this->editor_open_tabs[id] = EditorTab{
             .original_idx = id,
             .name = std::visit(LabelVisitor(), this->tests[id]),
         };
@@ -108,15 +108,15 @@ void AppState::focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_test
 }
 
 void AppState::post_open() noexcept {
-    this->opened_editor_tabs.clear();
+    this->editor_open_tabs.clear();
     this->selected_tests.clear();
     this->undo_history.reset_undo_history(this);
 }
 
 void AppState::post_undo() noexcept {
-    for (auto it = this->opened_editor_tabs.begin(); it != this->opened_editor_tabs.end();) {
+    for (auto it = this->editor_open_tabs.begin(); it != this->editor_open_tabs.end();) {
         if (!this->tests.contains(it->first)) {
-            it = this->opened_editor_tabs.erase(it);
+            it = this->editor_open_tabs.erase(it);
         } else {
             ++it;
         }
@@ -344,7 +344,7 @@ void AppState::delete_test(size_t id) noexcept {
     // remove from tests
     this->tests.erase(id);
 
-    this->opened_editor_tabs.erase(id);
+    this->editor_open_tabs.erase(id);
     this->selected_tests.erase(id);
 }
 

@@ -35,9 +35,10 @@ struct AppState {
 
     std::string tree_view_filter;
     std::unordered_set<size_t> filtered_tests = {};
-
     std::unordered_set<size_t> selected_tests = {};
-    std::unordered_map<size_t, EditorTab> opened_editor_tabs = {};
+
+    bool editor_show_homepage = true;
+    std::unordered_map<size_t, EditorTab> editor_open_tabs = {};
 
     std::unordered_map<size_t, std::vector<TestResult>> test_results;
     size_t test_results_last_selected_id = 0;
