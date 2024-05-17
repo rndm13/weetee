@@ -38,13 +38,14 @@ MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcep
     for (const auto& [key, value] : json.items()) {
         MultiPartBodyElement new_elem;
         if (value.is_string()) {
+             MultiPartBodyElementData new_data = {
+                .type = MPBD_TEXT,
+                .data = value.template get<std::string>(),
+            };
+
             new_elem = MultiPartBodyElement{
                 .key = key,
-                .data =
-                    MultiPartBodyElementData{
-                        .type = MPBD_TEXT,
-                        .data = value.template get<std::string>(),
-                    },
+                .data = new_data,
             };
         } else if (value.is_array()) {
             std::vector<std::string> files;
@@ -57,13 +58,14 @@ MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcep
                 }
             }
 
-            new_elem = MultiPartBodyElement{
+            MultiPartBodyElementData new_data = {
+                .type = MPBD_FILES,
+                .data = files,
+            };
+
+            new_elem = MultiPartBodyElement { 
                 .key = key,
-                .data =
-                    MultiPartBodyElementData{
-                        .type = MPBD_FILES,
-                        .data = files,
-                    },
+                .data = new_data,
             };
         } else {
             return {}; // Not MultiPartBody
