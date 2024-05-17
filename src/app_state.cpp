@@ -1072,7 +1072,7 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
             VariablesMap vars = app->get_test_variables(test->id);
 
             std::string new_hostname =
-                split_endpoint(replace_variables(vars, test_queue.at(0).endpoint)).first;
+                split_endpoint(replace_variables(vars, test->endpoint)).first;
 
             if (hostname == "") {
                 hostname = new_hostname;
