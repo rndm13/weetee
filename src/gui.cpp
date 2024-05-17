@@ -1701,7 +1701,14 @@ void testing_results(AppState* app) noexcept {
                             for (auto& [sel_result_id, sel_results] : app->test_results) {
                                 for (size_t sel_result_idx = 0; sel_result_idx < sel_results.size();
                                      sel_result_idx++) {
-                                    TestResult& sel_result = results.at(sel_result_idx);
+                                    TestResult& sel_result = sel_results.at(sel_result_idx);
+
+                                    if (!(sel_result.status.load() == app->test_results_filter ||
+                                          (sel_result.status.load() > app->test_results_filter &&
+                                           app->test_results_filter_cumulative))) {
+                                        continue;
+                                    }
+
                                     sel_result.selected = selection_start;
 
                                     if ((sel_result_id == app->test_results_last_selected_id &&
