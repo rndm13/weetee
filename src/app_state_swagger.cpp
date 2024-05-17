@@ -176,7 +176,8 @@ nljson schema_example(const nljson& schema, const nljson& swagger) noexcept {
             return array_example;
         }
 
-        return schema_value.at("type");
+        std::string example_var = schema_value.at("type");
+        return "{" + example_var + "}";
     }
 
     return schema_value;
@@ -213,6 +214,10 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
             }
         } else if (param_value.contains("schema")) {
             value = to_string(schema_example(param_value.at("schema"), swagger));
+        }
+
+        if (value.front() == '"' && value.back() == '"') {
+            value = value.substr(1, value.size() - 2);
         }
 
         // Don't put required on this one as it won't remain required after url
@@ -622,7 +627,7 @@ void AppState::export_swagger(const std::string& swagger_file) const noexcept {
         {
             nljson info = {};
             info.emplace("title", this->root_group()->name);
-            info.emplace("version", "0.1.0"); // TODO: Allow user to change this
+            info.emplace("version", "0.1.0");
 
             swagger.emplace("info", info);
         }
