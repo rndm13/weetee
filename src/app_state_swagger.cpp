@@ -146,7 +146,7 @@ nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) noexce
     return resolved;
 }
 
-nljson schema_example(const nljson& schema, const nljson& swagger) noexcept {
+nljson import_schema_example(const nljson& schema, const nljson& swagger) noexcept {
     nljson schema_value = resolve_swagger_ref(schema, swagger);
 
     if (schema_value.contains("example")) {
@@ -159,7 +159,7 @@ nljson schema_example(const nljson& schema, const nljson& swagger) noexcept {
 
             if (schema_value.contains("properties")) {
                 for (auto& [key, value] : schema_value.at("properties").items()) {
-                    object_example.emplace(key, schema_example(value, swagger));
+                    object_example.emplace(key, import_schema_example(value, swagger));
                 }
             }
 
@@ -170,7 +170,8 @@ nljson schema_example(const nljson& schema, const nljson& swagger) noexcept {
             std::vector<nljson> array_example;
 
             if (schema_value.contains("items")) {
-                array_example.emplace_back(schema_example(schema_value.at("items"), swagger));
+                array_example.emplace_back(
+                    import_schema_example(schema_value.at("items"), swagger));
             }
 
             return array_example;
@@ -213,7 +214,7 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
                 break;
             }
         } else if (param_value.contains("schema")) {
-            value = to_string(schema_example(param_value.at("schema"), swagger));
+            value = to_string(import_schema_example(param_value.at("schema"), swagger));
         }
 
         if (value.front() == '"' && value.back() == '"') {
@@ -334,7 +335,7 @@ void AppState::import_swagger_paths(const nljson& paths, const nljson& swagger) 
                             }
                         } else if (media_type.contains("schema")) {
                             new_test.request.body =
-                                to_string(schema_example(media_type.at("schema"), swagger));
+                                to_string(import_schema_example(media_type.at("schema"), swagger));
                         }
 
                         // TODO: Multiple tests for each content-type
@@ -400,10 +401,11 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     }
 }
 
-namespace swagger {
+namespace swagger_export {
 struct Parameter {
     std::string name;
     std::string in;
+    nljson schema;
     std::optional<nljson> example;
 };
 
@@ -411,6 +413,7 @@ void to_json(nljson& j, const Parameter& param) noexcept {
     j.emplace("name", param.name);
     j.emplace("in", param.in);
     j.emplace("required", true);
+    j.emplace("schema", param.schema);
     if (param.example.has_value()) {
         j.emplace("example", param.example.value());
     }
@@ -418,13 +421,18 @@ void to_json(nljson& j, const Parameter& param) noexcept {
 
 struct RequestBody {
     std::string media_type;
+    nljson schema;
     std::optional<nljson> example;
 };
 
 void to_json(nljson& j, const RequestBody& request_body) noexcept {
     j.emplace("content", nljson::object());
+    j.at("content").emplace(request_body.media_type, nljson::object());
+    j.at("content").at(request_body.media_type).emplace("schema", request_body.schema);
     if (request_body.example.has_value()) {
-        j.at("content").emplace(request_body.media_type, request_body.example.value());
+        j.at("content")
+            .at(request_body.media_type)
+            .emplace("example", request_body.example.value());
     }
 }
 
@@ -443,10 +451,36 @@ nljson export_example(const std::string& value_str) noexcept {
         return value; // Any
     }
 }
-} // namespace swagger
+
+nljson export_schema(const nljson& example) {
+    nljson result = nljson::object();
+
+    if (example.is_object()) {
+        result.emplace("type", "object");
+        result.emplace("properties", nljson::object());
+        for (auto& [name, value] : example.items()) {
+            result.at("properties").emplace(name, export_schema(value));
+        }
+    } else if (example.is_array()) {
+        result.emplace("type", "array");
+        result.emplace("items", nljson::object());
+
+        if (example.array().size() > 0) {
+            result.at("items").emplace(export_schema(example.at(0)));
+        } else {
+            result.at("items").emplace("type", "string");
+        }
+    } else {
+        result.emplace("type", example.type_name());
+    }
+
+    return result;
+}
+
+} // namespace swagger_export
 
 void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
-    using namespace swagger;
+    using namespace swagger_export;
     std::unordered_map<std::string, Operation> paths;
 
     size_t it_id = 0, it_idx = 0;
@@ -496,6 +530,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                         op.parameters.push_back({
                             .name = param,
                             .in = "path",
+                            .schema = export_schema(example.value_or(nljson::parse("\"\""))),
                             .example = example,
                         });
                     }
@@ -519,6 +554,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                                 op.parameters.push_back({
                                     .name = header.key,
                                     .in = "header",
+                                    .schema = export_schema(example),
                                     .example = example,
                                 });
                             }
@@ -534,6 +570,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                             op.parameters.push_back({
                                 .name = query.key,
                                 .in = "query",
+                                .schema = export_schema(example),
                                 .example = example,
                             });
                         }
@@ -548,6 +585,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                             op.parameters.push_back({
                                 .name = cookie.key,
                                 .in = "cookie",
+                                .schema = export_schema(example),
                                 .example = example,
                             });
                         }
@@ -562,8 +600,11 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                                 vars, std::get<std::string>(it_test->request.body)));
                         }
 
-                        op.request_body =
-                            swagger::RequestBody{.media_type = media_type, .example = example};
+                        op.request_body = swagger_export::RequestBody{
+                            .media_type = media_type,
+                            .schema = export_schema(example.value_or(nljson::parse("\"\""))),
+                            .example = example,
+                        };
                     }
 
                     paths.emplace(name, op);
@@ -583,6 +624,14 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
         if (op.request_body.has_value()) {
             operation.emplace("requestBody", op.request_body.value());
         }
+
+        operation.emplace("responses", nljson::parse(R"json(
+        {
+            "200": {
+                "description": "Ok"
+            }
+        }
+        )json"));
 
         swagger.at("paths").emplace(op.path, nljson::object());
         swagger.at("paths").at(op.path).emplace(lower_http_type_label(op.type), operation);
@@ -606,8 +655,8 @@ void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {
             var.emplace("default", value);
 
             variables.emplace(key, var);
+            servers.back().emplace("variables", variables);
         }
-        swagger.emplace("variables", variables);
 
         swagger.emplace("servers", servers);
     }
@@ -622,7 +671,7 @@ void AppState::export_swagger(const std::string& swagger_file) const noexcept {
 
     try {
         nljson swagger = {};
-        swagger.emplace("openapi", "3.1.0"); // Version
+        swagger.emplace("openapi", "3.0.0"); // Version
 
         {
             nljson info = {};
