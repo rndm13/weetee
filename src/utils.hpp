@@ -6,8 +6,6 @@
 #endif
 #include <httplib.h>
 
-#include "hello_imgui/hello_imgui_logger.h"
-
 #include "imgui.h"
 
 #include "cassert"
@@ -16,9 +14,6 @@
 #include "string"
 #include "variant"
 #include "vector"
-
-using HelloImGui::Log;
-using HelloImGui::LogLevel;
 
 using std::to_string;
 

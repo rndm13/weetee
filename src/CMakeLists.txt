@@ -1,5 +1,8 @@
 add_library(utils STATIC utils.hpp utils.cpp)
-target_link_libraries(utils PUBLIC hello_imgui httplib::httplib)
+target_link_libraries(utils PUBLIC httplib::httplib imgui)
+
+add_library(i18n STATIC i18n.hpp i18n.cpp)
+target_link_libraries(i18n PUBLIC utils nljson hello_imgui)
 
 add_library(save_state save_state.hpp save_state.cpp)
 target_link_libraries(save_state PUBLIC utils hello_imgui portable_file_dialogs)
@@ -21,8 +24,8 @@ target_link_libraries(test PUBLIC hello_imgui nljson save_state partial_dict htt
 
 add_library(app_state app_state.hpp)
 target_sources(app_state PUBLIC app_state.cpp app_state_swagger.cpp)
-
 target_link_libraries(app_state PUBLIC 
+    i18n
     hello_imgui textinputcombo
     save_state partial_dict test
     json http BS_thread_pool)

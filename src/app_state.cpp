@@ -1,5 +1,6 @@
 #include "app_state.hpp"
 
+#include "hello_imgui/hello_imgui_assets.h"
 #include "hello_imgui/hello_imgui_logger.h"
 
 #include "http.hpp"
@@ -634,9 +635,17 @@ void AppState::open_file() noexcept {
     this->post_open();
 }
 
+void AppState::load_i18n(const std::string& i18n_file) noexcept {
+    std::ifstream in(i18n_file); // TODO: Add to assets
+    this->i18n = nlohmann::json::parse(in).template get<I18N>();
+}
+
 AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     : runner_params(_runner_params) {
     this->undo_history.reset_undo_history(this);
+
+    std::string locale = "en";
+    this->load_i18n(HelloImGui::AssetFileFullPath(locale + ".json"));
 }
 
 bool status_match(const std::string& match, int status) noexcept {

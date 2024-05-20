@@ -22,24 +22,24 @@ void register_tests(AppState* app) noexcept {
 
     static constexpr const char* root_selectable = "**/##0";
 
-    static constexpr const char* delete_test_selectable = "**/###delete";
-    static constexpr const char* add_new_test_selectable = "**/###new_test";
-    static constexpr const char* add_new_group_selectable = "**/###new_group";
+    static constexpr const char* delete_test_selectable = "**/###tv_delete";
+    static constexpr const char* add_new_test_selectable = "**/###tv_new_test";
+    static constexpr const char* add_new_group_selectable = "**/###tv_new_group";
 
-    static constexpr const char* copy_selectable = "**/###copy";
-    static constexpr const char* paste_selectable = "**/###paste";
+    static constexpr const char* copy_selectable = "**/###tv_copy";
+    static constexpr const char* paste_selectable = "**/###tv_paste";
 
-    static constexpr const char* group_selectable = "**/###group";
-    static constexpr const char* ungroup_selectable = "**/###ungroup";
+    static constexpr const char* group_selectable = "**/###tv_group";
+    static constexpr const char* ungroup_selectable = "**/###tv_ungroup";
 
-    static constexpr const char* sort_selectable = "**/###sort";
+    static constexpr const char* sort_selectable = "**/###tv_sort";
 
-    static constexpr const char* edit_menu_selectable = "**/###edit";
-    static constexpr const char* undo_menu_selectable = "**/###undo";
-    static constexpr const char* redo_menu_selectable = "**/###redo";
+    static constexpr const char* edit_menu_selectable = "**/###menu_edit";
+    static constexpr const char* undo_menu_selectable = "**/###menu_edit_undo";
+    static constexpr const char* redo_menu_selectable = "**/###menu_edit_redo";
 
-    static constexpr const char* file_menu_selectable = "**/###file";
-    static constexpr const char* save_menu_selectable = "**/###save";
+    static constexpr const char* file_menu_selectable = "**/###menu_file";
+    static constexpr const char* save_menu_selectable = "**/###menu_file_save";
 
     auto tree_view__select_all = [app](ImGuiTestContext* ctx) -> std::vector<size_t> {
         std::vector<size_t> top_items = std::get<Group>(app->tests[0]).children_ids;

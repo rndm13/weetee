@@ -1,0 +1,21 @@
+{
+    "tv_edit": "Edit",
+    "tv_delete": "Delete",
+    "tv_enable": "Enable",
+    "tv_disable": "Disable",
+    "tv_move": "Move",
+
+    "tv_copy": "Copy",
+    "tv_paste": "Paste",
+    "tv_cut": "Cut",
+
+    "tv_group": "Group",
+    "tv_ungroup": "Ungroup",
+
+    "tv_new_test": "Add New Test",
+    "tv_new_group": "Add New Group",
+
+    "tv_sort": "Sort",
+    
+    "_": ""
+}

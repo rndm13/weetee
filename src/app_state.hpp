@@ -1,7 +1,10 @@
 #pragma once
 
+#include "hello_imgui/hello_imgui_logger.h"
+#include "hello_imgui/hello_imgui_assets.h"
 #include "hello_imgui/runner_params.h"
 
+#include "i18n.hpp"
 #include "imgui.h"
 
 #include "BS_thread_pool.hpp"
@@ -15,6 +18,9 @@
 #include "string"
 #include "unordered_map"
 #include "variant"
+
+using HelloImGui::Log;
+using HelloImGui::LogLevel;
 
 struct EditorTab {
     bool just_opened = true;
@@ -57,6 +63,8 @@ struct AppState {
     ImFont* mono_font;
     ImFont* awesome_font;
     HelloImGui::RunnerParams* runner_params;
+
+    I18N i18n;
 
     bool tree_view_focused; // Updated every frame
 
@@ -157,6 +165,8 @@ struct AppState {
     void export_swagger_paths(nlohmann::json&) const noexcept;
     void export_swagger_servers(nlohmann::json&) const noexcept;
     void export_swagger(const std::string& filename) const noexcept;
+
+    void load_i18n(const std::string& i18n_file) noexcept;
 
     AppState(HelloImGui::RunnerParams* _runner_params) noexcept;
 

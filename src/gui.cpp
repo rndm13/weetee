@@ -96,39 +96,31 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         auto analysis = app->select_analysis();
 
-        if (ImGui::MenuItem(ICON_FA_EDIT " Edit"
-                                         "###edit",
-                            "Enter", false, analysis.top_selected_count == 1 && !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_edit.c_str(), "Enter", false,
+                            analysis.top_selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
-        if (ImGui::MenuItem("Delete"
-                            "###delete",
-                            "Delete", false, !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_delete.c_str(), "Delete", false,
+                            !analysis.selected_root && !changed)) {
             changed = true;
 
             app->delete_selected();
         }
 
-        if (ImGui::MenuItem("Enable"
-                            "###enable",
-                            nullptr, false, !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_enable.c_str(), nullptr, false, !changed)) {
             changed = true;
 
             app->enable_selected(true);
         }
 
-        if (ImGui::MenuItem("Disable"
-                            "###disable",
-                            nullptr, false, !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_disable.c_str(), nullptr, false, !changed)) {
             changed = true;
 
             app->enable_selected(false);
         }
 
-        if (ImGui::BeginMenu(ICON_FA_ARROW_RIGHT " Move"
-                                                 "###move",
-                             !changed && !analysis.selected_root)) {
+        if (ImGui::BeginMenu(app->i18n.tv_move.c_str(), !changed && !analysis.selected_root)) {
             for (auto& [id, nt] : app->tests) {
                 // skip if not a group or same parent for selected or selected group
                 if (!std::holds_alternative<Group>(nt) ||
@@ -149,23 +141,19 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem(ICON_FA_COPY " Copy"
-                                         "###copy",
-                            "Ctrl + C", false, !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_copy.c_str(), "Ctrl + C", false, !changed)) {
             app->copy();
         }
 
-        if (ImGui::MenuItem(ICON_FA_CUT " Cut"
-                                        "###cut",
-                            "Ctrl + X", false, !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_cut.c_str(), "Ctrl + X", false,
+                            !analysis.selected_root && !changed)) {
             changed = true;
 
             app->cut();
         }
 
-        if (ImGui::MenuItem(ICON_FA_PASTE " Paste"
-                                          "###paste",
-                            "Ctrl + V", false, app->can_paste() && !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_paste.c_str(), "Ctrl + V", false,
+                            app->can_paste() && !changed)) {
             changed = true;
 
             NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -187,9 +175,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem(ICON_FA_SORT " Sort"
-                                             "###sort",
-                                nullptr, false, analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(app->i18n.tv_sort.c_str(), nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -199,9 +186,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->sort(selected_group);
             }
 
-            if (ImGui::MenuItem(ICON_FA_PLUS_CIRCLE " Add a new test"
-                                                    "###new_test",
-                                nullptr, false, analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(app->i18n.tv_new_test.c_str(), nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -224,9 +210,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem(ICON_FA_PLUS_SQUARE " Add a new group"
-                                                    "###new_group",
-                                nullptr, false, analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(app->i18n.tv_new_group.c_str(), nullptr, false,
+                                analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -245,9 +230,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 selected_group.children_ids.push_back(id);
             }
 
-            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_UP " Ungroup"
-                                                        "###ungroup",
-                                nullptr, false, !analysis.selected_root && !changed)) {
+            if (ImGui::MenuItem(app->i18n.tv_ungroup.c_str(), nullptr, false,
+                                !analysis.selected_root && !changed)) {
                 changed = true;
 
                 for (auto selected_id : app->select_top_layer()) {
@@ -263,18 +247,15 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
         }
 
         if (analysis.same_parent) {
-            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_DOWN " Group"
-                                                          "###group",
-                                nullptr, false, !analysis.selected_root && !changed)) {
+            if (ImGui::MenuItem(app->i18n.tv_group.c_str(), nullptr, false,
+                                !analysis.selected_root && !changed)) {
                 changed = true;
 
                 app->group_selected(analysis.parent_id);
             }
         }
 
-        if (ImGui::MenuItem(ICON_FA_ROCKET " Run tests"
-                                           "###run_tests",
-                            nullptr, false, !changed)) {
+        if (ImGui::MenuItem(app->i18n.tv_run_tests.c_str(), nullptr, false, !changed)) {
             std::vector<size_t> tests_to_run =
                 get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
 
