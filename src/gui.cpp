@@ -96,30 +96,30 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         auto analysis = app->select_analysis();
 
-        if (ImGui::MenuItem(ICON_FA_EDIT " Edit", "Enter", false,
+        if (ImGui::MenuItem(ICON_FA_EDIT " Edit" "###edit", "Enter", false,
                             analysis.top_selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
-        if (ImGui::MenuItem("Delete", "Delete", false, !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem("Delete" "###delete", "Delete", false, !analysis.selected_root && !changed)) {
             changed = true;
 
             app->delete_selected();
         }
 
-        if (ImGui::MenuItem("Enable", nullptr, false, !changed)) {
+        if (ImGui::MenuItem("Enable" "###enable", nullptr, false, !changed)) {
             changed = true;
 
             app->enable_selected(true);
         }
 
-        if (ImGui::MenuItem("Disable", nullptr, false, !changed)) {
+        if (ImGui::MenuItem("Disable" "###disable", nullptr, false, !changed)) {
             changed = true;
 
             app->enable_selected(false);
         }
 
-        if (ImGui::BeginMenu(ICON_FA_ARROW_RIGHT " Move", !changed && !analysis.selected_root)) {
+        if (ImGui::BeginMenu(ICON_FA_ARROW_RIGHT " Move" "###move", !changed && !analysis.selected_root)) {
             for (auto& [id, nt] : app->tests) {
                 // skip if not a group or same parent for selected or selected group
                 if (!std::holds_alternative<Group>(nt) ||
@@ -140,18 +140,18 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem(ICON_FA_COPY " Copy", "Ctrl + C", false, !changed)) {
+        if (ImGui::MenuItem(ICON_FA_COPY " Copy" "###copy", "Ctrl + C", false, !changed)) {
             app->copy();
         }
 
-        if (ImGui::MenuItem(ICON_FA_CUT " Cut", "Ctrl + X", false,
+        if (ImGui::MenuItem(ICON_FA_CUT " Cut" "###cut", "Ctrl + X", false,
                             !analysis.selected_root && !changed)) {
             changed = true;
 
             app->cut();
         }
 
-        if (ImGui::MenuItem(ICON_FA_PASTE " Paste", "Ctrl + V", false,
+        if (ImGui::MenuItem(ICON_FA_PASTE " Paste" "###paste", "Ctrl + V", false,
                             app->can_paste() && !changed)) {
             changed = true;
 
@@ -174,7 +174,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem(ICON_FA_SORT " Sort", nullptr, false,
+            if (ImGui::MenuItem(ICON_FA_SORT " Sort" "###sort", nullptr, false,
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
@@ -185,7 +185,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->sort(selected_group);
             }
 
-            if (ImGui::MenuItem(ICON_FA_PLUS_CIRCLE " Add a new test", nullptr, false,
+            if (ImGui::MenuItem(ICON_FA_PLUS_CIRCLE " Add a new test" "###new_test", nullptr, false,
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
@@ -209,7 +209,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem(ICON_FA_PLUS_SQUARE " Add a new group", nullptr, false,
+            if (ImGui::MenuItem(ICON_FA_PLUS_SQUARE " Add a new group" "###new_group", nullptr, false,
                                 analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
@@ -229,7 +229,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 selected_group.children_ids.push_back(id);
             }
 
-            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_UP " Ungroup", nullptr, false,
+            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_UP " Ungroup" "###ungroup", nullptr, false,
                                 !analysis.selected_root && !changed)) {
                 changed = true;
 
@@ -246,7 +246,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
         }
 
         if (analysis.same_parent) {
-            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_DOWN " Group Selected", nullptr, false,
+            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_DOWN " Group" "###group", nullptr, false,
                                 !analysis.selected_root && !changed)) {
                 changed = true;
 
@@ -254,7 +254,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             }
         }
 
-        if (ImGui::MenuItem(ICON_FA_ROCKET " Run tests", nullptr, false, !changed)) {
+        if (ImGui::MenuItem(ICON_FA_ROCKET " Run tests" "###run_tests", nullptr, false, !changed)) {
             std::vector<size_t> tests_to_run =
                 get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
 
@@ -787,9 +787,9 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
             auto& files = std::get<std::vector<std::string>>(elem->data.data);
             std::string text = files.empty()
-                                   ? ICON_FA_FILE_IMPORT " Select Files"
+                                   ? ICON_FA_FILE_IMPORT " Select Files" "###files"
                                    : ICON_FA_FILE_UPLOAD " Selected " + to_string(files.size()) +
-                                         " Files (Hover to see names)";
+                                         " Files (Hover to see names)" "###files";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
                 auto open_file =
                     pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
@@ -1764,11 +1764,11 @@ void testing_results(AppState* app) noexcept {
                             result.selected = true;
                         }
 
-                        if (ImGui::MenuItem(ICON_FA_NEWSPAPER " Details")) {
+                        if (ImGui::MenuItem(ICON_FA_NEWSPAPER " Details" "###details")) {
                             result.open = true;
                         }
 
-                        if (ImGui::MenuItem(ICON_FA_ARROW_RIGHT " Goto original test")) {
+                        if (ImGui::MenuItem(ICON_FA_ARROW_RIGHT " Goto original test" "###goto_original")) {
                             if (app->tests.contains(result.original_test.id)) {
                                 app->editor_open_tab(result.original_test.id);
                             } else {
@@ -1787,7 +1787,7 @@ void testing_results(AppState* app) noexcept {
                             }
                         }
 
-                        if (ImGui::MenuItem(ICON_FA_REDO " Rerun tests", nullptr, false,
+                        if (ImGui::MenuItem(ICON_FA_REDO " Rerun tests" "###rerun_tests", nullptr, false,
                                             any_not_running)) {
                             for (auto& [_, results] : app->test_results) {
                                 for (auto& rt : results) {
@@ -1798,7 +1798,7 @@ void testing_results(AppState* app) noexcept {
                             }
                         }
 
-                        if (ImGui::MenuItem(ICON_FA_STOP " Stop tests", nullptr, false,
+                        if (ImGui::MenuItem(ICON_FA_STOP " Stop tests" "###stop_tests", nullptr, false,
                                             any_running)) {
                             for (auto& [_, results] : app->test_results) {
                                 for (auto& rt : results) {
@@ -1930,14 +1930,14 @@ void export_swagger_file_dialog(AppState* app) noexcept {
 }
 
 void show_menus(AppState* app) noexcept {
-    if (ImGui::BeginMenu(ICON_FA_FILE " File")) {
-        if (ImGui::MenuItem(ICON_FA_SAVE " Save As", "Ctrl + Shift + S")) {
+    if (ImGui::BeginMenu(ICON_FA_FILE " File" "###file")) {
+        if (ImGui::MenuItem(ICON_FA_SAVE " Save As" "###save_as", "Ctrl + Shift + S")) {
             save_as_file_dialog(app);
         }
-        if (ImGui::MenuItem(ICON_FA_SAVE " Save", "Ctrl + S")) {
+        if (ImGui::MenuItem(ICON_FA_SAVE " Save" "###save", "Ctrl + S")) {
             save_file_dialog(app);
         }
-        if (ImGui::MenuItem(ICON_FA_FILE " Open", "Ctrl + O")) {
+        if (ImGui::MenuItem(ICON_FA_FILE " Open" "###open", "Ctrl + O")) {
             open_file_dialog(app);
         }
         if (ImGui::BeginMenu("Export")) {
@@ -1955,11 +1955,11 @@ void show_menus(AppState* app) noexcept {
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu(ICON_FA_EDIT " Edit")) {
-        if (ImGui::MenuItem(ICON_FA_UNDO " Undo", "Ctrl + Z", nullptr,
+    if (ImGui::BeginMenu(ICON_FA_EDIT " Edit" "###edit")) {
+        if (ImGui::MenuItem(ICON_FA_UNDO " Undo" "###undo", "Ctrl + Z", nullptr,
                             app->undo_history.can_undo())) {
             app->undo();
-        } else if (ImGui::MenuItem(ICON_FA_REDO " Redo", "Ctrl + Shift + Z", nullptr,
+        } else if (ImGui::MenuItem(ICON_FA_REDO " Redo" "###redo", "Ctrl + Shift + Z", nullptr,
                                    app->undo_history.can_redo())) {
             app->redo();
         }
