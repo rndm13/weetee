@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
     runner_params.callbacks.ShowAppMenuItems = [&app]() { show_app_menu_items(&app); };
     runner_params.callbacks.LoadAdditionalFonts = [&app]() { load_fonts(&app); };
+    runner_params.callbacks.PreNewFrame = [&app]() { pre_frame(&app); };
     runner_params.callbacks.PostInit = [&app]() { post_init(&app); };
     runner_params.callbacks.RegisterTests = [&app]() { register_tests(&app); };
 

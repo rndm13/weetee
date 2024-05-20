@@ -299,6 +299,8 @@ void show_menus(AppState* app) noexcept;
 void show_app_menu_items(AppState* app) noexcept;
 void show_gui(AppState* app) noexcept;
 
+void pre_frame(AppState* app) noexcept;
+
 // Program leaks those fonts
 // can't do much I guess and not a big deal
 void load_fonts(AppState* app) noexcept;

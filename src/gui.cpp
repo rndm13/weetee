@@ -1862,24 +1862,25 @@ void testing_results(AppState* app) noexcept {
 }
 
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
-    auto log_split = HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.2f);
+    auto log_split =
+        HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.35f);
     auto tests_split =
-        HelloImGui::DockingSplit("MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.2f);
+        HelloImGui::DockingSplit("MainDockSpace", "SideBarDockSpace", ImGuiDir_Left, 0.35f);
     return {log_split, tests_split};
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
-    auto tab_editor_window =
-        HelloImGui::DockableWindow("Editor", "MainDockSpace", [app]() { tabbed_editor(app); });
+    auto tab_editor_window = HelloImGui::DockableWindow(app->i18n.win_editor, "MainDockSpace",
+                                                        [app]() { tabbed_editor(app); });
 
-    auto tests_window =
-        HelloImGui::DockableWindow("Tests", "SideBarDockSpace", [app]() { tree_view(app); });
+    auto tests_window = HelloImGui::DockableWindow(app->i18n.win_tests, "SideBarDockSpace",
+                                                   [app]() { tree_view(app); });
 
-    auto results_window =
-        HelloImGui::DockableWindow("Results", "MainDockSpace", [app]() { testing_results(app); });
+    auto results_window = HelloImGui::DockableWindow(app->i18n.win_results, "MainDockSpace",
+                                                     [app]() { testing_results(app); });
 
-    auto logs_window =
-        HelloImGui::DockableWindow("Logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
+    auto logs_window = HelloImGui::DockableWindow(app->i18n.win_logs, "LogDockSpace",
+                                                  [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, results_window, logs_window};
 }
@@ -1945,47 +1946,37 @@ void export_swagger_file_dialog(AppState* app) noexcept {
 }
 
 void show_menus(AppState* app) noexcept {
-    if (ImGui::BeginMenu(ICON_FA_FILE " File"
-                                      "###file")) {
-        if (ImGui::MenuItem(ICON_FA_SAVE " Save As"
-                                         "###save_as",
-                            "Ctrl + Shift + S")) {
+    if (ImGui::BeginMenu(app->i18n.menu_file.c_str())) {
+        if (ImGui::MenuItem(app->i18n.menu_file_save_as.c_str(), "Ctrl + Shift + S")) {
             save_as_file_dialog(app);
         }
-        if (ImGui::MenuItem(ICON_FA_SAVE " Save"
-                                         "###save",
-                            "Ctrl + S")) {
+        if (ImGui::MenuItem(app->i18n.menu_file_save.c_str(), "Ctrl + S")) {
             save_file_dialog(app);
         }
-        if (ImGui::MenuItem(ICON_FA_FILE " Open"
-                                         "",
-                            "Ctrl + O")) {
+        if (ImGui::MenuItem(app->i18n.menu_file_open.c_str(), "Ctrl + O")) {
             open_file_dialog(app);
         }
-        if (ImGui::BeginMenu("Export")) {
+        if (ImGui::BeginMenu(app->i18n.menu_file_import.c_str())) {
             if (ImGui::MenuItem("Swagger JSON")) {
-                export_swagger_file_dialog(app);
+                import_swagger_file_dialog(app);
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Import")) {
+        if (ImGui::BeginMenu(app->i18n.menu_file_export.c_str())) {
             if (ImGui::MenuItem("Swagger JSON")) {
-                import_swagger_file_dialog(app);
+                export_swagger_file_dialog(app);
             }
             ImGui::EndMenu();
         }
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu(ICON_FA_EDIT " Edit"
-                                      "###edit")) {
-        if (ImGui::MenuItem(ICON_FA_UNDO " Undo"
-                                         "###undo",
-                            "Ctrl + Z", nullptr, app->undo_history.can_undo())) {
+    if (ImGui::BeginMenu(app->i18n.menu_edit.c_str())) {
+        if (ImGui::MenuItem(app->i18n.menu_edit_undo.c_str(), "Ctrl + Z", nullptr,
+                            app->undo_history.can_undo())) {
             app->undo();
-        } else if (ImGui::MenuItem(ICON_FA_REDO " Redo"
-                                                "###redo",
-                                   "Ctrl + Shift + Z", nullptr, app->undo_history.can_redo())) {
+        } else if (ImGui::MenuItem(app->i18n.menu_edit_redo.c_str(), "Ctrl + Shift + Z", nullptr,
+                                   app->undo_history.can_redo())) {
             app->redo();
         }
         ImGui::EndMenu();
@@ -2012,13 +2003,14 @@ void show_menus(AppState* app) noexcept {
 }
 
 void show_app_menu_items(AppState* app) noexcept {
-    if (ImGui::BeginMenu("Languages")) {
-        if (ImGui::MenuItem("English")) {
+    if (ImGui::BeginMenu(app->i18n.menu_languages.c_str())) {
+        if (ImGui::MenuItem(app->i18n.menu_languages_english.c_str())) {
             app->language = "en";
             HelloImGui::SaveUserPref("language", "en");
             app->load_i18n();
         }
-        if (ImGui::MenuItem("Ukrainian")) {
+
+        if (ImGui::MenuItem(app->i18n.menu_languages_ukrainian.c_str())) {
             app->language = "ua";
             HelloImGui::SaveUserPref("language", "ua");
             app->load_i18n();
@@ -2121,6 +2113,15 @@ void show_gui(AppState* app) noexcept {
     if (changed) {
         app->undo_history.push_undo_history(app);
     }
+}
+
+void pre_frame(AppState* app) noexcept {
+    static std::string old_language = app->language;
+
+    // if (old_language != app->language) {
+    //     old_language = app->language;
+    //     app->runner_params->dockingParams.dockableWindows = windows(app);
+    // }
 }
 
 void load_fonts(AppState* app) noexcept {

@@ -1,4 +1,27 @@
 {
+    "win_tests": "Тести",
+    "win_editor": "Редактор",
+    "win_results": "Результати",
+    "win_results": "Логи",
+
+    "menu_languages": "Мови",
+    "menu_languages_english": "Англійська",
+    "menu_languages_ukrainian": "Українська",
+
+    "menu_edit": "Змінити",
+    "menu_edit_undo": "Відмінити",
+    "menu_edit_redo": "Повторити",
+
+    "menu_file": "Файл",
+    "menu_file_save_as": "Зберегти Як",
+    "menu_file_save": "Зберегти",
+    "menu_file_open": "Відкрити",
+    "menu_file_import": "Імпортувати",
+    "menu_file_export": "Експортувати",
+
+    "tv_root_name": "Корінь",
+    "tv_new_group_name": "Нова Група",
+
     "tv_edit": "Змінити",
     "tv_delete": "Видалити",
     "tv_enable": "Включити",

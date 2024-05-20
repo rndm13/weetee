@@ -1,4 +1,27 @@
 {
+    "win_tests": "Tests",
+    "win_editor": "Editor",
+    "win_results": "Results",
+    "win_logs": "Logs",
+
+    "menu_languages": "Languages",
+    "menu_languages_english": "English",
+    "menu_languages_ukrainian": "Ukrainian",
+
+    "menu_edit": "Edit",
+    "menu_edit_undo": "Undo",
+    "menu_edit_redo": "Redo",
+
+    "menu_file": "File",
+    "menu_file_save_as": "Save As",
+    "menu_file_save": "Save",
+    "menu_file_open": "Open",
+    "menu_file_import": "Import",
+    "menu_file_export": "Export",
+
+    "tv_root_name": "Root",
+    "tv_new_group_name": "New Group",
+
     "tv_edit": "Edit",
     "tv_delete": "Delete",
     "tv_enable": "Enable",
