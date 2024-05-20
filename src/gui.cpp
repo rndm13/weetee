@@ -2011,6 +2011,23 @@ void show_menus(AppState* app) noexcept {
     end_transparent_button();
 }
 
+void show_app_menu_items(AppState* app) noexcept {
+    if (ImGui::BeginMenu("Languages")) {
+        if (ImGui::MenuItem("English")) {
+            app->language = "en";
+            HelloImGui::SaveUserPref("language", "en");
+            app->load_i18n();
+        }
+        if (ImGui::MenuItem("Ukrainian")) {
+            app->language = "ua";
+            HelloImGui::SaveUserPref("language", "ua");
+            app->load_i18n();
+        }
+
+        ImGui::EndMenu();
+    }
+}
+
 void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
 #ifndef NDEBUG

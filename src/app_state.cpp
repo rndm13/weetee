@@ -1,5 +1,6 @@
 #include "app_state.hpp"
 
+#include "hello_imgui/hello_imgui.h"
 #include "hello_imgui/hello_imgui_assets.h"
 #include "hello_imgui/hello_imgui_logger.h"
 
@@ -17,7 +18,7 @@ const Group AppState::root_initial = Group{
     .parent_id = static_cast<size_t>(-1),
     .id = 0,
     .flags = GROUP_NONE,
-    .name = "root",
+    .name = "Root",
     .cli_settings = ClientSettings{},
     .children_ids = {},
     .variables = {},
@@ -635,8 +636,8 @@ void AppState::open_file() noexcept {
     this->post_open();
 }
 
-void AppState::load_i18n(const std::string& i18n_file) noexcept {
-    std::ifstream in(i18n_file); // TODO: Add to assets
+void AppState::load_i18n() noexcept {
+    std::ifstream in(HelloImGui::AssetFileFullPath(this->language + ".json")); // TODO: Add to assets
     this->i18n = nlohmann::json::parse(in).template get<I18N>();
 }
 
@@ -644,8 +645,12 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     : runner_params(_runner_params) {
     this->undo_history.reset_undo_history(this);
 
-    std::string locale = "en";
-    this->load_i18n(HelloImGui::AssetFileFullPath(locale + ".json"));
+    // this->language = HelloImGui::LoadUserPref("language");
+    if (this->language.empty()) {
+        this->language = "en";
+    }
+
+    this->load_i18n();
 }
 
 bool status_match(const std::string& match, int status) noexcept {

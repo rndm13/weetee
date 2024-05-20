@@ -296,6 +296,7 @@ void save_file_dialog(AppState* app) noexcept;
 void open_file_dialog(AppState* app) noexcept;
 
 void show_menus(AppState* app) noexcept;
+void show_app_menu_items(AppState* app) noexcept;
 void show_gui(AppState* app) noexcept;
 
 // Program leaks those fonts

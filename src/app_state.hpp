@@ -64,6 +64,7 @@ struct AppState {
     ImFont* awesome_font;
     HelloImGui::RunnerParams* runner_params;
 
+    std::string language = "en";
     I18N i18n;
 
     bool tree_view_focused; // Updated every frame
@@ -166,7 +167,7 @@ struct AppState {
     void export_swagger_servers(nlohmann::json&) const noexcept;
     void export_swagger(const std::string& filename) const noexcept;
 
-    void load_i18n(const std::string& i18n_file) noexcept;
+    void load_i18n() noexcept;
 
     AppState(HelloImGui::RunnerParams* _runner_params) noexcept;
 

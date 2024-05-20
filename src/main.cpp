@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
 
     runner_params.callbacks.ShowGui = [&app]() { show_gui(&app); };
     runner_params.callbacks.ShowMenus = [&app]() { show_menus(&app); };
+    runner_params.callbacks.ShowAppMenuItems = [&app]() { show_app_menu_items(&app); };
     runner_params.callbacks.LoadAdditionalFonts = [&app]() { load_fonts(&app); };
     runner_params.callbacks.PostInit = [&app]() { post_init(&app); };
     runner_params.callbacks.RegisterTests = [&app]() { register_tests(&app); };
@@ -42,6 +43,7 @@ int main(int argc, char** argv) {
     ImmApp::Run(runner_params, addOnsParams);
     return 0;
 }
+
 
 // Needs to be in this file for compile definitions
 void post_init(AppState* app) noexcept {
