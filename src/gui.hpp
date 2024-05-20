@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hello_imgui/icons_font_awesome_4.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 

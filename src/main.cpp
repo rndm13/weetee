@@ -46,10 +46,7 @@ int main(int argc, char** argv) {
 // Needs to be in this file for compile definitions
 void post_init(AppState* app) noexcept {
     std::string ini = HelloImGui::IniSettingsLocation(*app->runner_params);
-    Log(LogLevel::Debug, "Ini: %s", ini.c_str());
     HelloImGui::HelloImGuiIniSettings::LoadHelloImGuiMiscSettings(ini, app->runner_params);
-    Log(LogLevel::Debug, "Theme: %s",
-        ImGuiTheme::ImGuiTheme_Name(app->runner_params->imGuiWindowParams.tweakedTheme.Theme));
 
 #ifndef CPPHTTPLIB_OPENSSL_SUPPORT
     Log(LogLevel::Warning, "Compiled without OpenSSL support! HTTPS will not work!");

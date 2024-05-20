@@ -1225,8 +1225,6 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
                 split_endpoint(replace_variables(result->variables, result->original_test.endpoint))
                     .first;
             httplib::Client cli = make_client(host, cli_settings);
-            Log(LogLevel::Debug, "Execute Test: %zu %zu", result->original_test.id,
-                result->test_result_idx);
             execute_test(app, &result->original_test, result->test_result_idx, cli);
         });
 }
