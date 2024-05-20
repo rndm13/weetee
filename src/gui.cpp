@@ -96,30 +96,39 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         auto analysis = app->select_analysis();
 
-        if (ImGui::MenuItem(ICON_FA_EDIT " Edit" "###edit", "Enter", false,
-                            analysis.top_selected_count == 1 && !changed)) {
+        if (ImGui::MenuItem(ICON_FA_EDIT " Edit"
+                                         "###edit",
+                            "Enter", false, analysis.top_selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
-        if (ImGui::MenuItem("Delete" "###delete", "Delete", false, !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem("Delete"
+                            "###delete",
+                            "Delete", false, !analysis.selected_root && !changed)) {
             changed = true;
 
             app->delete_selected();
         }
 
-        if (ImGui::MenuItem("Enable" "###enable", nullptr, false, !changed)) {
+        if (ImGui::MenuItem("Enable"
+                            "###enable",
+                            nullptr, false, !changed)) {
             changed = true;
 
             app->enable_selected(true);
         }
 
-        if (ImGui::MenuItem("Disable" "###disable", nullptr, false, !changed)) {
+        if (ImGui::MenuItem("Disable"
+                            "###disable",
+                            nullptr, false, !changed)) {
             changed = true;
 
             app->enable_selected(false);
         }
 
-        if (ImGui::BeginMenu(ICON_FA_ARROW_RIGHT " Move" "###move", !changed && !analysis.selected_root)) {
+        if (ImGui::BeginMenu(ICON_FA_ARROW_RIGHT " Move"
+                                                 "###move",
+                             !changed && !analysis.selected_root)) {
             for (auto& [id, nt] : app->tests) {
                 // skip if not a group or same parent for selected or selected group
                 if (!std::holds_alternative<Group>(nt) ||
@@ -140,19 +149,23 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem(ICON_FA_COPY " Copy" "###copy", "Ctrl + C", false, !changed)) {
+        if (ImGui::MenuItem(ICON_FA_COPY " Copy"
+                                         "###copy",
+                            "Ctrl + C", false, !changed)) {
             app->copy();
         }
 
-        if (ImGui::MenuItem(ICON_FA_CUT " Cut" "###cut", "Ctrl + X", false,
-                            !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem(ICON_FA_CUT " Cut"
+                                        "###cut",
+                            "Ctrl + X", false, !analysis.selected_root && !changed)) {
             changed = true;
 
             app->cut();
         }
 
-        if (ImGui::MenuItem(ICON_FA_PASTE " Paste" "###paste", "Ctrl + V", false,
-                            app->can_paste() && !changed)) {
+        if (ImGui::MenuItem(ICON_FA_PASTE " Paste"
+                                          "###paste",
+                            "Ctrl + V", false, app->can_paste() && !changed)) {
             changed = true;
 
             NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -174,8 +187,9 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem(ICON_FA_SORT " Sort" "###sort", nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(ICON_FA_SORT " Sort"
+                                             "###sort",
+                                nullptr, false, analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -185,8 +199,9 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->sort(selected_group);
             }
 
-            if (ImGui::MenuItem(ICON_FA_PLUS_CIRCLE " Add a new test" "###new_test", nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(ICON_FA_PLUS_CIRCLE " Add a new test"
+                                                    "###new_test",
+                                nullptr, false, analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -209,8 +224,9 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem(ICON_FA_PLUS_SQUARE " Add a new group" "###new_group", nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(ICON_FA_PLUS_SQUARE " Add a new group"
+                                                    "###new_group",
+                                nullptr, false, analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -229,8 +245,9 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 selected_group.children_ids.push_back(id);
             }
 
-            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_UP " Ungroup" "###ungroup", nullptr, false,
-                                !analysis.selected_root && !changed)) {
+            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_UP " Ungroup"
+                                                        "###ungroup",
+                                nullptr, false, !analysis.selected_root && !changed)) {
                 changed = true;
 
                 for (auto selected_id : app->select_top_layer()) {
@@ -246,15 +263,18 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
         }
 
         if (analysis.same_parent) {
-            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_DOWN " Group" "###group", nullptr, false,
-                                !analysis.selected_root && !changed)) {
+            if (ImGui::MenuItem(ICON_FA_ARROW_CIRCLE_DOWN " Group"
+                                                          "###group",
+                                nullptr, false, !analysis.selected_root && !changed)) {
                 changed = true;
 
                 app->group_selected(analysis.parent_id);
             }
         }
 
-        if (ImGui::MenuItem(ICON_FA_ROCKET " Run tests" "###run_tests", nullptr, false, !changed)) {
+        if (ImGui::MenuItem(ICON_FA_ROCKET " Run tests"
+                                           "###run_tests",
+                            nullptr, false, !changed)) {
             std::vector<size_t> tests_to_run =
                 get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
 
@@ -787,9 +807,11 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
             auto& files = std::get<std::vector<std::string>>(elem->data.data);
             std::string text = files.empty()
-                                   ? ICON_FA_FILE_IMPORT " Select Files" "###files"
+                                   ? ICON_FA_FILE_IMPORT " Select Files"
+                                                         "###files"
                                    : ICON_FA_FILE_UPLOAD " Selected " + to_string(files.size()) +
-                                         " Files (Hover to see names)" "###files";
+                                         " Files (Hover to see names)"
+                                         "###files";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
                 auto open_file =
                     pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
@@ -1669,6 +1691,164 @@ Ocassionally you will see buttons with question mark, hover over them to receive
     ImGui::PopFont();
 }
 
+void testing_result_row(AppState* app, size_t result_id,
+                        std::vector<TestResult>& results) noexcept {
+    auto deselect_all = [app]() {
+        for (auto& [_, results] : app->test_results) {
+            for (auto& result : results) {
+                result.selected = false;
+            }
+        }
+    };
+
+    auto shift_multiselect = [app, result_id](size_t result_idx) {
+        bool selection_start = false;
+
+        for (auto& [sel_result_id, sel_results] : app->test_results) {
+            for (size_t sel_result_idx = 0; sel_result_idx < sel_results.size(); sel_result_idx++) {
+                TestResult& sel_result = sel_results.at(sel_result_idx);
+
+                if (!(sel_result.status.load() == app->test_results_filter ||
+                      (sel_result.status.load() > app->test_results_filter &&
+                       app->test_results_filter_cumulative))) {
+                    continue;
+                }
+
+                sel_result.selected = selection_start;
+
+                if ((sel_result_id == app->test_results_last_selected_id &&
+                     sel_result_idx == app->test_results_last_selected_idx) ||
+                    (sel_result_id == result_id && sel_result_idx == result_idx)) {
+                    selection_start = !selection_start;
+                    sel_result.selected = true;
+                }
+            }
+        }
+    };
+
+    ImGui::PushID(static_cast<int32_t>(result_id));
+    for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
+        TestResult& result = results.at(result_idx);
+
+        if (!(result.status.load() == app->test_results_filter ||
+              (result.status.load() > app->test_results_filter &&
+               app->test_results_filter_cumulative))) {
+            continue;
+        }
+
+        ImGui::TableNextRow();
+        ImGui::PushID(static_cast<int32_t>(result_idx));
+        // Test type and Name
+        if (ImGui::TableNextColumn()) {
+            http_type_button(result.original_test.type);
+            ImGui::SameLine();
+
+            if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
+                                  SELECTABLE_FLAGS, ImVec2(0, 0))) {
+                if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
+                    result.open = true;
+                }
+                auto& io = ImGui::GetIO();
+                if (io.KeyCtrl) {
+                    result.selected = !result.selected;
+                } else if (io.KeyShift) {
+                    shift_multiselect(result_idx);
+                } else {
+                    deselect_all();
+                    result.selected = true;
+                }
+
+                app->test_results_last_selected_id = result_id;
+                app->test_results_last_selected_idx = result_idx;
+            }
+
+            if (ImGui::BeginPopupContextItem()) {
+                if (!result.selected) {
+                    deselect_all();
+                    result.selected = true;
+                }
+
+                if (ImGui::MenuItem(ICON_FA_NEWSPAPER " Details"
+                                                      "###details")) {
+                    result.open = true;
+                }
+
+                if (ImGui::MenuItem(ICON_FA_ARROW_RIGHT " Goto original test"
+                                                        "###goto_original")) {
+                    if (app->tests.contains(result.original_test.id)) {
+                        app->editor_open_tab(result.original_test.id);
+                    } else {
+                        Log(LogLevel::Error, "Original test is missing");
+                    }
+                }
+
+                bool any_running = false;
+                bool any_not_running = false;
+                for (auto& [_, results] : app->test_results) {
+                    for (auto& rt : results) {
+                        if (rt.selected) {
+                            any_running |= rt.running.load();
+                            any_not_running |= !rt.running.load();
+                        }
+                    }
+                }
+
+                if (ImGui::MenuItem(ICON_FA_REDO " Rerun tests"
+                                                 "###rerun_tests",
+                                    nullptr, false, any_not_running)) {
+                    for (auto& [_, results] : app->test_results) {
+                        for (auto& rt : results) {
+                            if (rt.selected && !rt.running.load()) {
+                                rerun_test(app, &rt);
+                            }
+                        }
+                    }
+                }
+
+                if (ImGui::MenuItem(ICON_FA_STOP " Stop tests"
+                                                 "###stop_tests",
+                                    nullptr, false, any_running)) {
+                    for (auto& [_, results] : app->test_results) {
+                        for (auto& rt : results) {
+                            if (rt.selected && rt.running.load()) {
+                                stop_test(&rt);
+                            }
+                        }
+                    }
+                }
+
+                ImGui::EndPopup();
+            }
+        }
+
+        // Status
+        if (ImGui::TableNextColumn()) {
+            ImGui::Text("%s", TestResultStatusLabels[result.status.load()]);
+        }
+
+        // Verdict
+        if (ImGui::TableNextColumn()) {
+            if (result.status.load() == STATUS_RUNNING) {
+                ImGui::ProgressBar(result.progress_total == 0
+                                       ? 0
+                                       : static_cast<float>(result.progress_current) /
+                                             result.progress_total);
+            } else {
+                ImGui::Text("%s", result.verdict.c_str());
+            }
+        }
+
+        ImGui::PopID();
+
+        if (result.open) {
+            auto modal = open_result_details(app, &result);
+            result.open &= modal == MODAL_NONE;
+        }
+    }
+
+    ImGui::PopID();
+}
+
 void testing_results(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
@@ -1684,14 +1864,6 @@ void testing_results(AppState* app) noexcept {
     ImGui::SameLine();
     ImGui::Checkbox("Cumulative", &app->test_results_filter_cumulative);
 
-    auto deselect_all = [app]() {
-        for (auto& [_, results] : app->test_results) {
-            for (auto& result : results) {
-                result.selected = false;
-            }
-        }
-    };
-
     if (ImGui::BeginTable("results", 3, TABLE_FLAGS)) {
         ImGui::TableSetupColumn("Test");
         ImGui::TableSetupColumn("Status");
@@ -1699,145 +1871,7 @@ void testing_results(AppState* app) noexcept {
         ImGui::TableHeadersRow();
 
         for (auto& [result_id, results] : app->test_results) {
-            ImGui::PushID(static_cast<int32_t>(result_id));
-            for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
-                TestResult& result = results.at(result_idx);
-
-                if (!(result.status.load() == app->test_results_filter ||
-                      (result.status.load() > app->test_results_filter &&
-                       app->test_results_filter_cumulative))) {
-                    continue;
-                }
-
-                ImGui::TableNextRow();
-                ImGui::PushID(static_cast<int32_t>(result_idx));
-                // Test type and Name
-                if (ImGui::TableNextColumn()) {
-                    http_type_button(result.original_test.type);
-                    ImGui::SameLine();
-
-                    if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
-                                          SELECTABLE_FLAGS, ImVec2(0, 0))) {
-                        if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
-                            result.open = true;
-                        }
-                        auto& io = ImGui::GetIO();
-                        if (io.KeyCtrl) {
-                            result.selected = !result.selected;
-                        } else if (io.KeyShift) {
-                            bool selection_start = false;
-
-                            for (auto& [sel_result_id, sel_results] : app->test_results) {
-                                for (size_t sel_result_idx = 0; sel_result_idx < sel_results.size();
-                                     sel_result_idx++) {
-                                    TestResult& sel_result = sel_results.at(sel_result_idx);
-
-                                    if (!(sel_result.status.load() == app->test_results_filter ||
-                                          (sel_result.status.load() > app->test_results_filter &&
-                                           app->test_results_filter_cumulative))) {
-                                        continue;
-                                    }
-
-                                    sel_result.selected = selection_start;
-
-                                    if ((sel_result_id == app->test_results_last_selected_id &&
-                                         sel_result_idx == app->test_results_last_selected_idx) ||
-                                        (sel_result_id == result_id &&
-                                         sel_result_idx == result_idx)) {
-                                        selection_start = !selection_start;
-                                        sel_result.selected = true;
-                                    }
-                                }
-                            }
-                        } else {
-                            deselect_all();
-                            result.selected = true;
-                        }
-
-                        app->test_results_last_selected_id = result_id;
-                        app->test_results_last_selected_idx = result_idx;
-                    }
-
-                    if (ImGui::BeginPopupContextItem()) {
-                        if (!result.selected) {
-                            deselect_all();
-                            result.selected = true;
-                        }
-
-                        if (ImGui::MenuItem(ICON_FA_NEWSPAPER " Details" "###details")) {
-                            result.open = true;
-                        }
-
-                        if (ImGui::MenuItem(ICON_FA_ARROW_RIGHT " Goto original test" "###goto_original")) {
-                            if (app->tests.contains(result.original_test.id)) {
-                                app->editor_open_tab(result.original_test.id);
-                            } else {
-                                Log(LogLevel::Error, "Original test is missing");
-                            }
-                        }
-
-                        bool any_running = false;
-                        bool any_not_running = false;
-                        for (auto& [_, results] : app->test_results) {
-                            for (auto& rt : results) {
-                                if (rt.selected) {
-                                    any_running |= rt.running.load();
-                                    any_not_running |= !rt.running.load();
-                                }
-                            }
-                        }
-
-                        if (ImGui::MenuItem(ICON_FA_REDO " Rerun tests" "###rerun_tests", nullptr, false,
-                                            any_not_running)) {
-                            for (auto& [_, results] : app->test_results) {
-                                for (auto& rt : results) {
-                                    if (rt.selected && !rt.running.load()) {
-                                        rerun_test(app, &rt);
-                                    }
-                                }
-                            }
-                        }
-
-                        if (ImGui::MenuItem(ICON_FA_STOP " Stop tests" "###stop_tests", nullptr, false,
-                                            any_running)) {
-                            for (auto& [_, results] : app->test_results) {
-                                for (auto& rt : results) {
-                                    if (rt.selected && rt.running.load()) {
-                                        stop_test(&rt);
-                                    }
-                                }
-                            }
-                        }
-
-                        ImGui::EndPopup();
-                    }
-                }
-
-                // Status
-                if (ImGui::TableNextColumn()) {
-                    ImGui::Text("%s", TestResultStatusLabels[result.status.load()]);
-                }
-
-                // Verdict
-                if (ImGui::TableNextColumn()) {
-                    if (result.status.load() == STATUS_RUNNING) {
-                        ImGui::ProgressBar(result.progress_total == 0
-                                               ? 0
-                                               : static_cast<float>(result.progress_current) /
-                                                     result.progress_total);
-                    } else {
-                        ImGui::Text("%s", result.verdict.c_str());
-                    }
-                }
-
-                ImGui::PopID();
-
-                if (result.open) {
-                    auto modal = open_result_details(app, &result);
-                    result.open &= modal == MODAL_NONE;
-                }
-            }
-            ImGui::PopID();
+            testing_result_row(app, result_id, results);
         }
 
         ImGui::EndTable();
@@ -1930,14 +1964,21 @@ void export_swagger_file_dialog(AppState* app) noexcept {
 }
 
 void show_menus(AppState* app) noexcept {
-    if (ImGui::BeginMenu(ICON_FA_FILE " File" "###file")) {
-        if (ImGui::MenuItem(ICON_FA_SAVE " Save As" "###save_as", "Ctrl + Shift + S")) {
+    if (ImGui::BeginMenu(ICON_FA_FILE " File"
+                                      "###file")) {
+        if (ImGui::MenuItem(ICON_FA_SAVE " Save As"
+                                         "###save_as",
+                            "Ctrl + Shift + S")) {
             save_as_file_dialog(app);
         }
-        if (ImGui::MenuItem(ICON_FA_SAVE " Save" "###save", "Ctrl + S")) {
+        if (ImGui::MenuItem(ICON_FA_SAVE " Save"
+                                         "###save",
+                            "Ctrl + S")) {
             save_file_dialog(app);
         }
-        if (ImGui::MenuItem(ICON_FA_FILE " Open" "###open", "Ctrl + O")) {
+        if (ImGui::MenuItem(ICON_FA_FILE " Open"
+                                         "",
+                            "Ctrl + O")) {
             open_file_dialog(app);
         }
         if (ImGui::BeginMenu("Export")) {
@@ -1955,12 +1996,15 @@ void show_menus(AppState* app) noexcept {
         ImGui::EndMenu();
     }
 
-    if (ImGui::BeginMenu(ICON_FA_EDIT " Edit" "###edit")) {
-        if (ImGui::MenuItem(ICON_FA_UNDO " Undo" "###undo", "Ctrl + Z", nullptr,
-                            app->undo_history.can_undo())) {
+    if (ImGui::BeginMenu(ICON_FA_EDIT " Edit"
+                                      "###edit")) {
+        if (ImGui::MenuItem(ICON_FA_UNDO " Undo"
+                                         "###undo",
+                            "Ctrl + Z", nullptr, app->undo_history.can_undo())) {
             app->undo();
-        } else if (ImGui::MenuItem(ICON_FA_REDO " Redo" "###redo", "Ctrl + Shift + Z", nullptr,
-                                   app->undo_history.can_redo())) {
+        } else if (ImGui::MenuItem(ICON_FA_REDO " Redo"
+                                                "###redo",
+                                   "Ctrl + Shift + Z", nullptr, app->undo_history.can_redo())) {
             app->redo();
         }
         ImGui::EndMenu();
