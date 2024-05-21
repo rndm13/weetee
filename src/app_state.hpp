@@ -1,7 +1,7 @@
 #pragma once
 
-#include "hello_imgui/hello_imgui_logger.h"
 #include "hello_imgui/hello_imgui_assets.h"
+#include "hello_imgui/hello_imgui_logger.h"
 #include "hello_imgui/runner_params.h"
 
 #include "i18n.hpp"
@@ -79,12 +79,13 @@ struct AppState {
     void load(SaveState* save) noexcept;
 
     void editor_open_tab(size_t id) noexcept;
+
     // On undo/redo focus on new/changed tests
     void focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) noexcept;
 
     void undo() noexcept;
-    void post_undo() noexcept;
     void redo() noexcept;
+    void post_undo() noexcept;
 
     VariablesMap get_test_variables(size_t id) const noexcept;
     bool parent_disabled(size_t id) const noexcept;
@@ -98,7 +99,7 @@ struct AppState {
         bool same_parent = true;
         bool selected_root = false;
         size_t parent_id = -1ull;
-        size_t top_selected_count;
+        size_t top_selected_count = 0;
     };
 
     SelectAnalysisResult select_analysis() const noexcept;

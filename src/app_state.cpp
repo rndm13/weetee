@@ -83,7 +83,7 @@ void AppState::load(SaveState* save) noexcept {
 void AppState::editor_open_tab(size_t id) noexcept {
     assert(this->tests.contains(id));
 
-    this->runner_params->dockingParams.dockableWindowOfName("Editor")->focusWindowAtNextFrame =
+    this->runner_params->dockingParams.dockableWindowOfName("Editor###win_editor")->focusWindowAtNextFrame =
         true;
     if (this->editor_open_tabs.contains(id)) {
         this->editor_open_tabs[id].just_opened = true;

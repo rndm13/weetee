@@ -232,7 +232,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); // enabled, skip
             if (ImGui::TableNextColumn()) {
-                ImGui::Text("Change this to add new elements");
+                ImGui::Text("%s", app->i18n.ed_pd_change_hint.c_str());
             }
 
             ImGui::TableNextRow();
@@ -267,8 +267,8 @@ enum ModalResult : uint8_t {
 
 ModalResult unsaved_changes(AppState*) noexcept;
 
-bool editor_auth(std::string label, AuthVariant* auth) noexcept;
-bool editor_client_settings(ClientSettings* set, bool show_dynamic) noexcept;
+bool editor_auth(const std::string& label, const I18N*, AuthVariant* auth) noexcept;
+bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool show_dynamic) noexcept;
 
 void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept;
 void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept;

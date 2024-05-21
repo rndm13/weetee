@@ -40,6 +40,39 @@
 
     "tv_sort": "Sort",
     "tv_run_tests": "Run Tests",
+
+    "ed_home": "Home",
+    "ed_home_content": "Welcome to Weetee! \n\nWeetee is a GUI tool for testing web APIs. \nTo begin work press on the plus icon near the \"root\" group. \n\nOcassionally you will see buttons with question mark, hover over them to receive hints about features. ",
+
+    "ed_name": "Name",
+
+    "ed_pd_change_hint": "Change this to add new elements",
+
+    "ed_variables": "Variables",
+    "ed_variables_hint": "To use a variable, write it's name anywhere encapsulated in {}. \n\nExample: \n{host}/api/test/",
+
+    "ed_cli_title": "Client Settings",
+    "ed_cli_parent_override": "Override Parent",
+    "ed_cli_dynamic": "Dynamic Testing",
+    "ed_cli_dynamic_hint": "Dynamic testing enables sequential testing for groups.\nDuring it the received cookies are used in the next tests, and it allows for Keep Alive connetions.",
+    "ed_cli_parent_dynamic_hint": "Cannot override settings when parent has dynamic settings enabled",
     
+    "ed_cli_keep_alive": "Keep Alive Connection",
+    "ed_cli_compression": "Enable Compression",
+    "ed_cli_redirects": "Follow Redirects",
+
+    "ed_cli_auth": "Authentication",
+    "ed_cli_auth_name": "Name",
+    "ed_cli_auth_password": "Password",
+    "ed_cli_auth_token": "Bearer Token",
+
+    "ed_cli_proxy": "Enable Proxy",
+    "ed_cli_proxy_host": "Proxy Host",
+    "ed_cli_proxy_port": "Proxy Port",
+    "ed_cli_proxy_auth": "Proxy Authentication",
+
+    "ed_cli_reruns": "Test Reruns",
+    "ed_cli_timeout": "Request Timeout",
+
     "_": ""
 }

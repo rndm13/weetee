@@ -15,7 +15,6 @@
 #include "imgui_test_engine/imgui_te_ui.h"
 
 #include "hello_imgui/icons_font_awesome_4.h"
-#include "imgui_md_wrapper/imgui_md_wrapper.h"
 #include "imspinner/imspinner.h"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
@@ -1072,7 +1071,8 @@ ModalResult unsaved_changes(AppState*) noexcept {
     return result;
 }
 
-bool editor_auth(std::string label, AuthVariant* auth) noexcept {
+bool editor_auth(const std::string& label, const I18N* i18n, AuthVariant* auth) noexcept {
+    std::string idless_label = label.substr(0, label.find("#"));
     bool changed = false;
     COMBO_VARIANT(label.c_str(), *auth, changed, AuthTypeLabels, AuthVariant);
     switch (auth->index()) {
@@ -1081,59 +1081,56 @@ bool editor_auth(std::string label, AuthVariant* auth) noexcept {
     case AUTH_BASIC: {
         assert(std::holds_alternative<AuthBasic>(*auth));
         AuthBasic* basic = &std::get<AuthBasic>(*auth);
-        changed |= ImGui::InputText((label + " Name").c_str(), &basic->name);
-        changed |= ImGui::InputText((label + " Password").c_str(), &basic->password,
-                                    ImGuiInputTextFlags_Password);
+        changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_name).c_str(), &basic->name);
+        changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_password).c_str(),
+                                    &basic->password, ImGuiInputTextFlags_Password);
     } break;
     case AUTH_BEARER_TOKEN: {
         assert(std::holds_alternative<AuthBearerToken>(*auth));
         AuthBearerToken* token = &std::get<AuthBearerToken>(*auth);
-        changed |= ImGui::InputText((label + " Token").c_str(), &token->token);
+        changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_token).c_str(), &token->token);
     } break;
     }
 
     return changed;
 }
 
-bool editor_client_settings(ClientSettings* set, bool enable_dynamic) noexcept {
+bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool enable_dynamic) noexcept {
     assert(set);
 
     bool changed = false;
 
     ImGui::BeginDisabled(!enable_dynamic);
 
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, "Dynamic Testing");
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_DYNAMIC, i18n->ed_cli_dynamic.c_str());
 
     ImGui::SameLine();
-    hint("Dynamic testing enables sequential testing for groups.\nDuring it the received cookies "
-         "are used in the next tests, and it allows for Keep Alive connetions.");
+    hint(i18n->ed_cli_dynamic_hint.c_str());
 
     if (set->flags & CLIENT_DYNAMIC) {
         ImGui::SameLine();
-        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, "Keep Alive Connection");
+        CHECKBOX_FLAG(set->flags, changed, CLIENT_KEEP_ALIVE, i18n->ed_cli_keep_alive.c_str());
     }
 
     ImGui::EndDisabled();
 
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_COMPRESSION,
-                  " " ICON_FA_COMPRESS " Enable Compression");
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_COMPRESSION, i18n->ed_cli_compression.c_str());
 
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS,
-                  " " ICON_FA_ARROW_RIGHT " Follow Redirects");
-    changed |= editor_auth("Authentication", &set->auth);
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_FOLLOW_REDIRECTS, i18n->ed_cli_redirects.c_str());
+    changed |= editor_auth(i18n->ed_cli_auth.c_str(), i18n, &set->auth);
 
-    CHECKBOX_FLAG(set->flags, changed, CLIENT_PROXY, " " ICON_FA_GLOBE " Set proxy");
+    CHECKBOX_FLAG(set->flags, changed, CLIENT_PROXY, i18n->ed_cli_proxy.c_str());
     if (set->flags & CLIENT_PROXY) {
-        changed |= ImGui::InputText("Proxy Host", &set->proxy_host);
-        changed |= ImGui::InputInt("Proxy Port", &set->proxy_port);
-        changed |= editor_auth("Proxy Authentication", &set->proxy_auth);
+        changed |= ImGui::InputText(i18n->ed_cli_proxy_host.c_str(), &set->proxy_host);
+        changed |= ImGui::InputInt(i18n->ed_cli_proxy_port.c_str(), &set->proxy_port);
+        changed |= editor_auth(i18n->ed_cli_proxy_auth.c_str(), i18n, &set->proxy_auth);
     }
 
     size_t step = 1;
-    changed |= ImGui::InputScalar(" " ICON_FA_REDO " Test Reruns", ImGuiDataType_U64,
-                                  &set->test_reruns, &step);
+    changed |= ImGui::InputScalar(i18n->ed_cli_reruns.c_str(), ImGuiDataType_U64, &set->test_reruns,
+                                  &step);
 
-    changed |= ImGui::InputScalar(" " ICON_FA_HOURGLASS " Timeout (Seconds)", ImGuiDataType_U64,
+    changed |= ImGui::InputScalar(i18n->ed_cli_timeout.c_str(), ImGuiDataType_U64,
                                   &set->seconds_timeout, &step);
 
     return changed;
@@ -1148,15 +1145,15 @@ void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexce
         for (const auto& [key, value] : headers) {
             ImGui::TableNextRow();
             ImGui::PushID((key + value).c_str());
-            // is given readonly flag so const_cast is fine
             if (ImGui::TableNextColumn()) {
                 ImGui::SetNextItemWidth(-1);
+                // is given readonly flag so const_cast is fine
                 ImGui::InputText("##key", &const_cast<std::string&>(key),
                                  ImGuiInputTextFlags_ReadOnly);
             }
-            // is given readonly flag so const_cast is fine
             if (ImGui::TableNextColumn()) {
                 ImGui::SetNextItemWidth(-1);
+                // is given readonly flag so const_cast is fine
                 ImGui::InputText("##value", &const_cast<std::string&>(value),
                                  ImGuiInputTextFlags_ReadOnly);
             }
@@ -1439,10 +1436,9 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 ImGui::EndCombo();
             }
 
-            hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
-                 "{host}/api/test/");
+            hint(app->i18n.ed_variables_hint.c_str());
             ImGui::SameLine();
-            if (ImGui::TreeNode("Variables")) {
+            if (ImGui::TreeNode(app->i18n.ed_variables.c_str())) {
                 ImGui::PushFont(app->mono_font);
                 changed = changed | partial_dict(app, &test.variables, "variables", vars);
                 ImGui::PopFont();
@@ -1453,7 +1449,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             changed |= editor_test_request(app, test);
             changed |= editor_test_response(app, test);
 
-            ImGui::Text(ICON_FA_COG " Client Settings");
+            ImGui::Text("%s", app->i18n.ed_cli_title.c_str());
             ImGui::Separator();
 
             ClientSettings cli_settings = app->get_cli_settings(test.id);
@@ -1464,7 +1460,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             ImGui::BeginDisabled(parent_dynamic);
 
             bool override_settings = test.cli_settings.has_value();
-            if (test.parent_id != -1ull && ImGui::Checkbox("Override Parent", &override_settings)) {
+            if (test.parent_id != -1ull &&
+                ImGui::Checkbox(app->i18n.ed_cli_parent_override.c_str(), &override_settings)) {
                 changed = true;
 
                 if (override_settings) {
@@ -1478,12 +1475,12 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
 
             if (parent_dynamic) {
                 ImGui::SameLine();
-                hint("Cannot override settings when parent has dynamic settings enabled");
+                hint(app->i18n.ed_cli_parent_dynamic_hint.c_str());
             }
 
             ImGui::BeginDisabled(!test.cli_settings.has_value());
 
-            if (editor_client_settings(&cli_settings, false)) {
+            if (editor_client_settings(&app->i18n, &cli_settings, false)) {
                 changed = true;
                 test.cli_settings = cli_settings;
             }
@@ -1524,19 +1521,18 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
-            ImGui::InputText("Name", &group.name);
+            ImGui::InputText(app->i18n.ed_name.c_str(), &group.name);
             changed |= ImGui::IsItemDeactivatedAfterEdit();
             tooltip("%s", replace_variables(app->get_test_variables(group.id), group.name).c_str());
 
-            hint("To use a variable, write it's name anywhere encapsulated in {}.\nExample:\n"
-                 "{host}/api/test/");
+            hint("%s", app->i18n.ed_variables_hint.c_str());
             ImGui::SameLine();
-            if (ImGui::TreeNode("Variables")) {
+            if (ImGui::TreeNode(app->i18n.ed_variables.c_str())) {
                 partial_dict(app, &group.variables, "variables", vars);
                 ImGui::TreePop();
             }
 
-            ImGui::Text(ICON_FA_COG " Client Settings");
+            ImGui::Text("%s", app->i18n.ed_cli_title.c_str());
             ImGui::Separator();
 
             ClientSettings cli_settings = app->get_cli_settings(group.id);
@@ -1548,7 +1544,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
             bool override_settings = group.cli_settings.has_value();
             if (group.parent_id != -1ull &&
-                ImGui::Checkbox("Override Parent", &override_settings)) {
+                ImGui::Checkbox(app->i18n.ed_cli_parent_override.c_str(), &override_settings)) {
                 changed = true;
                 if (override_settings) {
                     group.cli_settings = ClientSettings{};
@@ -1561,12 +1557,12 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
 
             if (parent_dynamic) {
                 ImGui::SameLine();
-                hint("Cannot override settings when parent has dynamic settings enabled");
+                hint(app->i18n.ed_cli_parent_dynamic_hint.c_str());
             }
 
             ImGui::BeginDisabled(!group.cli_settings.has_value());
 
-            if (editor_client_settings(&cli_settings, true)) {
+            if (editor_client_settings(&app->i18n, &cli_settings, true)) {
                 changed = true;
                 group.cli_settings = cli_settings;
 
@@ -1621,15 +1617,9 @@ void tabbed_editor(AppState* app) noexcept {
     }
 
     if (ImGui::BeginTabBar("editor", ImGuiTabBarFlags_Reorderable)) {
-        if (ImGui::BeginTabItem("Home",
+        if (ImGui::BeginTabItem(app->i18n.ed_home.c_str(),
                                 app->editor_open_tabs.size() > 0 ? &show_homepage : nullptr)) {
-            ImGuiMd::Render(R"md(
-# Welcome to Weetee!
-Weetee is a GUI tool for testing web APIs and applications.
-To begin work press on the )md" ICON_FA_PLUS_CIRCLE R"md( icon near the "root" group.
-
-Ocassionally you will see buttons with question mark, hover over them to receive hints about features.
-            )md");
+            ImGui::Text("%s", app->i18n.ed_home_content.c_str());
             ImGui::EndTabItem();
         }
 

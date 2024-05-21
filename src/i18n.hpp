@@ -45,6 +45,39 @@ struct I18N {
     std::string tv_sort;
 
     std::string tv_run_tests;
+
+    std::string ed_home;
+    std::string ed_home_content;
+
+    std::string ed_name;
+
+    std::string ed_pd_change_hint;
+
+    std::string ed_variables;
+    std::string ed_variables_hint;
+
+    std::string ed_cli_title;
+    std::string ed_cli_parent_override;
+    std::string ed_cli_dynamic;
+    std::string ed_cli_dynamic_hint;
+    std::string ed_cli_parent_dynamic_hint;
+
+    std::string ed_cli_keep_alive;
+    std::string ed_cli_compression;
+    std::string ed_cli_redirects;
+
+    std::string ed_cli_auth;
+    std::string ed_cli_auth_name;
+    std::string ed_cli_auth_password;
+    std::string ed_cli_auth_token;
+
+    std::string ed_cli_proxy;
+    std::string ed_cli_proxy_host;
+    std::string ed_cli_proxy_port;
+    std::string ed_cli_proxy_auth;
+
+    std::string ed_cli_reruns;
+    std::string ed_cli_timeout;
 };
 
 void from_json(const nlohmann::json& j, I18N& i18n) noexcept;
