@@ -46,6 +46,25 @@
 
     "ed_name": "Name",
 
+    "ed_endpoint": "Endpoint",
+    "ed_type": "Type",
+
+    "ed_rq_request": "Request",
+    "ed_rq_request_text": "Select any of the tabs to edit test's request",
+    "ed_rq_params": "Parameters",
+    "ed_rq_body": "Body",
+    "ed_rq_body_type": "Body Type",
+    "ed_rq_cookies": "Cookies",
+    "ed_rq_headers": "Headers",
+
+    "ed_rs_status": "Expected Status",
+    "ed_rs_response": "Response",
+    "ed_rs_response_text": "Select any of the tabs to edit test's expected response",
+    "ed_rs_body": "Body",
+    "ed_rs_body_type": "Body Type",
+    "ed_rs_set_cookies": "Set Cookies",
+    "ed_rs_headers": "Headers",
+
     "ed_pd_name": "Name",
     "ed_pd_data": "Data",
     "ed_pd_change_hint": "Change this to add new elements",

@@ -828,17 +828,17 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
 
     bool changed = false;
 
-    if (ImGui::BeginTabBar("Request")) {
+    if (ImGui::BeginTabBar("request")) {
         ImGui::PushID("request");
 
-        if (ImGui::BeginTabItem("Request")) {
-            ImGui::Text("Select any of the tabs to edit test's request");
+        if (ImGui::BeginTabItem(app->i18n.ed_rq_request.c_str())) {
+            ImGui::Text("%s", app->i18n.ed_rq_request_text.c_str());
             ImGui::EndTabItem();
         }
 
-        if (test.type != HTTP_GET && ImGui::BeginTabItem("Body")) {
+        if (test.type != HTTP_GET && ImGui::BeginTabItem(app->i18n.ed_rq_body.c_str())) {
             bool body_type_changed = false;
-            if (ImGui::BeginCombo("Body Type", RequestBodyTypeLabels[test.request.body_type])) {
+            if (ImGui::BeginCombo(app->i18n.ed_rq_body_type.c_str(), RequestBodyTypeLabels[test.request.body_type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(RequestBodyTypeLabels); i++) {
                     if (ImGui::Selectable(RequestBodyTypeLabels[i], i == test.request.body_type)) {
                         body_type_changed = true;
@@ -906,21 +906,21 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Parameters")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rq_params.c_str())) {
             ImGui::PushFont(app->mono_font);
             changed |= partial_dict(app, &test.request.parameters, "parameters", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Cookies")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rq_cookies.c_str())) {
             ImGui::PushFont(app->mono_font);
             changed |= partial_dict(app, &test.request.cookies, "cookies", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Headers")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rq_headers.c_str())) {
             ImGui::PushFont(app->mono_font);
             changed = changed | partial_dict(app, &test.request.headers, "headers", vars,
                                              PARTIAL_DICT_NONE, RequestHeadersLabels,
@@ -941,20 +941,20 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
 
     bool changed = false;
 
-    if (ImGui::BeginTabBar("Response")) {
+    if (ImGui::BeginTabBar("response")) {
         ImGui::PushID("response");
 
-        if (ImGui::BeginTabItem("Response")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rs_response.c_str())) {
             static ComboFilterState s{};
-            ComboFilter("Status", &test.response.status, HTTPStatusLabels,
+            ComboFilter(app->i18n.ed_rs_status.c_str(), &test.response.status, HTTPStatusLabels,
                         ARRAY_SIZE(HTTPStatusLabels), &s);
-            ImGui::Text("Select any of the tabs to edit test's expected response");
+            ImGui::Text("%s", app->i18n.ed_rs_response_text.c_str());
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Body")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rs_body.c_str())) {
             bool body_type_changed = false;
-            if (ImGui::BeginCombo("Body Type", ResponseBodyTypeLabels[test.response.body_type])) {
+            if (ImGui::BeginCombo(app->i18n.ed_rs_body_type.c_str(), ResponseBodyTypeLabels[test.response.body_type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(ResponseBodyTypeLabels); i++) {
                     if (ImGui::Selectable(ResponseBodyTypeLabels[i],
                                           i == test.response.body_type)) {
@@ -1018,14 +1018,14 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Set Cookies")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rs_set_cookies.c_str())) {
             ImGui::PushFont(app->mono_font);
             changed |= partial_dict(app, &test.response.cookies, "cookies", vars);
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Headers")) {
+        if (ImGui::BeginTabItem(app->i18n.ed_rs_headers.c_str())) {
             ImGui::PushFont(app->mono_font);
             changed |= partial_dict(app, &test.response.headers, "headers", vars, PARTIAL_DICT_NONE,
                                     ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
@@ -1414,7 +1414,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
-            ImGui::InputText("Endpoint", &test.endpoint);
+            ImGui::InputText(app->i18n.ed_endpoint.c_str(), &test.endpoint);
 
             // Don't display tooltip while endpoint is being edited
             if (!ImGui::IsItemActive() &&
@@ -1427,7 +1427,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
                 test_resolve_url_variables(app->get_test_variables(test.parent_id), &test);
             }
 
-            if (ImGui::BeginCombo("Type", HTTPTypeLabels[test.type])) {
+            if (ImGui::BeginCombo(app->i18n.ed_type.c_str(), HTTPTypeLabels[test.type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(HTTPTypeLabels); i++) {
                     if (ImGui::Selectable(HTTPTypeLabels[i], i == test.type)) {
                         changed = true;

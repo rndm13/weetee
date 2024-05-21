@@ -103,6 +103,25 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
 
     I18N_LOAD_ID(j, i18n, "", ed_name);
 
+    I18N_LOAD_ID(j, i18n, "", ed_endpoint);
+    I18N_LOAD_ID(j, i18n, "", ed_type);
+
+    I18N_LOAD_ID(j, i18n, "", ed_rq_request);
+    I18N_LOAD(j, i18n, "", ed_rq_request_text);
+    I18N_LOAD_ID(j, i18n, "", ed_rq_params);
+    I18N_LOAD_ID(j, i18n, "", ed_rq_body);
+    I18N_LOAD_ID(j, i18n, "", ed_rq_body_type);
+    I18N_LOAD_ID(j, i18n, "", ed_rq_cookies);
+    I18N_LOAD_ID(j, i18n, "", ed_rq_headers);
+
+    I18N_LOAD_ID(j, i18n, "", ed_rs_status);
+    I18N_LOAD_ID(j, i18n, "", ed_rs_response);
+    I18N_LOAD(j, i18n, "", ed_rs_response_text);
+    I18N_LOAD_ID(j, i18n, "", ed_rs_body);
+    I18N_LOAD_ID(j, i18n, "", ed_rs_body_type);
+    I18N_LOAD_ID(j, i18n, "", ed_rs_set_cookies);
+    I18N_LOAD_ID(j, i18n, "", ed_rs_headers);
+
     I18N_LOAD_ID(j, i18n, "", ed_pd_name);
     I18N_LOAD_ID(j, i18n, "", ed_pd_data);
     I18N_LOAD(j, i18n, "", ed_pd_change_hint);

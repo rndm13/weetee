@@ -51,6 +51,25 @@ struct I18N {
 
     std::string ed_name;
 
+    std::string ed_endpoint;
+    std::string ed_type;
+
+    std::string ed_rq_request;
+    std::string ed_rq_request_text;
+    std::string ed_rq_params;
+    std::string ed_rq_body;
+    std::string ed_rq_body_type;
+    std::string ed_rq_cookies;
+    std::string ed_rq_headers;
+
+    std::string ed_rs_status;
+    std::string ed_rs_response;
+    std::string ed_rs_response_text;
+    std::string ed_rs_body;
+    std::string ed_rs_body_type;
+    std::string ed_rs_set_cookies;
+    std::string ed_rs_headers;
+
     std::string ed_pd_name;
     std::string ed_pd_data;
     std::string ed_pd_change_hint;

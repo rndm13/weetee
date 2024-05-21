@@ -46,6 +46,25 @@
 
     "ed_name": "Назва",
 
+    "ed_endpoint": "Шлях",
+    "ed_type": "Тип",
+
+    "ed_rq_request": "Запит",
+    "ed_rq_request_text": "Оберіть одну вкладку для редагування запиту тесту",
+    "ed_rq_params": "Параметри",
+    "ed_rq_body": "Тіло",
+    "ed_rq_body_type": "Тип Тіла",
+    "ed_rq_cookies": "Кукі",
+    "ed_rq_headers": "Заголовки",
+
+    "ed_rs_response": "Відповідь",
+    "ed_rs_status": "Очікуваний Статус",
+    "ed_rs_response_text": "Оберіть одну вкладку для редагування очікуваної відповіді тесту",
+    "ed_rs_body": "Тіло",
+    "ed_rs_body_type": "Тип Тіла",
+    "ed_rs_set_cookies": "Встановлені Кукі",
+    "ed_rs_headers": "Заголовки",
+
     "ed_pd_name": "Назва",
     "ed_pd_data": "Дані",
     "ed_pd_change_hint": "Змініть це щоб додати новий елемент",
