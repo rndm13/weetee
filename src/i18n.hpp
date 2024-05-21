@@ -1,7 +1,6 @@
 #pragma once
 
 #include "string"
-#include "nlohmann/json.hpp"
 
 struct I18N {
     std::string win_tests;
@@ -51,7 +50,13 @@ struct I18N {
 
     std::string ed_name;
 
+    std::string ed_pd_name;
+    std::string ed_pd_data;
     std::string ed_pd_change_hint;
+
+    std::string ed_mpbd_type;
+    std::string ed_mpbd_data;
+    std::string ed_mpbd_content_type;
 
     std::string ed_variables;
     std::string ed_variables_hint;
@@ -80,4 +85,4 @@ struct I18N {
     std::string ed_cli_timeout;
 };
 
-void from_json(const nlohmann::json& j, I18N& i18n) noexcept;
+// Loaded in json.cpp

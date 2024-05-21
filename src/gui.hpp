@@ -195,11 +195,12 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
 
     //              name and checkbox        additional
     int32_t field_count = 2 + DataType::field_count;
+    auto data_fields = DataType::field_labels(&app->i18n);
     if (ImGui::BeginTable(label, field_count, TABLE_FLAGS, ImVec2(0, 300))) {
         ImGui::TableSetupColumn(" ", ImGuiTableColumnFlags_WidthFixed, 17.0f);
-        ImGui::TableSetupColumn("Name");
+        ImGui::TableSetupColumn(app->i18n.ed_pd_name.c_str());
         for (size_t i = 0; i < DataType::field_count; i++) {
-            ImGui::TableSetupColumn(DataType::field_labels[i]);
+            ImGui::TableSetupColumn(data_fields[i]);
         }
         ImGui::TableHeadersRow();
         bool deletion = false;

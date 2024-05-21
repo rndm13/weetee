@@ -46,7 +46,13 @@
 
     "ed_name": "Name",
 
+    "ed_pd_name": "Name",
+    "ed_pd_data": "Data",
     "ed_pd_change_hint": "Change this to add new elements",
+
+    "ed_mpbd_type": "Type",
+    "ed_mpbd_data": "Data",
+    "ed_mpbd_content_type": "Content-Type",
 
     "ed_variables": "Variables",
     "ed_variables_hint": "To use a variable, write it's name anywhere encapsulated in {}. \n\nExample: \n{host}/api/test/",

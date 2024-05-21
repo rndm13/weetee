@@ -46,7 +46,13 @@
 
     "ed_name": "Назва",
 
+    "ed_pd_name": "Назва",
+    "ed_pd_data": "Дані",
     "ed_pd_change_hint": "Змініть це щоб додати новий елемент",
+
+    "ed_mpbd_type": "Тип",
+    "ed_mpbd_data": "Дані",
+    "ed_mpbd_content_type": "Content-Type",
 
     "ed_variables": "Змінні",
     "ed_variables_hint": "Щоб використати змінну напишіть її ім'я будь-де у {}. \n\nНаприклад: \n{host}/api/test/",

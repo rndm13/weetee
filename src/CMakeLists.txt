@@ -1,14 +1,14 @@
 add_library(utils STATIC utils.hpp utils.cpp)
 target_link_libraries(utils PUBLIC httplib::httplib imgui)
 
-add_library(i18n STATIC i18n.hpp i18n.cpp)
-target_link_libraries(i18n PUBLIC utils nljson hello_imgui)
+add_library(i18n STATIC i18n.hpp)
+target_link_libraries(i18n PUBLIC utils)
 
 add_library(save_state save_state.hpp save_state.cpp)
 target_link_libraries(save_state PUBLIC utils hello_imgui portable_file_dialogs)
 
 add_library(json STATIC json.hpp json.cpp)
-target_link_libraries(json PUBLIC nljson utils)
+target_link_libraries(json PUBLIC i18n utils nljson hello_imgui)
 
 add_library(textinputcombo textinputcombo.hpp textinputcombo.cpp)
 target_link_libraries(textinputcombo PUBLIC hello_imgui)

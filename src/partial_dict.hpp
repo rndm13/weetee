@@ -1,5 +1,6 @@
 #pragma once
 
+#include "i18n.hpp"
 #include "save_state.hpp"
 #include "textinputcombo.hpp"
 
@@ -120,7 +121,7 @@ struct MultiPartBodyElementData {
     std::string content_type;
 
     static constexpr size_t field_count = 3;
-    static const char* field_labels[field_count];
+    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
 
     bool operator==(const MultiPartBodyElementData& other) const noexcept;
 
@@ -130,6 +131,7 @@ struct MultiPartBodyElementData {
 
     void resolve_content_type() noexcept;
 };
+
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;
 using MultiPartBodyElement = MultiPartBody::ElementType;
 
@@ -137,7 +139,7 @@ struct CookiesElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static const char* field_labels[field_count];
+    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
 
     bool operator!=(const CookiesElementData& other) const noexcept;
 
@@ -152,7 +154,8 @@ struct ParametersElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static const char* field_labels[field_count];
+    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
+    // static const char* field_labels[field_count];
 
     bool operator!=(const ParametersElementData& other) const noexcept;
 
@@ -167,7 +170,7 @@ struct HeadersElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static const char* field_labels[field_count];
+    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
 
     bool operator!=(const HeadersElementData& other) const noexcept;
 
@@ -183,7 +186,7 @@ struct VariablesElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static const char* field_labels[field_count];
+    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
 
     bool operator!=(const VariablesElementData& other) const noexcept;
 

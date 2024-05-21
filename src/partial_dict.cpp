@@ -58,11 +58,14 @@ void MultiPartBodyElementData::resolve_content_type() noexcept {
     }
 }
 
-const char* MultiPartBodyElementData::field_labels[field_count] = {
-    reinterpret_cast<const char*>("Type"),
-    reinterpret_cast<const char*>("Data"),
-    reinterpret_cast<const char*>("Content-Type"),
-};
+std::array<const char*, MultiPartBodyElementData::field_count>
+MultiPartBodyElementData::field_labels(const I18N* i18n) noexcept {
+    return {
+        i18n->ed_mpbd_type.c_str(),
+        i18n->ed_mpbd_data.c_str(),
+        i18n->ed_mpbd_content_type.c_str(),
+    };
+}
 
 bool CookiesElementData::operator!=(const CookiesElementData& other) const noexcept {
     return this->data != other.data;
@@ -90,9 +93,12 @@ void CookiesElementData::load(SaveState* save) noexcept {
     save->load(data);
 }
 
-const char* CookiesElementData::field_labels[field_count] = {
-    reinterpret_cast<const char*>("Data"),
-};
+std::array<const char*, CookiesElementData::field_count>
+CookiesElementData::field_labels(const I18N* i18n) noexcept {
+    return {
+        i18n->ed_pd_data.c_str(),
+    };
+}
 
 bool ParametersElementData::operator!=(const ParametersElementData& other) const noexcept {
     return this->data != other.data;
@@ -120,9 +126,12 @@ void ParametersElementData::load(SaveState* save) noexcept {
     save->load(data);
 }
 
-const char* ParametersElementData::field_labels[field_count] = {
-    reinterpret_cast<const char*>("Data"),
-};
+std::array<const char*, ParametersElementData::field_count>
+ParametersElementData::field_labels(const I18N* i18n) noexcept {
+    return {
+        i18n->ed_pd_data.c_str(),
+    };
+}
 
 bool HeadersElementData::operator!=(const HeadersElementData& other) const noexcept {
     return this->data != other.data;
@@ -150,9 +159,12 @@ void HeadersElementData::load(SaveState* save) noexcept {
     save->load(data);
 }
 
-const char* HeadersElementData::field_labels[field_count] = {
-    reinterpret_cast<const char*>("Data"),
-};
+std::array<const char*, HeadersElementData::field_count>
+HeadersElementData::field_labels(const I18N* i18n) noexcept {
+    return {
+        i18n->ed_pd_data.c_str(),
+    };
+}
 
 void VariablesElementData::save(SaveState* save) const noexcept {
     assert(save);
@@ -185,9 +197,13 @@ bool VariablesElementData::operator!=(const VariablesElementData& other) const n
     return this->data != other.data;
 }
 
-const char* VariablesElementData::field_labels[field_count] = {
-    reinterpret_cast<const char*>("Data"),
-};
+
+std::array<const char*, VariablesElementData::field_count>
+VariablesElementData::field_labels(const I18N* i18n) noexcept {
+    return {
+        i18n->ed_pd_data.c_str(),
+    };
+}
 
 std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept {
     std::string result = target;

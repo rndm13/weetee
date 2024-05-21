@@ -3,6 +3,7 @@
 #include "nlohmann/json.hpp"
 
 #include "utils.hpp"
+#include "i18n.hpp"
 
 #include "string"
 #include "variant"
@@ -36,3 +37,5 @@ template <class... Args> struct adl_serializer<std::variant<Args...>> {
     }
 };
 } // namespace nlohmann
+
+void from_json(const nlohmann::json& j, I18N& i18n) noexcept;
