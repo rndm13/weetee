@@ -1,7 +1,7 @@
 #include "json.hpp"
 
-#include "i18n.hpp"
 #include "hello_imgui/icons_font_awesome_4.h"
+#include "i18n.hpp"
 
 using json = nlohmann::json;
 
@@ -30,7 +30,7 @@ const char* json_validate(const std::string& expected, const std::string& got) n
     if (json_expected != json_got) {
         return "Unexpected Response JSON";
     }
-    
+
     return nullptr;
 }
 
@@ -38,6 +38,11 @@ const char* json_validate(const std::string& expected, const std::string& got) n
     if ((j).contains(#id)) {                                                                       \
         (i18n.id) = (!std::string(icon).empty()) ? (icon " ") : "";                                \
         (i18n.id) = std::string((j).at(#id));                                                      \
+    }
+
+#define I18N_LOAD_VEC(j, i18n, id)                                                                 \
+    if ((j).contains(#id)) {                                                                       \
+        (i18n.id) = std::vector<std::string>((j).at(#id));                                         \
     }
 
 #define I18N_LOAD_ID(j, i18n, icon, id)                                                            \
@@ -105,6 +110,7 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
     I18N_LOAD_ID(j, i18n, "", ed_mpbd_type);
     I18N_LOAD_ID(j, i18n, "", ed_mpbd_data);
     I18N_LOAD_ID(j, i18n, "", ed_mpbd_content_type);
+    I18N_LOAD_VEC(j, i18n, ed_mpbd_types);
 
     I18N_LOAD_ID(j, i18n, "", ed_variables);
     I18N_LOAD(j, i18n, "", ed_variables_hint);

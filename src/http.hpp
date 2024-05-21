@@ -1,8 +1,9 @@
 #pragma once
 
+#include "utils.hpp"
+
 #include "algorithm"
 #include "cstdint"
-#include "utils.hpp"
 
 static const char* RequestHeadersLabels[] = {
     reinterpret_cast<const char*>("A-IM"),
@@ -105,15 +106,19 @@ enum HTTPType : uint8_t {
     HTTP_PUT,
     HTTP_DELETE,
     HTTP_PATCH,
+
+    HTTP_COUNT,
 };
-static const char* HTTPTypeLabels[] = {
+
+static const char* HTTPTypeLabels[HTTP_COUNT] = {
     /* [HTTP_GET] = */ reinterpret_cast<const char*>("GET"),
     /* [HTTP_POST] = */ reinterpret_cast<const char*>("POST"),
     /* [HTTP_PUT] = */ reinterpret_cast<const char*>("PUT"),
     /* [HTTP_DELETE] = */ reinterpret_cast<const char*>("DELETE"),
     /* [HTTP_PATCH] = */ reinterpret_cast<const char*>("PATCH"),
 };
-static ImVec4 HTTPTypeColor[] = {
+
+static ImVec4 HTTPTypeColor[HTTP_COUNT] = {
     /* [HTTP_GET] = */ rgb_to_ImVec4(58, 142, 48, 255),
     /* [HTTP_POST] = */ rgb_to_ImVec4(160, 173, 64, 255),
     /* [HTTP_PUT] = */ rgb_to_ImVec4(181, 94, 65, 255),

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "string"
+#include "vector"
 
 struct I18N {
     std::string win_tests;
@@ -57,6 +58,7 @@ struct I18N {
     std::string ed_mpbd_type;
     std::string ed_mpbd_data;
     std::string ed_mpbd_content_type;
+    std::vector<std::string> ed_mpbd_types;
 
     std::string ed_variables;
     std::string ed_variables_hint;

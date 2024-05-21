@@ -422,7 +422,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
 
     ImGui::TableNextColumn(); // selectable
     const bool double_clicked =
-        tree_view_selectable(app, id, ("##" + to_string(test.id)).c_str()) &&
+        tree_view_selectable(app, id, ("###" + to_string(test.id)).c_str()) &&
         io.MouseDoubleClicked[0];
 
     if (!changed && !app->selected_tests.contains(0) &&
@@ -532,7 +532,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
     ImGui::EndDisabled();
 
     ImGui::TableNextColumn(); // selectable
-    const bool clicked = tree_view_selectable(app, id, ("##" + to_string(group.id)).c_str());
+    const bool clicked = tree_view_selectable(app, id, ("###" + to_string(group.id)).c_str());
 
     auto& io = ImGui::GetIO();
     if (clicked && !io.KeyShift && !io.KeyCtrl) {
@@ -747,9 +747,9 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
 
     if (ImGui::TableNextColumn()) { // type
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::BeginCombo("##type", MPBDTypeLabels[elem->data.type])) {
-            for (size_t i = 0; i < ARRAY_SIZE(MPBDTypeLabels); i++) {
-                if (ImGui::Selectable(MPBDTypeLabels[i], i == elem->data.type)) {
+        if (ImGui::BeginCombo("##type", app->i18n.ed_mpbd_types[elem->data.type].c_str())) {
+            for (size_t i = 0; i < app->i18n.ed_mpbd_types.size(); i++) {
+                if (ImGui::Selectable(app->i18n.ed_mpbd_types[i].c_str(), i == elem->data.type)) {
                     elem->data.type = static_cast<MultiPartBodyDataType>(i);
 
                     switch (elem->data.type) {
@@ -786,12 +786,11 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
         case MPBD_FILES:
             assert(std::holds_alternative<std::vector<std::string>>(elem->data.data));
             auto& files = std::get<std::vector<std::string>>(elem->data.data);
-            std::string text = files.empty()
-                                   ? ICON_FA_FILE_IMPORT " Select Files"
-                                                         "###files"
-                                   : ICON_FA_FILE_UPLOAD " Selected " + to_string(files.size()) +
-                                         " Files (Hover to see names)"
-                                         "###files";
+            std::string text = files.empty() ? ICON_FA_FILE " Select Files"
+                                                            "###files"
+                                             : ICON_FA_FILE " Selected " + to_string(files.size()) +
+                                                   " Files (Hover to see names)"
+                                                   "###files";
             if (ImGui::Button(text.c_str(), ImVec2(-1, 0))) {
                 auto open_file =
                     pfd::open_file("Select Files", ".", {"All Files", "*"}, pfd::opt::multiselect);
@@ -1081,14 +1080,16 @@ bool editor_auth(const std::string& label, const I18N* i18n, AuthVariant* auth) 
     case AUTH_BASIC: {
         assert(std::holds_alternative<AuthBasic>(*auth));
         AuthBasic* basic = &std::get<AuthBasic>(*auth);
-        changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_name).c_str(), &basic->name);
+        changed |=
+            ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_name).c_str(), &basic->name);
         changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_password).c_str(),
                                     &basic->password, ImGuiInputTextFlags_Password);
     } break;
     case AUTH_BEARER_TOKEN: {
         assert(std::holds_alternative<AuthBearerToken>(*auth));
         AuthBearerToken* token = &std::get<AuthBearerToken>(*auth);
-        changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_token).c_str(), &token->token);
+        changed |=
+            ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_token).c_str(), &token->token);
     } break;
     }
 

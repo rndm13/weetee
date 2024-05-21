@@ -53,6 +53,10 @@
     "ed_mpbd_type": "Type",
     "ed_mpbd_data": "Data",
     "ed_mpbd_content_type": "Content-Type",
+    "ed_mpbd_types": [
+        "Files",
+        "Text"
+    ],
 
     "ed_variables": "Variables",
     "ed_variables_hint": "To use a variable, write it's name anywhere encapsulated in {}. \n\nExample: \n{host}/api/test/",
