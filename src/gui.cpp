@@ -222,7 +222,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                     .parent_id = selected_group.id,
                     .id = id,
                     .flags = GROUP_NONE,
-                    .name = "New group",
+                    .name = app->i18n.tv_new_group_name,
                     .cli_settings = {},
                     .children_ids = {},
                 });
@@ -838,7 +838,8 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
 
         if (test.type != HTTP_GET && ImGui::BeginTabItem(app->i18n.ed_rq_body.c_str())) {
             bool body_type_changed = false;
-            if (ImGui::BeginCombo(app->i18n.ed_rq_body_type.c_str(), RequestBodyTypeLabels[test.request.body_type])) {
+            if (ImGui::BeginCombo(app->i18n.ed_rq_body_type.c_str(),
+                                  RequestBodyTypeLabels[test.request.body_type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(RequestBodyTypeLabels); i++) {
                     if (ImGui::Selectable(RequestBodyTypeLabels[i], i == test.request.body_type)) {
                         body_type_changed = true;
@@ -953,32 +954,16 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
         }
 
         if (ImGui::BeginTabItem(app->i18n.ed_rs_body.c_str())) {
-            bool body_type_changed = false;
-            if (ImGui::BeginCombo(app->i18n.ed_rs_body_type.c_str(), ResponseBodyTypeLabels[test.response.body_type])) {
+            if (ImGui::BeginCombo(app->i18n.ed_rs_body_type.c_str(),
+                                  ResponseBodyTypeLabels[test.response.body_type])) {
                 for (size_t i = 0; i < ARRAY_SIZE(ResponseBodyTypeLabels); i++) {
                     if (ImGui::Selectable(ResponseBodyTypeLabels[i],
                                           i == test.response.body_type)) {
-                        body_type_changed = true;
+                        changed = true;
                         test.response.body_type = static_cast<ResponseBodyType>(i);
                     }
                 }
                 ImGui::EndCombo();
-            }
-
-            if (body_type_changed) {
-                changed = true;
-
-                switch (test.response.body_type) {
-                case RESPONSE_ANY:
-                case RESPONSE_JSON:
-                case RESPONSE_HTML:
-                case RESPONSE_PLAIN:
-                case RESPONSE_OTHER:
-                    if (!std::holds_alternative<std::string>(test.response.body)) {
-                        test.response.body = "";
-                    }
-                    break;
-                }
             }
 
             if (test.response.body_type == RESPONSE_OTHER) {
@@ -993,14 +978,12 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
             case RESPONSE_OTHER:
                 ImGui::PushFont(app->mono_font);
 
-                std::string* body = &std::get<std::string>(test.response.body);
-                changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
+                changed |= ImGui::InputTextMultiline("##body", &test.response.body, ImVec2(0, 300));
 
                 if (test.response.body_type == RESPONSE_JSON &&
                     ImGui::BeginPopupContextItem("##body_json_context")) {
                     if (ImGui::MenuItem("Format")) {
-                        assert(std::holds_alternative<std::string>(test.response.body));
-                        const char* error = json_format(std::get<std::string>(test.response.body));
+                        const char* error = json_format(test.response.body);
 
                         if (error) {
                             Log(LogLevel::Error, "Failed to parse json: ", error);
@@ -1009,7 +992,7 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
                     ImGui::EndPopup();
                 }
 
-                tooltip("%s", replace_variables(vars, *body).c_str());
+                tooltip("%s", replace_variables(vars, test.response.body).c_str());
 
                 ImGui::PopFont();
 
@@ -1308,17 +1291,11 @@ ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
                                         ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
 
                                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                                        std::string body = "*Multipart Data*";
-                                        if (std::holds_alternative<std::string>(
-                                                tr->original_test.response.body)) {
-                                            body = std::get<std::string>(
-                                                tr->original_test.response.body);
-                                        }
                                         ImGui::SetTooltip(
                                             "Expected: %s\n%s",
                                             ResponseBodyTypeLabels[tr->original_test.response
                                                                        .body_type],
-                                            body.c_str());
+                                            tr->original_test.response.body.c_str());
                                     }
                                     ImGui::PopFont();
                                 }

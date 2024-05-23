@@ -45,7 +45,6 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-
 // Needs to be in this file for compile definitions
 void post_init(AppState* app) noexcept {
     std::string ini = HelloImGui::IniSettingsLocation(*app->runner_params);

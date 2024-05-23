@@ -90,14 +90,11 @@ static const char* ResponseBodyTypeLabels[] = {
     /* [RESPONSE_OTHER] = */ reinterpret_cast<const char*>("Other"),
 };
 
-// I'm too lazy to change it...
-using ResponseBody = std::variant<std::string>;
-
 struct Response {
     std::string status = "2XX"; // a string so user can get hints and write their own status code
     ResponseBodyType body_type = RESPONSE_ANY;
     std::string other_content_type;
-    ResponseBody body = std::string{};
+    std::string body = "";
 
     Cookies cookies;
     Headers headers;

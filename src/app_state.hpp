@@ -29,7 +29,6 @@ struct EditorTab {
 };
 
 struct AppState {
-    // Save
     size_t id_counter = 0;
 
     static const Group root_initial;

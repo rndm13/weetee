@@ -106,11 +106,9 @@ enum HTTPType : uint8_t {
     HTTP_PUT,
     HTTP_DELETE,
     HTTP_PATCH,
-
-    HTTP_COUNT,
 };
 
-static const char* HTTPTypeLabels[HTTP_COUNT] = {
+static const char* HTTPTypeLabels[] = {
     /* [HTTP_GET] = */ reinterpret_cast<const char*>("GET"),
     /* [HTTP_POST] = */ reinterpret_cast<const char*>("POST"),
     /* [HTTP_PUT] = */ reinterpret_cast<const char*>("PUT"),
@@ -118,7 +116,7 @@ static const char* HTTPTypeLabels[HTTP_COUNT] = {
     /* [HTTP_PATCH] = */ reinterpret_cast<const char*>("PATCH"),
 };
 
-static ImVec4 HTTPTypeColor[HTTP_COUNT] = {
+static ImVec4 HTTPTypeColor[] = {
     /* [HTTP_GET] = */ rgb_to_ImVec4(58, 142, 48, 255),
     /* [HTTP_POST] = */ rgb_to_ImVec4(160, 173, 64, 255),
     /* [HTTP_PUT] = */ rgb_to_ImVec4(181, 94, 65, 255),

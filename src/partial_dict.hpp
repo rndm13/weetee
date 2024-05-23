@@ -109,11 +109,9 @@ enum PartialDictFlags : uint8_t {
 enum MultiPartBodyDataType : uint8_t {
     MPBD_FILES,
     MPBD_TEXT,
-
-    MPBD_COUNT,
 };
 
-// static const char* MPBDTypeLabels[MPBD_COUNT] = {
+// static const char* MPBDTypeLabels[] = {
 //     /* [MPBD_FILES] = */ reinterpret_cast<const char*>("Files"),
 //     /* [MPBD_TEXT] = */ reinterpret_cast<const char*>("Text"),
 // };

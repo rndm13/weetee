@@ -83,8 +83,8 @@ void AppState::load(SaveState* save) noexcept {
 void AppState::editor_open_tab(size_t id) noexcept {
     assert(this->tests.contains(id));
 
-    this->runner_params->dockingParams.dockableWindowOfName("Editor###win_editor")->focusWindowAtNextFrame =
-        true;
+    this->runner_params->dockingParams.dockableWindowOfName("Editor###win_editor")
+        ->focusWindowAtNextFrame = true;
     if (this->editor_open_tabs.contains(id)) {
         this->editor_open_tabs[id].just_opened = true;
     } else {
@@ -317,7 +317,7 @@ void AppState::delete_children(const Group* group) noexcept {
     // delete_test also removes it from parent->children_idx
     // when iterating over it it creates unexpected behaviour
 
-    for (auto child_id : to_delete) {
+    for (size_t child_id : to_delete) {
         this->delete_test(child_id);
     }
 
@@ -637,7 +637,8 @@ void AppState::open_file() noexcept {
 }
 
 void AppState::load_i18n() noexcept {
-    std::ifstream in(HelloImGui::AssetFileFullPath(this->language + ".json")); // TODO: Add to assets
+    std::ifstream in(
+        HelloImGui::AssetFileFullPath(this->language + ".json")); // TODO: Add to assets
     this->i18n = nlohmann::json::parse(in).template get<I18N>();
 }
 
@@ -681,19 +682,15 @@ const char* body_match(const VariablesMap& vars, const Test* test,
             return "Unexpected Response Content-Type";
         }
 
-        if (!std::visit(EmptyVisitor(), test->response.body)) {
+        if (!test->response.body.empty()) {
             if (test->response.body_type == RESPONSE_JSON) {
-                assert(std::holds_alternative<std::string>(test->response.body));
-                const char* err = json_validate(
-                    replace_variables(vars, std::get<std::string>(test->response.body)),
-                    result->body);
+                const char* err =
+                    json_validate(replace_variables(vars, test->response.body), result->body);
                 if (err) {
                     return err;
                 }
             } else {
-                assert(std::holds_alternative<std::string>(test->response.body));
-                if (replace_variables(vars, std::get<std::string>(test->response.body)) !=
-                    result->body) {
+                if (replace_variables(vars, test->response.body) != result->body) {
                     return "Unexpected Response Body";
                 }
             }
@@ -1204,8 +1201,8 @@ void run_tests(AppState* app, const std::vector<size_t>& test_ids) noexcept {
     app->thr_pool.purge();
     app->test_results.clear();
 
-    app->runner_params->dockingParams.dockableWindowOfName("Results")->focusWindowAtNextFrame =
-        true;
+    app->runner_params->dockingParams.dockableWindowOfName("Results###win_results")
+        ->focusWindowAtNextFrame = true;
 
     for (size_t id : test_ids) {
         assert(app->tests.contains(id));
