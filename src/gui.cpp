@@ -275,6 +275,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
 bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept {
     bool item_is_selected = app->selected_tests.contains(id);
+
+    bool clicked = false;
     if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
         auto io = ImGui::GetIO();
         if (io.KeyCtrl) {
@@ -323,10 +325,10 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
 
         app->tree_view_last_selected_idx = id;
 
-        return true;
+        clicked = true;
     }
 
-    return false;
+    return clicked;
 }
 
 bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) noexcept {
@@ -369,11 +371,14 @@ bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) noexcept {
 
 bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
                     float indentation) noexcept {
-    return std::visit(
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ImGui::GetStyle().FramePadding.x, 0});
+    bool changed = std::visit(
         [app, &min, &max, idx, indentation](auto& val) {
             return tree_view_show(app, val, min, max, idx, indentation);
         },
         nt);
+    ImGui::PopStyleVar();
+    return changed;
 }
 
 bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx,

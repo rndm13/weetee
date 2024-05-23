@@ -117,7 +117,7 @@ static const char* HTTPTypeLabels[] = {
 };
 
 static ImVec4 HTTPTypeColor[] = {
-    /* [HTTP_GET] = */ rgb_to_ImVec4(58, 142, 48, 255),
+    /* [HTTP_GET] = */ rgb_to_ImVec4(58, 162, 48, 255),
     /* [HTTP_POST] = */ rgb_to_ImVec4(160, 173, 64, 255),
     /* [HTTP_PUT] = */ rgb_to_ImVec4(181, 94, 65, 255),
     /* [HTTP_DELETE] = */ rgb_to_ImVec4(201, 61, 22, 255),
