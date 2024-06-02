@@ -42,6 +42,9 @@ struct AppState {
     std::unordered_set<size_t> filtered_tests = {};
     std::unordered_set<size_t> selected_tests = {};
 
+    SaveState clipboard;
+    UndoHistory undo_history;
+
     bool editor_show_homepage = true;
     std::unordered_map<size_t, EditorTab> editor_open_tabs = {};
 
@@ -51,10 +54,16 @@ struct AppState {
     TestResultStatus test_results_filter = STATUS_OK;
     bool test_results_filter_cumulative = true;
 
-    SaveState clipboard;
-    UndoHistory undo_history;
-
     std::optional<std::string> filename;
+
+    bool sync_show = false;
+    // TODO: Save
+    std::string sync_hostname = "https://weetee-sync.vercel.app";
+    bool sync_wait = false;
+    bool sync_logged_in = false;
+    std::string sync_session = "";
+    std::string sync_name;
+    std::string sync_password;
 
     BS::thread_pool thr_pool;
 
@@ -63,6 +72,7 @@ struct AppState {
     ImFont* awesome_font;
     HelloImGui::RunnerParams* runner_params;
 
+    // TODO: Save
     std::string language = "en";
     I18N i18n;
 

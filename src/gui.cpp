@@ -1846,6 +1846,91 @@ void testing_results(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
+void remote_file_sync(AppState* app) noexcept {
+    if (ImGui::Begin("Remote File Sync", &app->sync_show)) {
+        ImGui::InputText("Remote Host##host", &app->sync_hostname);
+
+        if (app->sync_wait) {
+            ImSpinner::SpinnerIncDots("wait", 5, 1);
+            ImGui::SameLine();
+            ImGui::Text("Please wait, your request is being processed");
+        } else if (!app->sync_logged_in) {
+            ImGui::Text("Login/Register");
+            ImGui::InputText("Name##name", &app->sync_name);
+            ImGui::InputText("Password##password", &app->sync_password,
+                             ImGuiInputTextFlags_Password);
+            if (ImGui::Button("Login")) {
+                app->thr_pool.detach_task([app]() {
+                    app->sync_wait = true;
+                    httplib::Client cli(app->sync_hostname);
+                    httplib::Params params;
+                    params.emplace("name", app->sync_name);
+                    params.emplace("password", app->sync_password);
+                    auto result = cli.Get("/login", params, httplib::Headers{}, httplib::Progress{});
+                    if (result.error() != httplib::Error::Success) {
+                        Log(LogLevel::Error, "Failed to send login request: %s", to_string(result.error()).c_str());
+                    } else {
+                        if (result->body.empty()) {
+                            Log(LogLevel::Error, "Failed to login");
+                        } else {
+                            app->sync_session = result->body;
+                            app->sync_logged_in = true;
+                        }
+                    }
+                    app->sync_wait = false;
+                });
+            }
+            if (ImGui::Button("Register")) {
+                app->thr_pool.detach_task([app]() {
+                    app->sync_wait = true;
+                    httplib::Client cli(app->sync_hostname);
+                    httplib::Params params;
+                    params.emplace("name", app->sync_name);
+                    params.emplace("password", app->sync_password);
+                    auto result = cli.Get("/register", params, httplib::Headers{}, httplib::Progress{});
+                    if (result.error() != httplib::Error::Success) {
+                        Log(LogLevel::Error, "Failed to send register request: %s", to_string(result.error()).c_str());
+                    } else {
+                        if (result->body.empty()) {
+                            Log(LogLevel::Error, "Failed to register");
+                        } else {
+                            app->sync_session = result->body;
+                            app->sync_logged_in = true;
+                        }
+                    }
+                    app->sync_wait = false;
+                });
+            }
+        } else {
+            ImGui::Text("You are logged in as %s", app->sync_name.c_str());
+            ImGui::SameLine();
+            if (ImGui::Button("Logout")) {
+                app->thr_pool.detach_task([app]() {
+                    app->sync_wait = true;
+                    httplib::Client cli(app->sync_hostname);
+                    httplib::Params params;
+                    params.emplace("session_token", app->sync_session);
+                    auto result = cli.Get("/logout", params, httplib::Headers{}, httplib::Progress{});
+                    if (result.error() != httplib::Error::Success) {
+                        Log(LogLevel::Error, "Failed to send logout request: %s", to_string(result.error()).c_str());
+                    } else {
+                        if (result->body.empty()) {
+                            Log(LogLevel::Error, "Failed to logout");
+                        } else {
+                            app->sync_session = "";
+                            app->sync_logged_in = false;
+                            app->sync_name = "";
+                            app->sync_password = "";
+                        }
+                    }
+                    app->sync_wait = false;
+                });
+            }
+        }
+    }
+    ImGui::End();
+}
+
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
     auto log_split =
         HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.35f);
@@ -1953,6 +2038,10 @@ void show_menus(AppState* app) noexcept {
             }
             ImGui::EndMenu();
         }
+
+        if (ImGui::MenuItem("Remote File Sync")) {
+            app->sync_show = true;
+        }
         ImGui::EndMenu();
     }
 
@@ -2021,6 +2110,10 @@ void show_gui(AppState* app) noexcept {
 
     if (!app->tree_view_focused) {
         app->selected_tests.clear();
+    }
+
+    if (app->sync_show) {
+        remote_file_sync(app);
     }
 
     bool changed = false;
