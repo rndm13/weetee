@@ -56,6 +56,12 @@
     "ed_rq_body_type": "Body Type",
     "ed_rq_cookies": "Cookies",
     "ed_rq_headers": "Headers",
+    "ed_rs_body_types": [
+        "JSON",
+        "Plain Text",
+        "Multipart",
+        "Other"
+    ],
 
     "ed_rs_status": "Expected Status",
     "ed_rs_response": "Response",
@@ -64,6 +70,13 @@
     "ed_rs_body_type": "Body Type",
     "ed_rs_set_cookies": "Set Cookies",
     "ed_rs_headers": "Headers",
+    "ed_rs_body_types": [
+        "Any",
+        "JSON",
+        "HTML",
+        "Plain Text",
+        "Other"
+    ],
 
     "ed_pd_name": "Name",
     "ed_pd_data": "Data",

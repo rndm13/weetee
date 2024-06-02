@@ -372,11 +372,10 @@ bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) noexcept {
 bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
                     float indentation) noexcept {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ImGui::GetStyle().FramePadding.x, 0});
-    bool changed = std::visit(
-        [app, &min, &max, idx, indentation](auto& val) {
-            return tree_view_show(app, val, min, max, idx, indentation);
-        },
-        nt);
+    bool changed =
+        std::visit([app, &min, &max, idx, indentation](
+                       auto& val) { return tree_view_show(app, val, min, max, idx, indentation); },
+                   nt);
     ImGui::PopStyleVar();
     return changed;
 }
@@ -844,9 +843,10 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
         if (test.type != HTTP_GET && ImGui::BeginTabItem(app->i18n.ed_rq_body.c_str())) {
             bool body_type_changed = false;
             if (ImGui::BeginCombo(app->i18n.ed_rq_body_type.c_str(),
-                                  RequestBodyTypeLabels[test.request.body_type])) {
-                for (size_t i = 0; i < ARRAY_SIZE(RequestBodyTypeLabels); i++) {
-                    if (ImGui::Selectable(RequestBodyTypeLabels[i], i == test.request.body_type)) {
+                                  app->i18n.ed_rq_body_types[test.request.body_type].c_str())) {
+                for (size_t i = 0; i < app->i18n.ed_rq_body_types.size(); i++) {
+                    if (ImGui::Selectable(app->i18n.ed_rq_body_types[i].c_str(),
+                                          i == test.request.body_type)) {
                         body_type_changed = true;
                         test.request.body_type = static_cast<RequestBodyType>(i);
                     }
@@ -960,9 +960,9 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
 
         if (ImGui::BeginTabItem(app->i18n.ed_rs_body.c_str())) {
             if (ImGui::BeginCombo(app->i18n.ed_rs_body_type.c_str(),
-                                  ResponseBodyTypeLabels[test.response.body_type])) {
-                for (size_t i = 0; i < ARRAY_SIZE(ResponseBodyTypeLabels); i++) {
-                    if (ImGui::Selectable(ResponseBodyTypeLabels[i],
+                                  app->i18n.ed_rs_body_types[test.response.body_type].c_str())) {
+                for (size_t i = 0; i < app->i18n.ed_rs_body_types.size(); i++) {
+                    if (ImGui::Selectable(app->i18n.ed_rs_body_types[i].c_str(),
                                           i == test.response.body_type)) {
                         changed = true;
                         test.response.body_type = static_cast<ResponseBodyType>(i);
@@ -1296,11 +1296,12 @@ ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
                                         ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
 
                                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-                                        ImGui::SetTooltip(
-                                            "Expected: %s\n%s",
-                                            ResponseBodyTypeLabels[tr->original_test.response
-                                                                       .body_type],
-                                            tr->original_test.response.body.c_str());
+                                        ResponseBodyType body_type =
+                                            tr->original_test.response.body_type;
+                                        std::string body_type_str =
+                                            app->i18n.ed_rs_body_types[body_type];
+                                        ImGui::SetTooltip("Expected: %s\n%s", body_type_str.c_str(),
+                                                          tr->original_test.response.body.c_str());
                                     }
                                     ImGui::PopFont();
                                 }

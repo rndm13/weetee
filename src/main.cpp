@@ -63,3 +63,4 @@ void post_init(AppState* app) noexcept {
     // NOTE: You have to do this in show_gui instead because hello_imgui is stupid
     // ImGuiTheme::ApplyTweakedTheme(app->runner_params->imGuiWindowParams.tweakedTheme);
 }
+

@@ -23,12 +23,6 @@ enum RequestBodyType : uint8_t {
     REQUEST_MULTIPART,
     REQUEST_OTHER,
 };
-static const char* RequestBodyTypeLabels[] = {
-    /* [REQUEST_JSON] = */ reinterpret_cast<const char*>("JSON"),
-    /* [REQUEST_RAW] = */ reinterpret_cast<const char*>("Plain Text"),
-    /* [REQUEST_MULTIPART] = */ reinterpret_cast<const char*>("Multipart"),
-    /* [REQUEST_OTHER] = */ reinterpret_cast<const char*>("Other"),
-};
 
 using RequestBody = std::variant<std::string, MultiPartBody>;
 
@@ -81,13 +75,6 @@ enum ResponseBodyType : uint8_t {
     RESPONSE_HTML,
     RESPONSE_PLAIN,
     RESPONSE_OTHER,
-};
-static const char* ResponseBodyTypeLabels[] = {
-    /* [RESPONSE_ANY] = */ reinterpret_cast<const char*>("Any"),
-    /* [RESPONSE_JSON] = */ reinterpret_cast<const char*>("JSON"),
-    /* [RESPONSE_HTML] = */ reinterpret_cast<const char*>("HTML"),
-    /* [RESPONSE_RAW] = */ reinterpret_cast<const char*>("Plain Text"),
-    /* [RESPONSE_OTHER] = */ reinterpret_cast<const char*>("Other"),
 };
 
 struct Response {

@@ -113,6 +113,7 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
     I18N_LOAD_ID(j, i18n, "", ed_rq_body_type);
     I18N_LOAD_ID(j, i18n, "", ed_rq_cookies);
     I18N_LOAD_ID(j, i18n, "", ed_rq_headers);
+    I18N_LOAD_VEC(j, i18n, ed_rq_body_types);
 
     I18N_LOAD_ID(j, i18n, "", ed_rs_status);
     I18N_LOAD_ID(j, i18n, "", ed_rs_response);
@@ -121,6 +122,7 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
     I18N_LOAD_ID(j, i18n, "", ed_rs_body_type);
     I18N_LOAD_ID(j, i18n, "", ed_rs_set_cookies);
     I18N_LOAD_ID(j, i18n, "", ed_rs_headers);
+    I18N_LOAD_VEC(j, i18n, ed_rs_body_types);
 
     I18N_LOAD_ID(j, i18n, "", ed_pd_name);
     I18N_LOAD_ID(j, i18n, "", ed_pd_data);

@@ -56,6 +56,12 @@
     "ed_rq_body_type": "Тип Тіла",
     "ed_rq_cookies": "Кукі",
     "ed_rq_headers": "Заголовки",
+    "ed_rq_body_types": [
+        "JSON",
+        "HTML",
+        "Текст",
+        "Інший"
+    ],
 
     "ed_rs_response": "Відповідь",
     "ed_rs_status": "Очікуваний Статус",
@@ -64,6 +70,13 @@
     "ed_rs_body_type": "Тип Тіла",
     "ed_rs_set_cookies": "Встановлені Кукі",
     "ed_rs_headers": "Заголовки",
+    "ed_rs_body_types": [
+        "Будь-який",
+        "JSON",
+        "HTML",
+        "Текст",
+        "Інший"
+    ],
 
     "ed_pd_name": "Назва",
     "ed_pd_data": "Дані",

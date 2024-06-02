@@ -61,6 +61,7 @@ struct I18N {
     std::string ed_rq_body_type;
     std::string ed_rq_cookies;
     std::string ed_rq_headers;
+    std::vector<std::string> ed_rq_body_types;
 
     std::string ed_rs_status;
     std::string ed_rs_response;
@@ -69,6 +70,7 @@ struct I18N {
     std::string ed_rs_body_type;
     std::string ed_rs_set_cookies;
     std::string ed_rs_headers;
+    std::vector<std::string> ed_rs_body_types;
 
     std::string ed_pd_name;
     std::string ed_pd_data;
