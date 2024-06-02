@@ -221,24 +221,24 @@ void register_tests(AppState* app) noexcept {
 
         ctx->SetRef("");
 
-        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left, op_flags);
-        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left, op_flags);
+        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left);
+        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left);
 
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 2);
 
-        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left, op_flags);
-        ctx->ItemClick(redo_menu_selectable, ImGuiMouseButton_Left, op_flags);
+        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left);
+        ctx->ItemClick(redo_menu_selectable, ImGuiMouseButton_Left);
 
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
 
-        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left, op_flags);
-        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left, op_flags);
+        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left);
+        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left);
 
-        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left, op_flags);
-        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left, op_flags);
+        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left);
+        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left);
 
-        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left, op_flags);
-        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left, op_flags);
+        ctx->ItemClick(edit_menu_selectable, ImGuiMouseButton_Left);
+        ctx->ItemClick(undo_menu_selectable, ImGuiMouseButton_Left);
 
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 0);
     };
@@ -259,8 +259,8 @@ void register_tests(AppState* app) noexcept {
         ctx->SetRef("");
 
         app->filename = "/tmp/test.wt";
-        ctx->ItemClick(file_menu_selectable, ImGuiMouseButton_Left, op_flags);
-        ctx->ItemClick(save_menu_selectable, ImGuiMouseButton_Left, op_flags);
+        ctx->ItemClick(file_menu_selectable, ImGuiMouseButton_Left);
+        ctx->ItemClick(save_menu_selectable, ImGuiMouseButton_Left);
 
         tree_view__delete_all(ctx);
 

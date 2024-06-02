@@ -682,7 +682,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
                                const VariablesMap& vars) noexcept {
     bool changed = false;
 
-    if (ImGui::BeginMenu(ICON_FA_DICE_D6 " Fuzzing Separator")) {
+    if (ImGui::BeginMenu("Fuzzing Separator")) {
         if (ImGui::MenuItem("None", nullptr, elem->data.separator == std::nullopt)) {
             changed = true;
 
@@ -721,7 +721,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
         ImGui::EndMenu();
     }
 
-    if (ImGui::MenuItem(ICON_FA_FILE_IMPORT " Load from file")) {
+    if (ImGui::MenuItem(ICON_FA_FILE " Load from file")) {
         changed = true;
         auto open_file_dialog =
             pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
