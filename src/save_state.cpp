@@ -59,7 +59,8 @@ bool SaveState::write(std::ostream& os) const noexcept {
         return false;
     }
 
-    os.write(reinterpret_cast<const char*>(&this->original_size), sizeof(size_t));
+    os.write(reinterpret_cast<const char*>(&this->save_version), sizeof(this->save_version));
+    os.write(reinterpret_cast<const char*>(&this->original_size), sizeof(this->original_size));
     os.write(this->original_buffer.data(), static_cast<int32_t>(this->original_buffer.size()));
     os.flush();
 
@@ -68,10 +69,14 @@ bool SaveState::write(std::ostream& os) const noexcept {
 
 bool SaveState::read(std::istream& is) noexcept {
     assert(is);
-    is.read(reinterpret_cast<char*>(&this->original_size), sizeof(size_t));
+    is.read(reinterpret_cast<char*>(&this->save_version), sizeof(this->save_version));
+    if (!is || is.eof()) {
+        return false;
+    }
+    is.read(reinterpret_cast<char*>(&this->original_size), sizeof(this->original_size));
 
     assert(this->original_size > 0);
-    if (this->original_size > SAVE_STATE_MAX_SIZE) {
+    if (!is || is.eof() || this->original_size > SAVE_STATE_MAX_SIZE) {
         return false;
     }
 

@@ -56,7 +56,7 @@
     "ed_rq_body_type": "Body Type",
     "ed_rq_cookies": "Cookies",
     "ed_rq_headers": "Headers",
-    "ed_rs_body_types": [
+    "ed_rq_body_types": [
         "JSON",
         "Plain Text",
         "Multipart",

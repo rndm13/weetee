@@ -75,6 +75,21 @@ template <class... Args> void tooltip(const char* format, Args... args) noexcept
     }
 }
 
+std::string load_from_file() noexcept {
+    auto open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
+
+    std::vector<std::string> result = open_file_dialog.result();
+    if (result.size() > 0) {
+        std::ifstream in(result.at(0));
+        if (in) {
+            std::stringstream ss;
+            ss << in.rdbuf();
+            return ss.str();
+        }
+    }
+    return "";
+}
+
 template <class... Args> bool hint(const char* format, Args... args) noexcept {
     bool result = ImGui::Button(ICON_FA_QUESTION);
     tooltip(format, args...);
@@ -722,20 +737,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
 
     if (ImGui::MenuItem(ICON_FA_FILE " Load from file")) {
         changed = true;
-        auto open_file_dialog =
-            pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
-
-        std::vector<std::string> result = open_file_dialog.result();
-        if (result.size() > 0) {
-            std::ifstream in(result.at(0));
-            if (in) {
-                std::stringstream ss;
-                ss << in.rdbuf();
-                elem->data.data = ss.str();
-            }
-
-            // httplib::detail::read_file(result.at(0), elem->data.data);
-        }
+        elem->data.data = load_from_file();
 
         if (elem->data.data.find("\n") != std::string::npos) {
             elem->data.separator = '\n';
@@ -886,15 +888,19 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
                 std::string* body = &std::get<std::string>(test.request.body);
                 changed |= ImGui::InputTextMultiline("##body", body, ImVec2(0, 300));
 
-                if (test.request.body_type == REQUEST_JSON &&
-                    ImGui::BeginPopupContextItem("##body_json_context")) {
-                    if (ImGui::MenuItem("Format")) {
+                if (ImGui::BeginPopupContextItem("##body_json_context")) {
+                    if (ImGui::MenuItem("Format JSON")) {
                         assert(std::holds_alternative<std::string>(test.request.body));
                         const char* error = json_format(std::get<std::string>(test.request.body));
 
                         if (error) {
                             Log(LogLevel::Error, "Failed to parse json: ", error);
                         }
+                    }
+
+                    if (ImGui::MenuItem(ICON_FA_FILE " Load from file")) {
+                        changed = true;
+                        test.request.body = load_from_file();
                     }
                     ImGui::EndPopup();
                 }
@@ -985,15 +991,20 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
 
                 changed |= ImGui::InputTextMultiline("##body", &test.response.body, ImVec2(0, 300));
 
-                if (test.response.body_type == RESPONSE_JSON &&
-                    ImGui::BeginPopupContextItem("##body_json_context")) {
-                    if (ImGui::MenuItem("Format")) {
+                if (ImGui::BeginPopupContextItem("##body_json_context")) {
+                    if (ImGui::MenuItem("Format JSON")) {
                         const char* error = json_format(test.response.body);
 
                         if (error) {
                             Log(LogLevel::Error, "Failed to parse json: ", error);
                         }
                     }
+
+                    if (ImGui::MenuItem(ICON_FA_FILE " Load from file")) {
+                        changed = true;
+                        test.response.body = load_from_file();
+                    }
+
                     ImGui::EndPopup();
                 }
 

@@ -16,6 +16,7 @@
 #include "vector"
 
 struct SaveState {
+    size_t save_version = {0};
     size_t original_size = {};
     size_t load_idx = {};
     std::vector<char> original_buffer;
