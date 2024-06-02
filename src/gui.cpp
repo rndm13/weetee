@@ -16,6 +16,7 @@
 
 #include "hello_imgui/icons_font_awesome_4.h"
 #include "imspinner/imspinner.h"
+#include "nlohmann/json.hpp"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
 #include "app_state.hpp"
@@ -33,6 +34,7 @@
 #include "string"
 #include "utility"
 #include "variant"
+#include <fstream>
 
 void begin_transparent_button() noexcept {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
@@ -98,7 +100,7 @@ template <class... Args> bool hint(const char* format, Args... args) noexcept {
 
 bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     assert(app->tests.contains(nested_test_id));
-    bool changed = false; // This also indicates that analysis data is invalid
+    bool changed = false; // This also indicates that previous analysis data is no longer valid
 
     if (ImGui::BeginPopupContextItem()) {
         app->tree_view_focused = true;
@@ -1846,85 +1848,186 @@ void testing_results(AppState* app) noexcept {
     ImGui::PopFont();
 }
 
+template <class Data>
+bool display_requestable_wait(const Requestable<Data>& requestable, std::string message) {
+    if (requestable.status == REQUESTABLE_WAIT) {
+        ImSpinner::SpinnerIncDots("wait", 5, 1);
+        ImGui::SameLine();
+        ImGui::Text("%s", message.c_str());
+    }
+    return requestable.status != REQUESTABLE_WAIT;
+}
+
+template <class Data, class Process>
+void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType type,
+                         const std::string& hostname, const std::string& destination,
+                         const std::string& body, const httplib::Params& params,
+                         Process&& process) noexcept {
+    app->thr_pool.detach_task(
+        [app, &requestable, type, hostname, destination, params, body, process]() mutable {
+            requestable.status = REQUESTABLE_WAIT;
+            httplib::Client cli(hostname);
+            // cli.set_follow_location(true);
+            httplib::Result result;
+            std::string dest_params = httplib::append_query_params(destination, params);
+            switch (type) {
+            case HTTP_GET:
+                result = cli.Get(dest_params);
+                break;
+            case HTTP_POST:
+                result = cli.Post(dest_params, body, "application/octet-stream");
+                break;
+            default:
+                break;
+            }
+
+            if (result.error() != httplib::Error::Success) {
+                requestable.status = REQUESTABLE_ERROR;
+                requestable.error = to_string(result.error());
+            } else {
+                if (result->status != 200) {
+                    requestable.status = REQUESTABLE_ERROR;
+                    requestable.error = result->body;
+                } else {
+                    requestable.status = REQUESTABLE_FOUND;
+                    process(requestable, result->body);
+                }
+            }
+        });
+}
+
 void remote_file_sync(AppState* app) noexcept {
     if (ImGui::Begin("Remote File Sync", &app->sync_show)) {
         ImGui::InputText("Remote Host##host", &app->sync_hostname);
 
-        if (app->sync_wait) {
-            ImSpinner::SpinnerIncDots("wait", 5, 1);
-            ImGui::SameLine();
-            ImGui::Text("Please wait, your request is being processed");
-        } else if (!app->sync_logged_in) {
-            ImGui::Text("Login/Register");
-            ImGui::InputText("Name##name", &app->sync_name);
-            ImGui::InputText("Password##password", &app->sync_password,
-                             ImGuiInputTextFlags_Password);
-            if (ImGui::Button("Login")) {
-                app->thr_pool.detach_task([app]() {
-                    app->sync_wait = true;
-                    httplib::Client cli(app->sync_hostname);
+        if (app->sync_session.status != REQUESTABLE_FOUND) {
+            if (display_requestable_wait(
+                    app->sync_session,
+                    "Please wait, your authentication request is being processed")) {
+                ImGui::Text("Login/Register");
+                ImGui::Text("%s", app->sync_session.error.c_str());
+                ImGui::InputText("Name##name", &app->sync_name);
+                ImGui::InputText("Password##password", &app->sync_password,
+                                 ImGuiInputTextFlags_Password);
+                ImGui::Checkbox("Remember Me##remember", &app->sync_remember_me);
+                if (ImGui::Button("Login")) {
                     httplib::Params params;
                     params.emplace("name", app->sync_name);
                     params.emplace("password", app->sync_password);
-                    auto result = cli.Get("/login", params, httplib::Headers{}, httplib::Progress{});
-                    if (result.error() != httplib::Error::Success) {
-                        Log(LogLevel::Error, "Failed to send login request: %s", to_string(result.error()).c_str());
-                    } else {
-                        if (result->body.empty()) {
-                            Log(LogLevel::Error, "Failed to login");
-                        } else {
-                            app->sync_session = result->body;
-                            app->sync_logged_in = true;
-                        }
-                    }
-                    app->sync_wait = false;
-                });
-            }
-            if (ImGui::Button("Register")) {
-                app->thr_pool.detach_task([app]() {
-                    app->sync_wait = true;
-                    httplib::Client cli(app->sync_hostname);
+                    params.emplace("remember_me", app->sync_remember_me ? "1" : "0");
+                    execute_requestable(
+                        app, app->sync_session, HTTP_GET, app->sync_hostname, "/login", "", params,
+                        [](auto& requestable, std::string data) { requestable.data = data; });
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Register")) {
                     httplib::Params params;
                     params.emplace("name", app->sync_name);
                     params.emplace("password", app->sync_password);
-                    auto result = cli.Get("/register", params, httplib::Headers{}, httplib::Progress{});
-                    if (result.error() != httplib::Error::Success) {
-                        Log(LogLevel::Error, "Failed to send register request: %s", to_string(result.error()).c_str());
-                    } else {
-                        if (result->body.empty()) {
-                            Log(LogLevel::Error, "Failed to register");
-                        } else {
-                            app->sync_session = result->body;
-                            app->sync_logged_in = true;
-                        }
-                    }
-                    app->sync_wait = false;
-                });
+                    execute_requestable(
+                        app, app->sync_session, HTTP_GET, app->sync_hostname, "/register", "",
+                        params,
+                        [](auto& requestable, std::string data) { requestable.data = data; });
+                }
             }
         } else {
             ImGui::Text("You are logged in as %s", app->sync_name.c_str());
             ImGui::SameLine();
             if (ImGui::Button("Logout")) {
-                app->thr_pool.detach_task([app]() {
-                    app->sync_wait = true;
-                    httplib::Client cli(app->sync_hostname);
-                    httplib::Params params;
-                    params.emplace("session_token", app->sync_session);
-                    auto result = cli.Get("/logout", params, httplib::Headers{}, httplib::Progress{});
-                    if (result.error() != httplib::Error::Success) {
-                        Log(LogLevel::Error, "Failed to send logout request: %s", to_string(result.error()).c_str());
-                    } else {
-                        if (result->body.empty()) {
-                            Log(LogLevel::Error, "Failed to logout");
-                        } else {
-                            app->sync_session = "";
-                            app->sync_logged_in = false;
-                            app->sync_name = "";
-                            app->sync_password = "";
-                        }
+                httplib::Params params;
+                params.emplace("session_token", app->sync_session.data);
+                execute_requestable(app, app->sync_session, HTTP_GET, app->sync_hostname, "/logout",
+                                    "", params, [app](auto& requestable, std::string data) {
+                                        app->sync_session.status = REQUESTABLE_NONE;
+                                    });
+                app->sync_name = "";
+                app->sync_password = "";
+                app->sync_session.data = "";
+                app->sync_files = {};
+                app->sync_file_save = {};
+                app->sync_file_open = {};
+            }
+
+            auto request_file_list = [app]() {
+                httplib::Params params;
+                params.emplace("session_token", app->sync_session.data);
+                execute_requestable(app, app->sync_files, HTTP_GET, app->sync_hostname,
+                                    "/file-list", "", params,
+                                    [](auto& requestable, std::string data) {
+                                        auto json_data = nlohmann::json::parse(data);
+                                        if (json_data.is_array()) {
+                                            for (auto& item : json_data) {
+                                                if (item.is_object() && item.contains("name")) {
+                                                    requestable.data.push_back(item["name"]);
+                                                }
+                                            }
+                                        }
+                                    });
+            };
+
+            if (app->sync_files.status == REQUESTABLE_NONE) {
+                request_file_list();
+            }
+            if (display_requestable_wait(app->sync_files, "Fetching a list of your files")) {
+                if (ImGui::Button("Retry Fetch")) {
+                    request_file_list();
+                }
+            }
+
+            if (app->sync_files.status == REQUESTABLE_FOUND) {
+                ImGui::Text("%s", app->sync_file_open.error.c_str());
+                ImGui::Text("%s", app->sync_files.error.c_str());
+                if (display_requestable_wait(app->sync_file_open, "Opening file...")) {
+                    if (app->sync_file_open.status == REQUESTABLE_FOUND) {
+                        std::stringstream ss;
+                        ss << app->sync_file_open.data;
+
+                        app->open_file(ss);
+
+                        app->sync_file_open = {};
                     }
-                    app->sync_wait = false;
-                });
+
+                    for (const std::string& name : app->sync_files.data) {
+                        ImGui::PushID(name.c_str());
+                        ImGui::Text("%s", name.c_str());
+                        ImGui::SameLine();
+                        if (ImGui::Button("Open##open")) {
+                            httplib::Params params;
+                            params.emplace("session_token", app->sync_session.data);
+                            params.emplace("file_name", name);
+                            execute_requestable(app, app->sync_file_open, HTTP_GET,
+                                                app->sync_hostname, "/file", "", params,
+                                                [app, name](auto& requestable, std::string data) {
+                                                    app->filename = name;
+                                                    requestable.data = data;
+                                                });
+                        }
+                        ImGui::PopID();
+                    }
+                }
+            }
+
+            if (display_requestable_wait(app->sync_file_save, "Saving file...")) {
+                ImGui::Text("%s", app->sync_file_save.error.c_str());
+                ImGui::InputText("##file_name", &app->sync_file_name);
+                ImGui::SameLine();
+                if (ImGui::Button("Save")) {
+                    app->filename = app->sync_file_name;
+                    std::stringstream out;
+                    app->save_file(out);
+                    std::string body = out.str();
+
+                    httplib::Params params;
+                    params.emplace("session_token", app->sync_session.data);
+                    params.emplace("file_name", app->sync_file_name);
+
+                    execute_requestable(app, app->sync_file_save, HTTP_POST, app->sync_hostname,
+                                        "/file", body, params,
+                                        [app](auto& requestable, std::string data) {
+                                            requestable.data = true;
+                                            app->sync_files = {};
+                                        });
+                }
             }
         }
     }
@@ -1972,7 +2075,8 @@ void save_as_file_dialog(AppState* app) noexcept {
 
     if (result.size() > 0) {
         app->filename = result;
-        app->save_file();
+        std::ofstream out(app->filename.value());
+        app->save_file(out);
     }
 }
 
@@ -1980,7 +2084,8 @@ void save_file_dialog(AppState* app) noexcept {
     if (!app->filename.has_value()) {
         save_as_file_dialog(app);
     } else {
-        app->save_file();
+        std::ofstream out(app->filename.value());
+        app->save_file(out);
     }
 }
 
@@ -1991,7 +2096,8 @@ void open_file_dialog(AppState* app) noexcept {
     std::vector<std::string> result = open_file_dialog.result();
     if (result.size() > 0) {
         app->filename = result[0];
-        app->open_file();
+        std::ifstream in(app->filename.value());
+        app->open_file(in);
     }
 }
 

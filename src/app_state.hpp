@@ -28,6 +28,22 @@ struct EditorTab {
     std::string name;
 };
 
+enum RequestableStatus : uint8_t {
+    REQUESTABLE_NONE,
+    REQUESTABLE_WAIT,
+    REQUESTABLE_ERROR,
+    REQUESTABLE_FOUND,
+
+    REQUESTABLE_COUNT,
+};
+
+template <class Data>
+struct Requestable {
+    RequestableStatus status;
+    std::string error;
+    Data data;
+};
+
 struct AppState {
     size_t id_counter = 0;
 
@@ -59,11 +75,15 @@ struct AppState {
     bool sync_show = false;
     // TODO: Save
     std::string sync_hostname = "https://weetee-sync.vercel.app";
-    bool sync_wait = false;
-    bool sync_logged_in = false;
-    std::string sync_session = "";
+    Requestable<std::string> sync_session;
     std::string sync_name;
     std::string sync_password;
+    bool sync_remember_me;
+
+    Requestable<std::vector<std::string>> sync_files;
+    Requestable<std::string> sync_file_open;
+    std::string sync_file_name;
+    Requestable<bool> sync_file_save;
 
     BS::thread_pool thr_pool;
 
@@ -165,8 +185,8 @@ struct AppState {
     bool filter(Test& test) noexcept;
     bool filter(NestedTest* nt) noexcept;
 
-    void save_file() noexcept;
-    void open_file() noexcept;
+    void save_file(std::ostream&) noexcept;
+    void open_file(std::istream&) noexcept;
     void post_open() noexcept;
 
     void import_swagger_paths(const nlohmann::json& paths, const nlohmann::json& swagger) noexcept;

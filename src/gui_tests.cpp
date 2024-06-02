@@ -264,7 +264,8 @@ void register_tests(AppState* app) noexcept {
 
         tree_view__delete_all(ctx);
 
-        app->open_file();
+        std::ifstream in(app->filename.value());
+        app->open_file(in);
 
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);
 

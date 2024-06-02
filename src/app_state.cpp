@@ -592,10 +592,7 @@ bool AppState::filter(NestedTest* nt) noexcept {
     return filter;
 }
 
-void AppState::save_file() noexcept {
-    assert(this->filename.has_value());
-
-    std::ofstream out(this->filename.value());
+void AppState::save_file(std::ostream& out) noexcept {
     if (!out) {
         Log(LogLevel::Error, "Failed to save to file '%s'", this->filename->c_str());
         return;
@@ -610,10 +607,7 @@ void AppState::save_file() noexcept {
     }
 }
 
-void AppState::open_file() noexcept {
-    assert(this->filename.has_value());
-
-    std::ifstream in(this->filename.value());
+void AppState::open_file(std::istream& in) noexcept {
     if (!in) {
         Log(LogLevel::Error, "Failed to open file \"%s\"", this->filename->c_str());
         return;
