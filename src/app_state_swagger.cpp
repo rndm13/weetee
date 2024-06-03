@@ -372,9 +372,6 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
     this->filtered_tests.clear();
     this->editor_open_tabs.clear();
 
-    // Pushes initial undo state
-    this->undo_history.reset_undo_history(this);
-
     try {
         if (swagger.contains("info")) {
             if (swagger["info"].contains("title")) {
@@ -396,6 +393,9 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         }
 
         Log(LogLevel::Info, "Successfully imported swagger file '%s'", swagger_file.c_str());
+
+        // Pushes initial undo state
+        this->undo_history.reset_undo_history(this);
     } catch (std::exception& e) {
         Log(LogLevel::Error, "Failed to import swagger: %s", e.what());
     }
@@ -463,12 +463,12 @@ nljson export_schema(const nljson& example) {
         }
     } else if (example.is_array()) {
         result.emplace("type", "array");
-        result.emplace("items", nljson::object());
+        result.emplace("items", nljson::array());
 
         if (example.size() > 0) {
-            result.at("items").emplace(export_schema(example.at(0)));
+            result.at("items").push_back(export_schema(example.at(0)));
         } else {
-            result.at("items").emplace("type", "string");
+            result.at("items").push_back({"type", "string"});
         }
     } else {
         result.emplace("type", example.type_name());
@@ -599,9 +599,16 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                                 vars, std::get<std::string>(it_test->request.body)));
                         }
 
+                        nljson schema_json = nljson::parse("\"\"");
+                        if (example.has_value()) {
+                            schema_json = example.value();
+                        }
+
+                        nljson export_schema_json = export_schema(schema_json);
+
                         op.request_body = swagger_export::RequestBody{
                             .media_type = media_type,
-                            .schema = export_schema(example.value_or(nljson::parse("\"\""))),
+                            .schema = export_schema_json,
                             .example = example,
                         };
                     }
@@ -685,6 +692,8 @@ void AppState::export_swagger(const std::string& swagger_file) const noexcept {
 
         out << swagger.dump(2);
         Log(LogLevel::Info, "Successfully exported swagger to '%s'", swagger_file.c_str());
+    } catch (nljson::type_error& te) {
+        Log(LogLevel::Error, "Failed to export swagger: %s", te.what());
     } catch (std::exception& e) {
         Log(LogLevel::Error, "Failed to export swagger: %s", e.what());
     }
