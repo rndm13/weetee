@@ -1695,6 +1695,7 @@ void testing_result_row(AppState* app, size_t result_id,
     };
 
     ImGui::PushID(static_cast<int32_t>(result_id));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ImGui::GetStyle().FramePadding.x, 0});
     for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
         TestResult& result = results.at(result_idx);
 
@@ -1814,6 +1815,7 @@ void testing_result_row(AppState* app, size_t result_id,
         }
     }
 
+    ImGui::PopStyleVar();
     ImGui::PopID();
 }
 
