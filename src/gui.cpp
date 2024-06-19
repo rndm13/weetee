@@ -1892,6 +1892,7 @@ void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType
                     requestable.error = result->body;
                 } else {
                     requestable.status = REQUESTABLE_FOUND;
+                    requestable.error = "";
                     process(requestable, result->body);
                 }
             }
@@ -2205,7 +2206,7 @@ void show_app_menu_items(AppState* app) noexcept {
 void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
 #ifndef NDEBUG
-    ImGui::ShowDemoWindow();
+    // ImGui::ShowDemoWindow();
     ImGuiTestEngine* engine = HelloImGui::GetImGuiTestEngine();
     ImGuiTestEngine_ShowTestEngineWindows(engine, nullptr);
 #endif

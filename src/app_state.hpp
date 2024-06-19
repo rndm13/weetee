@@ -39,9 +39,9 @@ enum RequestableStatus : uint8_t {
 
 template <class Data>
 struct Requestable {
-    RequestableStatus status;
-    std::string error;
-    Data data;
+    RequestableStatus status = REQUESTABLE_NONE;
+    std::string error = "";
+    Data data = {};
 };
 
 struct AppState {
@@ -75,15 +75,15 @@ struct AppState {
     bool sync_show = false;
     // TODO: Save
     std::string sync_hostname = "https://weetee-sync.vercel.app";
-    Requestable<std::string> sync_session;
-    std::string sync_name;
-    std::string sync_password;
-    bool sync_remember_me;
+    Requestable<std::string> sync_session = {};
+    std::string sync_name = "";
+    std::string sync_password = "";
+    bool sync_remember_me = false;
 
-    Requestable<std::vector<std::string>> sync_files;
-    Requestable<std::string> sync_file_open;
-    std::string sync_file_name;
-    Requestable<bool> sync_file_save;
+    Requestable<std::vector<std::string>> sync_files = {};
+    Requestable<std::string> sync_file_open = {};
+    std::string sync_file_name = "";
+    Requestable<bool> sync_file_save = {};
 
     BS::thread_pool thr_pool;
 
