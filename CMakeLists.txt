@@ -87,6 +87,11 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# Add tests
+# ===============
+
+add_subdirectory(tests)
+
 # Add src
 # ===============
 
@@ -101,10 +106,5 @@ target_link_libraries(weetee PRIVATE
 if(WIN32)
   target_link_libraries(weetee PRIVATE wsock32 ws2_32)
 endif()
-
-# Add tests
-# ===============
-
-add_subdirectory(tests)
 
 cotire(weetee)

@@ -1,7 +1,5 @@
 #include "utils.hpp"
 
-// TODO: Add unit tests to these functions
-
 bool str_contains(const std::string& haystack, const std::string& needle) noexcept {
     size_t need_idx = 0;
     for (char hay : haystack) {

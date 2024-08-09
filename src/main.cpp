@@ -7,7 +7,7 @@
 
 #include "app_state.hpp"
 #include "gui.hpp"
-#include "gui_tests.hpp"
+#include "../tests/functional/gui_tests.hpp"
 
 // TODO: Add a better icon
 // TODO: Add Head, Options, Trace

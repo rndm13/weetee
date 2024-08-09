@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "../src/utils.hpp"
+#include "../../src/utils.hpp"
 
 TEST(utils, vector_comparison) {
     std::vector<int> a = {1, 2, 4};

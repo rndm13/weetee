@@ -9,10 +9,6 @@
 #include "imgui_test_engine/imgui_te_engine.h"
 #include "imgui_test_engine/imgui_te_ui.h"
 
-#include "app_state.hpp"
-#include "test.hpp"
-#include "utils.hpp"
-
 #include "cmath"
 #include "string"
 
