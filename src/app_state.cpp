@@ -567,7 +567,7 @@ bool AppState::filter(Group& group) noexcept {
     for (size_t child_id : group.children_ids) {
         result &= this->filter(&this->tests[child_id]);
     }
-    result &= !contains(group.name, this->tree_view_filter);
+    result &= !str_contains(group.name, this->tree_view_filter);
 
     if (result) {
         group.flags &= ~GROUP_OPEN;
@@ -578,7 +578,7 @@ bool AppState::filter(Group& group) noexcept {
 }
 
 bool AppState::filter(Test& test) noexcept {
-    return !contains(test.endpoint, this->tree_view_filter);
+    return !str_contains(test.endpoint, this->tree_view_filter);
 }
 
 bool AppState::filter(NestedTest* nt) noexcept {
@@ -707,7 +707,7 @@ const char* header_match(const VariablesMap& vars, const Test* test,
     for (const auto& [key, value] : headers) {
         bool found = false;
         for (const auto& [match_key, match_value] : result->headers) {
-            if (key == match_key && contains(match_value, value)) {
+            if (key == match_key && str_contains(match_value, value)) {
                 found = true;
                 break;
             }

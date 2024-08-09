@@ -23,21 +23,9 @@ set(BS_thread_pool_SOURCE_DIR external/thread-pool/)
 
 # Add imgui_bundle
 # =================
-# 1/  Option 1: if you added imgui_bundle in a subfolder, you can add it to your project with:
+
 if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui_bundle)
     add_subdirectory(external/imgui_bundle)
-endif()
-
-## 2/  Option 2: simply fetch imgui_bundle during the build
-if (NOT TARGET imgui_bundle)
-    message(STATUS "Fetching imgui_bundle...")
-    include(FetchContent)
-    Set(FETCHCONTENT_QUIET FALSE)
-    FetchContent_Declare(imgui_bundle GIT_REPOSITORY https://github.com/pthom/imgui_bundle.git GIT_TAG main)
-    FetchContent_MakeAvailable(imgui_bundle)
-
-    # Uncomment the next line if you which to also automatically fetch and compile OpenCV for immvision support
-    # set(IMMVISION_FETCH_OPENCV ON)
 endif()
 
 # Build app
@@ -88,8 +76,19 @@ endif()
 add_library(BS_thread_pool INTERFACE)
 target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}/include)
 
+# Add GTest
+# ===============
+
+FetchContent_Declare(
+  googletest
+  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+)
+# For Windows: Prevent overriding the parent project's compiler/linker settings
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
 # Add src
-# ==================
+# ===============
 
 add_subdirectory(src)
 
@@ -102,5 +101,10 @@ target_link_libraries(weetee PRIVATE
 if(WIN32)
   target_link_libraries(weetee PRIVATE wsock32 ws2_32)
 endif()
+
+# Add tests
+# ===============
+
+add_subdirectory(tests)
 
 cotire(weetee)

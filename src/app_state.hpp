@@ -73,6 +73,7 @@ struct AppState {
     std::optional<std::string> filename;
 
     bool sync_show = false;
+
     // TODO: Save
     std::string sync_hostname = "https://weetee-sync.vercel.app";
     Requestable<std::string> sync_session = {};
@@ -82,6 +83,8 @@ struct AppState {
 
     Requestable<std::vector<std::string>> sync_files = {};
     Requestable<std::string> sync_file_open = {};
+
+    // TODO: Save files with Ctrl+S into remote storage when this is set
     std::string sync_file_name = "";
     Requestable<bool> sync_file_save = {};
 

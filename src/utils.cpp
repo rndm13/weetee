@@ -2,7 +2,7 @@
 
 // TODO: Add unit tests to these functions
 
-bool contains(const std::string& haystack, const std::string& needle) noexcept {
+bool str_contains(const std::string& haystack, const std::string& needle) noexcept {
     size_t need_idx = 0;
     for (char hay : haystack) {
         if (std::tolower(hay) == std::tolower(needle[need_idx])) {

@@ -48,9 +48,9 @@ template <class... Ts> struct overloaded : Ts... {
         }                                                                                          \
     };
 
-#define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
-
 using EmptyVisitor = COPY_GETTER_VISITOR(empty(), empty);
+
+#define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
 
 template <class T>
 constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noexcept {
@@ -67,6 +67,11 @@ constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) noex
     return true;
 }
 
+template <class T>
+constexpr bool operator!=(const std::vector<T>& a, const std::vector<T>& b) noexcept {
+    return !(a == b);
+}
+
 constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) noexcept {
     return ImVec4(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f,
                   static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
@@ -76,7 +81,7 @@ void find_and_replace(std::string& str, const std::string& to_replace,
                       const std::string& replace_with) noexcept;
 
 // Case insensitive string comparison
-bool contains(const std::string& haystack, const std::string& needle) noexcept;
+bool str_contains(const std::string& haystack, const std::string& needle) noexcept;
 
 template <class Variant> constexpr bool valid_variant_from_index(size_t index) noexcept {
     return index < std::variant_size_v<Variant>;
