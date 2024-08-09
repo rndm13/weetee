@@ -1,7 +1,6 @@
 #include "fstream"
 
-#include "nlohmann/json.hpp"
-
+#include "json.hpp"
 #include "app_state.hpp"
 #include "http.hpp"
 #include "partial_dict.hpp"
@@ -177,8 +176,11 @@ nljson import_schema_example(const nljson& schema, const nljson& swagger) noexce
             return array_example;
         }
 
+        // Encode weetee variable as a json object with specific key
         std::string example_var = schema_value.at("type");
-        return "{" + example_var + "}";
+        nljson object_var = nljson::object();
+        object_var.emplace(WEETEE_VARIABLE_KEY, example_var);
+        return object_var;
     }
 
     return schema_value;
@@ -202,7 +204,7 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
         std::string value = "";
 
         if (param_value.contains("example")) {
-            value = to_string(param_value.at("example"));
+            value = param_value.at("example");
         } else if (param_value.contains("examples")) {
             const auto& examples = param_value.at("examples");
             for (auto example = examples.begin(); example != examples.end(); example++) {
@@ -214,7 +216,8 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
                 break;
             }
         } else if (param_value.contains("schema")) {
-            value = to_string(import_schema_example(param_value.at("schema"), swagger));
+            value = unpack_variables(import_schema_example(param_value.at("schema"), swagger), 0);
+            find_and_replace(value, "\n", "");
         }
 
         if (value.front() == '"' && value.back() == '"') {
@@ -223,6 +226,7 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
 
         // Don't put required on this one as it won't remain required after url
         // variables resolve and you should provide a way to change it for user
+
         if (in == "query") {
             params.elements.push_back({
                 .key = name,
@@ -334,8 +338,8 @@ void AppState::import_swagger_paths(const nljson& paths, const nljson& swagger) 
                                 request_body_convert<REQUEST_MULTIPART>(&new_test);
                             }
                         } else if (media_type.contains("schema")) {
-                            new_test.request.body =
-                                to_string(import_schema_example(media_type.at("schema"), swagger));
+                            new_test.request.body = unpack_variables(
+                                import_schema_example(media_type.at("schema"), swagger), 4);
                         }
 
                         // TODO: Multiple tests for each content-type
@@ -529,7 +533,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                         op.parameters.push_back({
                             .name = param,
                             .in = "path",
-                            .schema = export_schema(example.value_or(nljson::parse("\"\""))),
+                            .schema = export_schema(example.value_or(nljson::string_t{})),
                             .example = example,
                         });
                     }
@@ -599,7 +603,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
                                 vars, std::get<std::string>(it_test->request.body)));
                         }
 
-                        nljson schema_json = nljson::parse("\"\"");
+                        nljson schema_json = nljson::string_t{};
                         if (example.has_value()) {
                             schema_json = example.value();
                         }

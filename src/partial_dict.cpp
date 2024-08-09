@@ -204,34 +204,3 @@ VariablesElementData::field_labels(const I18N* i18n) noexcept {
         i18n->ed_pd_data.c_str(),
     };
 }
-
-std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept {
-    std::string result = target;
-
-    bool changed = true;
-    size_t iterations = 0;
-    while (iterations < REPLACE_VARIABLES_MAX_NEST && changed) {
-        std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
-
-        changed = false;
-        iterations++;
-
-        for (auto it = params_idx.rbegin(); it != params_idx.rend(); it++) {
-            auto [begin, size] = *it;
-            std::string name = result.substr(begin + 1, size - 1);
-
-            if (vars.contains(name)) {
-                changed = true;
-
-                std::string value = vars.at(name);
-                if (value.empty()) {
-                    value = "<empty>";
-                }
-
-                result.replace(begin, size + 1, value);
-            }
-        }
-    }
-
-    return result;
-}

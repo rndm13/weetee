@@ -679,7 +679,7 @@ const char* body_match(const VariablesMap& vars, const Test* test,
         if (!test->response.body.empty()) {
             if (test->response.body_type == RESPONSE_JSON) {
                 const char* err =
-                    json_validate(replace_variables(vars, test->response.body), result->body);
+                    json_compare(replace_variables(vars, test->response.body), result->body);
                 if (err) {
                     return err;
                 }
@@ -908,7 +908,8 @@ bool execute_test(AppState* app, const Test* test, size_t test_result_idx, httpl
     }
 
     if (result.error() == httplib::Error::Success) {
-        test_result->res_body = format_response_body(result->body);
+        test_result->res_body = result->body;
+        const char* err = json_format(test_result->res_body);
     }
 
     if (!app->test_results.contains(test->id)) {

@@ -16,7 +16,6 @@
 
 #include "hello_imgui/icons_font_awesome_4.h"
 #include "imspinner/imspinner.h"
-#include "nlohmann/json.hpp"
 #include "portable_file_dialogs/portable_file_dialogs.h"
 
 #include "app_state.hpp"
@@ -893,7 +892,7 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
                 if (ImGui::BeginPopupContextItem("##body_json_context")) {
                     if (ImGui::MenuItem("Format JSON")) {
                         assert(std::holds_alternative<std::string>(test.request.body));
-                        const char* error = json_format(std::get<std::string>(test.request.body));
+                        const char* error = json_format_variables(std::get<std::string>(test.request.body), vars);
 
                         if (error) {
                             Log(LogLevel::Error, "Failed to parse json: ", error);
@@ -995,7 +994,7 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
 
                 if (ImGui::BeginPopupContextItem("##body_json_context")) {
                     if (ImGui::MenuItem("Format JSON")) {
-                        const char* error = json_format(test.response.body);
+                        const char* error = json_format_variables(test.response.body, vars);
 
                         if (error) {
                             Log(LogLevel::Error, "Failed to parse json: ", error);

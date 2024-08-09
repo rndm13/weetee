@@ -1,16 +1,18 @@
 #pragma once
 
-#include "nlohmann/json.hpp"
+#include "../external/json/single_include/nlohmann/json.hpp"
 
-#include "utils.hpp"
 #include "i18n.hpp"
+#include "utils.hpp"
 
 #include "string"
 #include "variant"
 
+#define WEETEE_VARIABLE_KEY "__weetee_variable"
+
 // returns an error message, if there isn't returns null pointer
 const char* json_format(std::string& json) noexcept;
-const char* json_validate(const std::string&, const std::string&) noexcept;
+const char* json_compare(const std::string&, const std::string&) noexcept;
 
 namespace nlohmann {
 template <class... Args> struct adl_serializer<std::variant<Args...>> {

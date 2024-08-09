@@ -1,5 +1,7 @@
 #include "utils.hpp"
 
+// TODO: Add unit tests to these functions
+
 bool contains(const std::string& haystack, const std::string& needle) noexcept {
     size_t need_idx = 0;
     for (char hay : haystack) {
@@ -14,7 +16,7 @@ bool contains(const std::string& haystack, const std::string& needle) noexcept {
 }
 
 std::string get_filename(const std::string& path) noexcept {
-#ifdef WIN32
+#ifndef WIN32
     size_t slash = path.rfind("/");
 #else
     size_t slash = path.rfind("\\");
@@ -71,6 +73,7 @@ std::vector<std::string> split_string(const std::string& str,
     return result;
 }
 
+// Returns a vector of pairs of index and size of found range in string including begin and end chars 
 std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
                                                             char end) noexcept {
     std::vector<std::pair<size_t, size_t>> result;
@@ -94,8 +97,7 @@ std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, cha
     };
 
     // Erase unescaped
-    std::erase_if(
-        result, [](const std::pair<size_t, size_t>& it) {  return it.second == std::string::npos; });
+    std::erase_if(result, [](const std::pair<size_t, size_t>& it) { return it.second == std::string::npos; });
 
     return result;
 }

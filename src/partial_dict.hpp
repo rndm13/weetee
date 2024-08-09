@@ -196,9 +196,6 @@ struct VariablesElementData {
     bool can_load(SaveState* save) const noexcept;
     void load(SaveState* save) noexcept;
 };
+
 using Variables = PartialDict<VariablesElementData>;
 using VariablesElement = Variables::ElementType;
-using VariablesMap = std::unordered_map<std::string, std::string>;
-
-static constexpr size_t REPLACE_VARIABLES_MAX_NEST = 10;
-std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept;

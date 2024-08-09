@@ -402,16 +402,6 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->variables);
 }
 
-std::string format_response_body(const std::string& body) noexcept {
-    using json = nlohmann::json;
-
-    json js = json::parse(body, nullptr, false);
-    if (js.is_discarded()) {
-        return body;
-    }
-    return js.dump(4);
-}
-
 RequestBodyType request_body_type(const std::string& str) noexcept {
     if (str == "application/json") {
         return REQUEST_JSON;

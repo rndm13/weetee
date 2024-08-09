@@ -15,6 +15,8 @@
 #include "variant"
 #include "vector"
 
+static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
+
 struct SaveState {
     size_t save_version = {1};
     size_t original_size = {};
@@ -251,7 +253,6 @@ struct SaveState {
 
     void reset_load() noexcept;
 
-#define SAVE_STATE_MAX_SIZE 0x10000000
     // Returns false when failed
     bool write(std::ostream& os) const noexcept;
 

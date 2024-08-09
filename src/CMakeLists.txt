@@ -10,6 +10,9 @@ target_link_libraries(save_state PUBLIC utils hello_imgui portable_file_dialogs)
 add_library(json STATIC json.hpp json.cpp)
 target_link_libraries(json PUBLIC i18n utils nljson hello_imgui)
 
+add_library(variables variables.hpp variables.cpp)
+target_link_libraries(variables PUBLIC utils json)
+
 add_library(textinputcombo textinputcombo.hpp textinputcombo.cpp)
 target_link_libraries(textinputcombo PUBLIC hello_imgui)
 
@@ -20,7 +23,7 @@ add_library(http http.hpp http.cpp)
 target_link_libraries(http PUBLIC hello_imgui save_state partial_dict)
 
 add_library(test test.hpp test.cpp)
-target_link_libraries(test PUBLIC hello_imgui nljson save_state partial_dict http json)
+target_link_libraries(test PUBLIC hello_imgui json save_state partial_dict http json variables)
 
 add_library(app_state app_state.hpp)
 target_sources(app_state PUBLIC app_state.cpp app_state_swagger.cpp)
@@ -28,18 +31,18 @@ target_link_libraries(app_state PUBLIC
     i18n
     hello_imgui textinputcombo
     save_state partial_dict test
-    json http BS_thread_pool)
+    json http variables BS_thread_pool)
 
 add_library(gui gui.hpp gui.cpp)
 target_link_libraries(gui PUBLIC 
     textinputcombo imgui_toggle
     hello_imgui portable_file_dialogs imspinner
     save_state partial_dict test app_state
-    json http BS_thread_pool)
+    json http variables BS_thread_pool)
 
 add_library(gui_tests gui_tests.hpp gui_tests.cpp)
 target_link_libraries(gui_tests PUBLIC 
     gui textinputcombo
     hello_imgui portable_file_dialogs imspinner
     save_state partial_dict test
-    json http BS_thread_pool)
+    json http variables BS_thread_pool)

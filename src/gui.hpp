@@ -69,6 +69,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
                       const VariablesMap& vars, int32_t flags, const char** hints,
                       const size_t hint_count) noexcept {
     bool changed = false;
+
     auto select_only_this = [pd, elem]() {
         for (auto& e : pd->elements) {
             e.flags &= ~PARTIAL_DICT_ELEM_SELECTED;
@@ -117,6 +118,8 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
             if (!(elem->flags & PARTIAL_DICT_ELEM_SELECTED)) {
                 select_only_this();
             }
+
+            // TODO: i18n partial_dict context menu
 
             if (ImGui::MenuItem("Delete", nullptr, false, !(flags & PARTIAL_DICT_NO_DELETE))) {
                 changed = true;
@@ -210,10 +213,10 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(i));
 
-            uint8_t row_flags = flags | (elem->flags & PARTIAL_DICT_ELEM_REQUIRED
-                                             ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE |
-                                                   PARTIAL_DICT_NO_KEY_CHANGE
-                                             : PARTIAL_DICT_NONE);
+            uint8_t row_flags = flags | (
+                    elem->flags & PARTIAL_DICT_ELEM_REQUIRED
+                    ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE | PARTIAL_DICT_NO_KEY_CHANGE
+                    : PARTIAL_DICT_NONE);
 
             changed |= partial_dict_row(app, pd, elem, vars, row_flags, hints, hint_count);
             deletion |= elem->flags & PARTIAL_DICT_ELEM_TO_DELETE;
@@ -247,6 +250,7 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
                 pd->elements.push_back(pd->add_element);
                 pd->add_element = {};
             }
+
             ImGui::PopID();
         }
 

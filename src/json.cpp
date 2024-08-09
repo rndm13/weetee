@@ -14,7 +14,7 @@ const char* json_format(std::string& input) noexcept {
     return nullptr;
 }
 
-const char* json_validate(const std::string& expected, const std::string& got) noexcept {
+const char* json_compare(const std::string& expected, const std::string& got) noexcept {
     json json_expected, json_got;
 
     json_expected = json::parse(expected, nullptr, false);
@@ -161,4 +161,5 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
 }
 
 #undef I18N_LOAD
+#undef I18N_LOAD_VEC
 #undef I18N_LOAD_ID

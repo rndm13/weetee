@@ -2,11 +2,10 @@
 
 #include "hello_imgui/hello_imgui_logger.h"
 
-#include "nlohmann/json.hpp"
-
 #include "http.hpp"
 #include "json.hpp"
 #include "partial_dict.hpp"
+#include "variables.hpp"
 #include "utils.hpp"
 
 #include "cmath"
@@ -243,8 +242,6 @@ struct TestResult {
           variables(_variables) {}
 };
 
-std::string format_response_body(const std::string& body) noexcept;
-
 enum GroupFlags : uint8_t {
     GROUP_NONE = 0,
     GROUP_DISABLED = 1 << 0,
@@ -276,6 +273,9 @@ enum NestedTestType : uint8_t {
 using NestedTest = std::variant<Test, Group>;
 
 constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
+    assert(a != nullptr);
+    assert(b != nullptr);
+
     if (a->index() != b->index()) {
         return false;
     }
