@@ -8,11 +8,6 @@
 #include "hello_imgui/icons_font_awesome_4.h"
 
 struct I18N {
-    std::string win_tests;
-    std::string win_editor;
-    std::string win_results;
-    std::string win_logs;
-
     std::string menu_edit;
     std::string menu_edit_undo;
     std::string menu_edit_redo;

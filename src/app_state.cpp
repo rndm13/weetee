@@ -4,6 +4,8 @@
 #include "hello_imgui/hello_imgui_assets.h"
 #include "hello_imgui/hello_imgui_logger.h"
 
+#include "hello_imgui/internal/platform/ini_folder_locations.h"
+#include "hello_imgui/runner_params.h"
 #include "http.hpp"
 #include "partial_dict.hpp"
 #include "tests.hpp"
@@ -13,6 +15,92 @@
 #include "algorithm"
 #include "fstream"
 #include "iterator"
+#include <filesystem>
+
+void UserConfig::save(SaveState* save) const noexcept {
+    assert(save);
+
+    save->save(this->sync_hostname);
+    save->save(this->sync_session.status);
+    save->save(this->sync_session.data);
+    save->save(this->language);
+}
+
+bool UserConfig::can_load(SaveState* save) const noexcept {
+    assert(save);
+
+    if (!save->can_load(this->sync_hostname)) {
+        return false;
+    }
+    if (!save->can_load(this->sync_session.status)) {
+        return false;
+    }
+    if (!save->can_load(this->sync_session.data)) {
+        return false;
+    }
+    if (!save->can_load(this->language)) {
+        return false;
+    }
+
+    return true;
+}
+
+void UserConfig::load(SaveState* save) noexcept {
+    assert(save);
+
+    save->load(this->sync_hostname);
+    save->load(this->sync_session.status);
+    save->load(this->sync_session.data);
+    save->load(this->language);
+}
+
+void UserConfig::open_file() noexcept {
+    std::string filename = HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + UserConfig::filename;
+
+    std::ifstream in(filename);
+    if (!in) {
+        Log(LogLevel::Error, "Failed to load user config in %s", filename.c_str());
+        return;
+    }
+
+    SaveState save{};
+    if (!save.read(in) || !save.can_load(*this) || save.load_idx != save.original_size) {
+        Log(LogLevel::Error, "Failed to read user config in '%s', likely file is invalid or size exceeds maximum", filename.c_str());
+        Log(LogLevel::Warning, "Copying the old user config file, and creating a new one");
+
+        std::string new_filename = filename + ".old";
+
+        if (std::filesystem::copy_file(filename, new_filename)) {
+            Log(LogLevel::Error, "Failed to copy old user config file '%s'", new_filename.c_str());
+        }
+
+        // Create a new config with default settings
+        *this = {};
+        this->save_file();
+    }
+
+    save.reset_load();
+    save.load(*this);
+}
+
+void UserConfig::save_file() noexcept {
+    std::string filename = HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + UserConfig::filename;
+
+    std::ofstream out(filename);
+    if (!out) {
+        Log(LogLevel::Error, "Failed to save user config in '%s'", filename.c_str());
+        return;
+    }
+
+    SaveState save{};
+    save.save(*this);
+    save.finish_save();
+    
+    if (!save.write(out)) {
+        Log(LogLevel::Error, "Failed to save", filename.c_str());
+        return;
+    }
+}
 
 const Group AppState::root_initial = Group{
     .parent_id = static_cast<size_t>(-1),
@@ -605,7 +693,7 @@ void AppState::save_file(std::ostream& out) noexcept {
     save.finish_save();
     Log(LogLevel::Info, "Saving to '%s': %zuB", this->local_filename->c_str(), save.original_size);
     if (!save.write(out)) {
-        Log(LogLevel::Error, "Failed to save, likely size exeeds maximum");
+        Log(LogLevel::Error, "Failed to save");
     }
 }
 
@@ -617,7 +705,7 @@ void AppState::open_file(std::istream& in) noexcept {
 
     SaveState save{};
     if (!save.read(in)) {
-        Log(LogLevel::Error, "Failed to read, likely file is invalid or size exeeds maximum");
+        Log(LogLevel::Error, "Failed to read, likely file is invalid or size exceeds maximum");
         return;
     }
 
@@ -634,19 +722,15 @@ void AppState::open_file(std::istream& in) noexcept {
 }
 
 void AppState::load_i18n() noexcept {
-    std::ifstream in(
-        HelloImGui::AssetFileFullPath(this->conf.language + ".json")); // TODO: Add to assets
-    this->i18n = nlohmann::json::parse(in).template get<I18N>();
+    std::ifstream in(HelloImGui::AssetFileFullPath(this->conf.language + ".json"));
+    this->i18n = nlohmann::json::parse(in, nullptr, false, true).template get<I18N>();
 }
 
 AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     : runner_params(_runner_params) {
     this->undo_history.reset_undo_history(this);
 
-    // this->language = HelloImGui::LoadUserPref("language");
-    if (this->conf.language.empty()) {
-        this->conf.language = "en";
-    }
+    this->conf.open_file();
 
     this->load_i18n();
 }

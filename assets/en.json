@@ -1,9 +1,4 @@
 {
-    "win_tests": "Tests",
-    "win_editor": "Editor",
-    "win_results": "Results",
-    "win_logs": "Logs",
-
     "menu_languages": "Languages",
     "menu_languages_english": "English",
     "menu_languages_ukrainian": "Ukrainian",

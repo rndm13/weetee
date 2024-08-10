@@ -271,8 +271,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
         }
 
         if (ImGui::MenuItem(app->i18n.tv_run_tests.c_str(), nullptr, false, !changed)) {
-            std::vector<size_t> tests_to_run =
-                get_tests_to_run(app, app->tree_view.selected_tests.begin(), app->tree_view.selected_tests.end());
+            std::vector<size_t> tests_to_run = get_tests_to_run(
+                app, app->tree_view.selected_tests.begin(), app->tree_view.selected_tests.end());
 
             run_tests(app, tests_to_run);
         }
@@ -892,7 +892,8 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
                 if (ImGui::BeginPopupContextItem("##body_json_context")) {
                     if (ImGui::MenuItem("Format JSON")) {
                         assert(std::holds_alternative<std::string>(test.request.body));
-                        const char* error = json_format_variables(std::get<std::string>(test.request.body), vars);
+                        const char* error =
+                            json_format_variables(std::get<std::string>(test.request.body), vars);
 
                         if (error) {
                             Log(LogLevel::Error, "Failed to parse json: ", error);
@@ -1699,8 +1700,7 @@ void testing_result_row(AppState* app, size_t result_id,
         TestResult& result = results.at(result_idx);
 
         if (!(result.status.load() == app->results.filter ||
-              (result.status.load() > app->results.filter &&
-               app->results.filter_cumulative))) {
+              (result.status.load() > app->results.filter && app->results.filter_cumulative))) {
             continue;
         }
 
@@ -1821,8 +1821,7 @@ void testing_result_row(AppState* app, size_t result_id,
 void testing_results(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
-    if (ImGui::BeginCombo(ICON_FA_FILTER " Filter",
-                          TestResultStatusLabels[app->results.filter])) {
+    if (ImGui::BeginCombo(ICON_FA_FILTER " Filter", TestResultStatusLabels[app->results.filter])) {
         for (size_t i = 0; i < ARRAY_SIZE(TestResultStatusLabels); i++) {
             if (ImGui::Selectable(TestResultStatusLabels[i], i == app->results.filter)) {
                 app->results.filter = static_cast<TestResultStatus>(i);
@@ -1902,6 +1901,10 @@ void remote_file_sync(AppState* app) noexcept {
     if (ImGui::Begin("Remote File Sync", &app->sync.show)) {
         ImGui::InputText("Remote Host##host", &app->conf.sync_hostname);
 
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            app->conf.save_file();
+        }
+
         if (app->conf.sync_session.status != REQUESTABLE_FOUND) {
             if (display_requestable_wait(
                     app->conf.sync_session,
@@ -1918,8 +1921,12 @@ void remote_file_sync(AppState* app) noexcept {
                     params.emplace("password", app->sync.password);
                     params.emplace("remember_me", app->sync.remember_me ? "1" : "0");
                     execute_requestable(
-                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/login", "", params,
-                        [](auto& requestable, std::string data) { requestable.data = data; });
+                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/login",
+                        "", params,
+                        [app](auto& sync_session, std::string data) { 
+                            sync_session.data = data; 
+                            app->conf.save_file();
+                        });
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Register")) {
@@ -1927,8 +1934,8 @@ void remote_file_sync(AppState* app) noexcept {
                     params.emplace("name", app->sync.name);
                     params.emplace("password", app->sync.password);
                     execute_requestable(
-                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/register", "",
-                        params,
+                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/register",
+                        "", params,
                         [](auto& requestable, std::string data) { requestable.data = data; });
                 }
             }
@@ -1938,8 +1945,9 @@ void remote_file_sync(AppState* app) noexcept {
             if (ImGui::Button("Logout")) {
                 httplib::Params params;
                 params.emplace("session_token", app->conf.sync_session.data);
-                execute_requestable(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/logout",
-                                    "", params, [app](auto& requestable, std::string data) {
+                execute_requestable(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
+                                    "/logout", "", params,
+                                    [app](auto& requestable, std::string data) {
                                         app->conf.sync_session.status = REQUESTABLE_NONE;
                                     });
                 app->sync = {};
@@ -2021,8 +2029,8 @@ void remote_file_sync(AppState* app) noexcept {
                     params.emplace("session_token", app->conf.sync_session.data);
                     params.emplace("file_name", app->sync.file_name);
 
-                    execute_requestable(app, app->sync.file_save, HTTP_POST, app->conf.sync_hostname,
-                                        "/file", body, params,
+                    execute_requestable(app, app->sync.file_save, HTTP_POST,
+                                        app->conf.sync_hostname, "/file", body, params,
                                         [app](auto& requestable, std::string data) {
                                             requestable.data = true;
                                             app->sync.files = {};
@@ -2043,16 +2051,16 @@ std::vector<HelloImGui::DockingSplit> splits() noexcept {
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
-    auto tab_editor_window = HelloImGui::DockableWindow(app->i18n.win_editor, "MainDockSpace",
+    auto tab_editor_window = HelloImGui::DockableWindow("Editor###win_editor", "MainDockSpace",
                                                         [app]() { tabbed_editor(app); });
 
-    auto tests_window = HelloImGui::DockableWindow(app->i18n.win_tests, "SideBarDockSpace",
+    auto tests_window = HelloImGui::DockableWindow("Tests###win_tests", "SideBarDockSpace",
                                                    [app]() { tree_view(app); });
 
-    auto results_window = HelloImGui::DockableWindow(app->i18n.win_results, "MainDockSpace",
+    auto results_window = HelloImGui::DockableWindow("Results###win_results", "MainDockSpace",
                                                      [app]() { testing_results(app); });
 
-    auto logs_window = HelloImGui::DockableWindow(app->i18n.win_logs, "LogDockSpace",
+    auto logs_window = HelloImGui::DockableWindow("Logs###win_logs", "LogDockSpace",
                                                   [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, results_window, logs_window};
@@ -2186,14 +2194,18 @@ void show_app_menu_items(AppState* app) noexcept {
     if (ImGui::BeginMenu(app->i18n.menu_languages.c_str())) {
         if (ImGui::MenuItem(app->i18n.menu_languages_english.c_str())) {
             app->conf.language = "en";
-            HelloImGui::SaveUserPref("language", "en");
+
             app->load_i18n();
+
+            app->conf.save_file();
         }
 
         if (ImGui::MenuItem(app->i18n.menu_languages_ukrainian.c_str())) {
             app->conf.language = "ua";
-            HelloImGui::SaveUserPref("language", "ua");
+
             app->load_i18n();
+
+            app->conf.save_file();
         }
 
         ImGui::EndMenu();
@@ -2300,12 +2312,6 @@ void show_gui(AppState* app) noexcept {
 }
 
 void pre_frame(AppState* app) noexcept {
-    static std::string old_language = app->conf.language;
-
-    // if (old_language != app->language) {
-    //     old_language = app->language;
-    //     app->runner_params->dockingParams.dockableWindows = windows(app);
-    // }
 }
 
 void load_fonts(AppState* app) noexcept {

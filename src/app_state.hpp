@@ -50,6 +50,15 @@ struct UserConfig {
 
     std::string sync_hostname = "https://weetee-sync.vercel.app";
     Requestable<std::string> sync_session = {};
+
+    static constexpr const char* filename = FS_SLASH "weetee" FS_SLASH "user_config.wt";
+
+    void save(SaveState* save) const noexcept;
+    bool can_load(SaveState* save) const noexcept;
+    void load(SaveState* save) noexcept;
+
+    void open_file() noexcept;
+    void save_file() noexcept;
 };
 
 struct SyncState {

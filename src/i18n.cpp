@@ -22,11 +22,6 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
         return;
     }
 
-    I18N_LOAD_ID(j, i18n, "", win_tests);
-    I18N_LOAD_ID(j, i18n, "", win_editor);
-    I18N_LOAD_ID(j, i18n, "", win_results);
-    I18N_LOAD_ID(j, i18n, "", win_logs);
-
     I18N_LOAD_ID(j, i18n, "", menu_languages);
     I18N_LOAD_ID(j, i18n, "", menu_languages_english);
     I18N_LOAD_ID(j, i18n, "", menu_languages_ukrainian);
