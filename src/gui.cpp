@@ -102,10 +102,10 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     bool changed = false; // This also indicates that previous analysis data is no longer valid
 
     if (ImGui::BeginPopupContextItem()) {
-        app->tree_view_focused = true;
+        app->tree_view.window_focused = true;
 
-        if (!app->selected_tests.contains(nested_test_id)) {
-            app->selected_tests.clear();
+        if (!app->tree_view.selected_tests.contains(nested_test_id)) {
+            app->tree_view.selected_tests.clear();
             app->select_with_children(nested_test_id);
         }
 
@@ -140,7 +140,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
                 // skip if not a group or same parent for selected or selected group
                 if (!std::holds_alternative<Group>(nt) ||
                     (analysis.same_parent && analysis.parent_id == id) ||
-                    app->selected_tests.contains(id)) {
+                    app->tree_view.selected_tests.contains(id)) {
                     continue;
                 }
 
@@ -272,7 +272,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
         if (ImGui::MenuItem(app->i18n.tv_run_tests.c_str(), nullptr, false, !changed)) {
             std::vector<size_t> tests_to_run =
-                get_tests_to_run(app, app->selected_tests.begin(), app->selected_tests.end());
+                get_tests_to_run(app, app->tree_view.selected_tests.begin(), app->tree_view.selected_tests.end());
 
             run_tests(app, tests_to_run);
         }
@@ -281,7 +281,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     }
 
     if (changed) {
-        app->selected_tests.clear();
+        app->tree_view.selected_tests.clear();
 
         app->undo_history.push_undo_history(app);
     }
@@ -290,7 +290,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 }
 
 bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept {
-    bool item_is_selected = app->selected_tests.contains(id);
+    bool item_is_selected = app->tree_view.selected_tests.contains(id);
 
     bool clicked = false;
     if (ImGui::Selectable(label, item_is_selected, SELECTABLE_FLAGS, ImVec2(0, 0))) {
@@ -302,7 +302,7 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
                 app->select_with_children(id);
             }
         } else if (io.KeyShift) {
-            app->selected_tests.clear();
+            app->tree_view.selected_tests.clear();
 
             bool selection_start = false;
             size_t it_group_id = 0, it_idx = 0;
@@ -321,11 +321,11 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
 
                 size_t it_id = std::visit(IDVisitor(), *it_nt);
 
-                if (it_id == app->tree_view_last_selected_idx || it_id == id) {
+                if (it_id == app->tree_view.last_selected_idx || it_id == id) {
                     selection_start = !selection_start;
                 }
 
-                if (selection_start || it_id == app->tree_view_last_selected_idx || it_id == id) {
+                if (selection_start || it_id == app->tree_view.last_selected_idx || it_id == id) {
                     app->select_with_children<true>(it_id);
                 } else {
                     app->select_with_children<false>(it_id);
@@ -334,12 +334,12 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
                 iterate_over_nested_children(app, &it_group_id, &it_idx, root->parent_id);
             }
         } else {
-            app->selected_tests.clear();
+            app->tree_view.selected_tests.clear();
 
             app->select_with_children(id);
         }
 
-        app->tree_view_last_selected_idx = id;
+        app->tree_view.last_selected_idx = id;
 
         clicked = true;
     }
@@ -350,7 +350,7 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
 bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) noexcept {
     bool changed = false;
     // Don't allow move into itself
-    if (app->selected_tests.contains(nested_test_id)) {
+    if (app->tree_view.selected_tests.contains(nested_test_id)) {
         return changed;
     }
 
@@ -401,7 +401,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
     size_t id = test.id;
     bool changed = false;
 
-    if (app->filtered_tests.contains(id)) {
+    if (app->tree_view.filtered_tests.contains(id)) {
         return changed;
     }
 
@@ -445,14 +445,14 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
         tree_view_selectable(app, id, ("###" + to_string(test.id)).c_str()) &&
         io.MouseDoubleClicked[0];
 
-    if (!changed && !app->selected_tests.contains(0) &&
+    if (!changed && !app->tree_view.selected_tests.contains(0) &&
         ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
-        if (!app->selected_tests.contains(test.id)) {
-            app->selected_tests.clear();
+        if (!app->tree_view.selected_tests.contains(test.id)) {
+            app->tree_view.selected_tests.clear();
             app->select_with_children(test.id);
         }
 
-        ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
+        ImGui::Text("Moving %zu item(s)", app->tree_view.selected_tests.size());
         ImGui::SetDragDropPayload("MOVE_SELECTED", &test.id, sizeof(size_t));
         ImGui::EndDragDropSource();
     }
@@ -482,7 +482,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
     size_t id = group.id;
     bool changed = false;
 
-    if (app->filtered_tests.contains(id)) {
+    if (app->tree_view.filtered_tests.contains(id)) {
         return changed;
     }
 
@@ -559,14 +559,14 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
         group.flags ^= GROUP_OPEN; // toggle
     }
 
-    if (!changed && !app->selected_tests.contains(0) &&
+    if (!changed && !app->tree_view.selected_tests.contains(0) &&
         ImGui::BeginDragDropSource(DRAG_SOURCE_FLAGS)) {
-        if (!app->selected_tests.contains(group.id)) {
-            app->selected_tests.clear();
+        if (!app->tree_view.selected_tests.contains(group.id)) {
+            app->tree_view.selected_tests.clear();
             app->select_with_children(group.id);
         }
 
-        ImGui::Text("Moving %zu item(s)", app->selected_tests.size());
+        ImGui::Text("Moving %zu item(s)", app->tree_view.selected_tests.size());
         ImGui::SetDragDropPayload("MOVE_SELECTED", nullptr, 0);
         ImGui::EndDragDropSource();
     }
@@ -601,7 +601,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 
         // after the opened group
         if (group.id != 0 && ImGui::IsDragDropActive() && vec2_intersect(mouse, min, max) &&
-            !app->selected_tests.contains(id)) {
+            !app->tree_view.selected_tests.contains(id)) {
             changed |= tree_view_dnd_target_row(app, group.parent_id, idx, indentation);
         }
     }
@@ -612,12 +612,12 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
 }
 
 void tree_view(AppState* app) noexcept {
-    app->tree_view_focused = ImGui::IsWindowFocused();
+    app->tree_view.window_focused = ImGui::IsWindowFocused();
 
     ImGui::PushFont(app->regular_font);
 
     ImGui::SetNextItemWidth(-1);
-    bool changed = ImGui::InputText("##tree_view_search", &app->tree_view_filter);
+    bool changed = ImGui::InputText("##tree_view_search", &app->tree_view.filter);
 
     if (ImGui::BeginTable("tests", 4)) {
         ImGui::TableSetupColumn("test");
@@ -1608,19 +1608,19 @@ void tabbed_editor(AppState* app) noexcept {
 
     static bool show_homepage = true;
 
-    if (app->editor_open_tabs.size() <= 0) {
+    if (app->editor.open_tabs.size() <= 0) {
         show_homepage = true;
     }
 
     if (ImGui::BeginTabBar("editor", ImGuiTabBarFlags_Reorderable)) {
         if (ImGui::BeginTabItem(app->i18n.ed_home.c_str(),
-                                app->editor_open_tabs.size() > 0 ? &show_homepage : nullptr)) {
+                                app->editor.open_tabs.size() > 0 ? &show_homepage : nullptr)) {
             ImGui::Text("%s", app->i18n.ed_home_content.c_str());
             ImGui::EndTabItem();
         }
 
         size_t closed_id = -1ull;
-        for (auto& [id, tab] : app->editor_open_tabs) {
+        for (auto& [id, tab] : app->editor.open_tabs) {
             NestedTest* original = &app->tests[tab.original_idx];
             EditorTabResult result;
             switch (app->tests[tab.original_idx].index()) {
@@ -1650,7 +1650,7 @@ void tabbed_editor(AppState* app) noexcept {
         }
 
         if (closed_id != -1ull) {
-            app->editor_open_tabs.erase(closed_id);
+            app->editor.open_tabs.erase(closed_id);
         }
         ImGui::EndTabBar();
     }
@@ -1675,16 +1675,16 @@ void testing_result_row(AppState* app, size_t result_id,
             for (size_t sel_result_idx = 0; sel_result_idx < sel_results.size(); sel_result_idx++) {
                 TestResult& sel_result = sel_results.at(sel_result_idx);
 
-                if (!(sel_result.status.load() == app->test_results_filter ||
-                      (sel_result.status.load() > app->test_results_filter &&
-                       app->test_results_filter_cumulative))) {
+                if (!(sel_result.status.load() == app->results.filter ||
+                      (sel_result.status.load() > app->results.filter &&
+                       app->results.filter_cumulative))) {
                     continue;
                 }
 
                 sel_result.selected = selection_start;
 
-                if ((sel_result_id == app->test_results_last_selected_id &&
-                     sel_result_idx == app->test_results_last_selected_idx) ||
+                if ((sel_result_id == app->results.last_selected_id &&
+                     sel_result_idx == app->results.last_selected_idx) ||
                     (sel_result_id == result_id && sel_result_idx == result_idx)) {
                     selection_start = !selection_start;
                     sel_result.selected = true;
@@ -1698,9 +1698,9 @@ void testing_result_row(AppState* app, size_t result_id,
     for (size_t result_idx = 0; result_idx < results.size(); result_idx++) {
         TestResult& result = results.at(result_idx);
 
-        if (!(result.status.load() == app->test_results_filter ||
-              (result.status.load() > app->test_results_filter &&
-               app->test_results_filter_cumulative))) {
+        if (!(result.status.load() == app->results.filter ||
+              (result.status.load() > app->results.filter &&
+               app->results.filter_cumulative))) {
             continue;
         }
 
@@ -1726,8 +1726,8 @@ void testing_result_row(AppState* app, size_t result_id,
                     result.selected = true;
                 }
 
-                app->test_results_last_selected_id = result_id;
-                app->test_results_last_selected_idx = result_idx;
+                app->results.last_selected_id = result_id;
+                app->results.last_selected_idx = result_idx;
             }
 
             if (ImGui::BeginPopupContextItem()) {
@@ -1822,16 +1822,16 @@ void testing_results(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::BeginCombo(ICON_FA_FILTER " Filter",
-                          TestResultStatusLabels[app->test_results_filter])) {
+                          TestResultStatusLabels[app->results.filter])) {
         for (size_t i = 0; i < ARRAY_SIZE(TestResultStatusLabels); i++) {
-            if (ImGui::Selectable(TestResultStatusLabels[i], i == app->test_results_filter)) {
-                app->test_results_filter = static_cast<TestResultStatus>(i);
+            if (ImGui::Selectable(TestResultStatusLabels[i], i == app->results.filter)) {
+                app->results.filter = static_cast<TestResultStatus>(i);
             }
         }
         ImGui::EndCombo();
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Cumulative", &app->test_results_filter_cumulative);
+    ImGui::Checkbox("Cumulative", &app->results.filter_cumulative);
 
     if (ImGui::BeginTable("results", 3, TABLE_FLAGS)) {
         ImGui::TableSetupColumn("Test");
@@ -1899,61 +1899,59 @@ void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType
 }
 
 void remote_file_sync(AppState* app) noexcept {
-    if (ImGui::Begin("Remote File Sync", &app->sync_show)) {
-        ImGui::InputText("Remote Host##host", &app->sync_hostname);
+    if (ImGui::Begin("Remote File Sync", &app->sync.show)) {
+        ImGui::InputText("Remote Host##host", &app->conf.sync_hostname);
 
-        if (app->sync_session.status != REQUESTABLE_FOUND) {
+        if (app->conf.sync_session.status != REQUESTABLE_FOUND) {
             if (display_requestable_wait(
-                    app->sync_session,
+                    app->conf.sync_session,
                     "Please wait, your authentication request is being processed")) {
                 ImGui::Text("Login/Register");
-                ImGui::Text("%s", app->sync_session.error.c_str());
-                ImGui::InputText("Name##name", &app->sync_name);
-                ImGui::InputText("Password##password", &app->sync_password,
+                ImGui::Text("%s", app->conf.sync_session.error.c_str());
+                ImGui::InputText("Name##name", &app->sync.name);
+                ImGui::InputText("Password##password", &app->sync.password,
                                  ImGuiInputTextFlags_Password);
-                ImGui::Checkbox("Remember Me##remember", &app->sync_remember_me);
+                ImGui::Checkbox("Remember Me##remember", &app->sync.remember_me);
                 if (ImGui::Button("Login")) {
                     httplib::Params params;
-                    params.emplace("name", app->sync_name);
-                    params.emplace("password", app->sync_password);
-                    params.emplace("remember_me", app->sync_remember_me ? "1" : "0");
+                    params.emplace("name", app->sync.name);
+                    params.emplace("password", app->sync.password);
+                    params.emplace("remember_me", app->sync.remember_me ? "1" : "0");
                     execute_requestable(
-                        app, app->sync_session, HTTP_GET, app->sync_hostname, "/login", "", params,
+                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/login", "", params,
                         [](auto& requestable, std::string data) { requestable.data = data; });
                 }
                 ImGui::SameLine();
                 if (ImGui::Button("Register")) {
                     httplib::Params params;
-                    params.emplace("name", app->sync_name);
-                    params.emplace("password", app->sync_password);
+                    params.emplace("name", app->sync.name);
+                    params.emplace("password", app->sync.password);
                     execute_requestable(
-                        app, app->sync_session, HTTP_GET, app->sync_hostname, "/register", "",
+                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/register", "",
                         params,
                         [](auto& requestable, std::string data) { requestable.data = data; });
                 }
             }
         } else {
-            ImGui::Text("You are logged in as %s", app->sync_name.c_str());
+            ImGui::Text("You are logged in as %s", app->sync.name.c_str());
             ImGui::SameLine();
             if (ImGui::Button("Logout")) {
                 httplib::Params params;
-                params.emplace("session_token", app->sync_session.data);
-                execute_requestable(app, app->sync_session, HTTP_GET, app->sync_hostname, "/logout",
+                params.emplace("session_token", app->conf.sync_session.data);
+                execute_requestable(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/logout",
                                     "", params, [app](auto& requestable, std::string data) {
-                                        app->sync_session.status = REQUESTABLE_NONE;
+                                        app->conf.sync_session.status = REQUESTABLE_NONE;
                                     });
-                app->sync_name = "";
-                app->sync_password = "";
-                app->sync_session.data = "";
-                app->sync_files = {};
-                app->sync_file_save = {};
-                app->sync_file_open = {};
+                app->sync = {};
+                app->sync.show = true;
+
+                app->conf.sync_session.data = "";
             }
 
             auto request_file_list = [app]() {
                 httplib::Params params;
-                params.emplace("session_token", app->sync_session.data);
-                execute_requestable(app, app->sync_files, HTTP_GET, app->sync_hostname,
+                params.emplace("session_token", app->conf.sync_session.data);
+                execute_requestable(app, app->sync.files, HTTP_GET, app->conf.sync_hostname,
                                     "/file-list", "", params,
                                     [](auto& requestable, std::string data) {
                                         auto json_data = nlohmann::json::parse(data);
@@ -1967,40 +1965,40 @@ void remote_file_sync(AppState* app) noexcept {
                                     });
             };
 
-            if (app->sync_files.status == REQUESTABLE_NONE) {
+            if (app->sync.files.status == REQUESTABLE_NONE) {
                 request_file_list();
             }
-            if (display_requestable_wait(app->sync_files, "Fetching a list of your files")) {
+            if (display_requestable_wait(app->sync.files, "Fetching a list of your files")) {
                 if (ImGui::Button("Retry Fetch")) {
                     request_file_list();
                 }
             }
 
-            if (app->sync_files.status == REQUESTABLE_FOUND) {
-                ImGui::Text("%s", app->sync_file_open.error.c_str());
-                ImGui::Text("%s", app->sync_files.error.c_str());
-                if (display_requestable_wait(app->sync_file_open, "Opening file...")) {
-                    if (app->sync_file_open.status == REQUESTABLE_FOUND) {
+            if (app->sync.files.status == REQUESTABLE_FOUND) {
+                ImGui::Text("%s", app->sync.file_open.error.c_str());
+                ImGui::Text("%s", app->sync.files.error.c_str());
+                if (display_requestable_wait(app->sync.file_open, "Opening file...")) {
+                    if (app->sync.file_open.status == REQUESTABLE_FOUND) {
                         std::stringstream ss;
-                        ss << app->sync_file_open.data;
+                        ss << app->sync.file_open.data;
 
                         app->open_file(ss);
 
-                        app->sync_file_open = {};
+                        app->sync.file_open = {};
                     }
 
-                    for (const std::string& name : app->sync_files.data) {
+                    for (const std::string& name : app->sync.files.data) {
                         ImGui::PushID(name.c_str());
                         ImGui::Text("%s", name.c_str());
                         ImGui::SameLine();
                         if (ImGui::Button("Open##open")) {
                             httplib::Params params;
-                            params.emplace("session_token", app->sync_session.data);
+                            params.emplace("session_token", app->conf.sync_session.data);
                             params.emplace("file_name", name);
-                            execute_requestable(app, app->sync_file_open, HTTP_GET,
-                                                app->sync_hostname, "/file", "", params,
+                            execute_requestable(app, app->sync.file_open, HTTP_GET,
+                                                app->conf.sync_hostname, "/file", "", params,
                                                 [app, name](auto& requestable, std::string data) {
-                                                    app->filename = name;
+                                                    app->local_filename = name;
                                                     requestable.data = data;
                                                 });
                         }
@@ -2009,25 +2007,25 @@ void remote_file_sync(AppState* app) noexcept {
                 }
             }
 
-            if (display_requestable_wait(app->sync_file_save, "Saving file...")) {
-                ImGui::Text("%s", app->sync_file_save.error.c_str());
-                ImGui::InputText("##file_name", &app->sync_file_name);
+            if (display_requestable_wait(app->sync.file_save, "Saving file...")) {
+                ImGui::Text("%s", app->sync.file_save.error.c_str());
+                ImGui::InputText("##file_name", &app->sync.file_name);
                 ImGui::SameLine();
                 if (ImGui::Button("Save")) {
-                    app->filename = app->sync_file_name;
+                    app->local_filename = app->sync.file_name;
                     std::stringstream out;
                     app->save_file(out);
                     std::string body = out.str();
 
                     httplib::Params params;
-                    params.emplace("session_token", app->sync_session.data);
-                    params.emplace("file_name", app->sync_file_name);
+                    params.emplace("session_token", app->conf.sync_session.data);
+                    params.emplace("file_name", app->sync.file_name);
 
-                    execute_requestable(app, app->sync_file_save, HTTP_POST, app->sync_hostname,
+                    execute_requestable(app, app->sync.file_save, HTTP_POST, app->conf.sync_hostname,
                                         "/file", body, params,
                                         [app](auto& requestable, std::string data) {
                                             requestable.data = true;
-                                            app->sync_files = {};
+                                            app->sync.files = {};
                                         });
                 }
             }
@@ -2076,17 +2074,17 @@ void save_as_file_dialog(AppState* app) noexcept {
     std::string result = save_file_dialog.result();
 
     if (result.size() > 0) {
-        app->filename = result;
-        std::ofstream out(app->filename.value());
+        app->local_filename = result;
+        std::ofstream out(app->local_filename.value());
         app->save_file(out);
     }
 }
 
 void save_file_dialog(AppState* app) noexcept {
-    if (!app->filename.has_value()) {
+    if (!app->local_filename.has_value()) {
         save_as_file_dialog(app);
     } else {
-        std::ofstream out(app->filename.value());
+        std::ofstream out(app->local_filename.value());
         app->save_file(out);
     }
 }
@@ -2097,8 +2095,8 @@ void open_file_dialog(AppState* app) noexcept {
 
     std::vector<std::string> result = open_file_dialog.result();
     if (result.size() > 0) {
-        app->filename = result[0];
-        std::ifstream in(app->filename.value());
+        app->local_filename = result[0];
+        std::ifstream in(app->local_filename.value());
         app->open_file(in);
     }
 }
@@ -2148,7 +2146,7 @@ void show_menus(AppState* app) noexcept {
         }
 
         if (ImGui::MenuItem("Remote File Sync")) {
-            app->sync_show = true;
+            app->sync.show = true;
         }
         ImGui::EndMenu();
     }
@@ -2187,13 +2185,13 @@ void show_menus(AppState* app) noexcept {
 void show_app_menu_items(AppState* app) noexcept {
     if (ImGui::BeginMenu(app->i18n.menu_languages.c_str())) {
         if (ImGui::MenuItem(app->i18n.menu_languages_english.c_str())) {
-            app->language = "en";
+            app->conf.language = "en";
             HelloImGui::SaveUserPref("language", "en");
             app->load_i18n();
         }
 
         if (ImGui::MenuItem(app->i18n.menu_languages_ukrainian.c_str())) {
-            app->language = "ua";
+            app->conf.language = "ua";
             HelloImGui::SaveUserPref("language", "ua");
             app->load_i18n();
         }
@@ -2216,11 +2214,11 @@ void show_gui(AppState* app) noexcept {
         first_call = false;
     }
 
-    if (!app->tree_view_focused) {
-        app->selected_tests.clear();
+    if (!app->tree_view.window_focused) {
+        app->tree_view.selected_tests.clear();
     }
 
-    if (app->sync_show) {
+    if (app->sync.show) {
         remote_file_sync(app);
     }
 
@@ -2247,11 +2245,11 @@ void show_gui(AppState* app) noexcept {
     }
 
     // Tree view
-    if (app->selected_tests.size() > 0) {
+    if (app->tree_view.selected_tests.size() > 0) {
         // Copy pasting
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
             app->copy();
-        } else if (!app->selected_tests.contains(0) && io.KeyCtrl &&
+        } else if (!app->tree_view.selected_tests.contains(0) && io.KeyCtrl &&
                    ImGui::IsKeyPressed(ImGuiKey_X)) {
             changed = true;
 
@@ -2290,7 +2288,7 @@ void show_gui(AppState* app) noexcept {
 
         if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
             changed = true;
-            if (!app->selected_tests.contains(0)) { // root not selected
+            if (!app->tree_view.selected_tests.contains(0)) { // root not selected
                 app->delete_selected();
             }
         }
@@ -2302,7 +2300,7 @@ void show_gui(AppState* app) noexcept {
 }
 
 void pre_frame(AppState* app) noexcept {
-    static std::string old_language = app->language;
+    static std::string old_language = app->conf.language;
 
     // if (old_language != app->language) {
     //     old_language = app->language;

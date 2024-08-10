@@ -365,16 +365,16 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         return;
     }
 
-    this->selected_tests.clear();
+    this->tree_view.selected_tests.clear();
     this->tests = {
         {0, root_initial},
     };
 
-    this->filename = std::nullopt;
+    this->local_filename = std::nullopt;
     this->id_counter = 0;
     this->test_results.clear();
-    this->filtered_tests.clear();
-    this->editor_open_tabs.clear();
+    this->tree_view.filtered_tests.clear();
+    this->editor.open_tabs.clear();
 
     try {
         if (swagger.contains("info")) {

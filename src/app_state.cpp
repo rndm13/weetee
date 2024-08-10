@@ -85,10 +85,10 @@ void AppState::editor_open_tab(size_t id) noexcept {
 
     this->runner_params->dockingParams.dockableWindowOfName("Editor###win_editor")
         ->focusWindowAtNextFrame = true;
-    if (this->editor_open_tabs.contains(id)) {
-        this->editor_open_tabs[id].just_opened = true;
+    if (this->editor.open_tabs.contains(id)) {
+        this->editor.open_tabs[id].just_opened = true;
     } else {
-        this->editor_open_tabs[id] = EditorTab{
+        this->editor.open_tabs[id] = EditorTab{
             .original_idx = id,
             .name = std::visit(LabelVisitor(), this->tests[id]),
         };
@@ -110,24 +110,25 @@ void AppState::focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_test
 }
 
 void AppState::post_open() noexcept {
-    this->editor_open_tabs.clear();
-    this->selected_tests.clear();
+    this->editor.open_tabs.clear();
+    this->tree_view.selected_tests.clear();
     this->undo_history.reset_undo_history(this);
 }
 
 void AppState::post_undo() noexcept {
-    for (auto it = this->editor_open_tabs.begin(); it != this->editor_open_tabs.end();) {
+    for (auto it = this->editor.open_tabs.begin(); it != this->editor.open_tabs.end();) {
         if (!this->tests.contains(it->first)) {
-            it = this->editor_open_tabs.erase(it);
+            it = this->editor.open_tabs.erase(it);
         } else {
             ++it;
         }
     }
 
     // remove missing tests from selected
-    for (auto it = this->selected_tests.begin(); it != this->selected_tests.end();) {
+    for (auto it = this->tree_view.selected_tests.begin();
+         it != this->tree_view.selected_tests.end();) {
         if (!this->tests.contains(*it)) {
-            it = this->selected_tests.erase(it);
+            it = this->tree_view.selected_tests.erase(it);
         } else {
             ++it;
         }
@@ -135,7 +136,7 @@ void AppState::post_undo() noexcept {
 
     // add newly selected if parent is selected
     for (auto& [id, nt] : this->tests) {
-        if (this->parent_selected(id) && !this->selected_tests.contains(id)) {
+        if (this->parent_selected(id) && !this->tree_view.selected_tests.contains(id)) {
             this->select_with_children(std::visit(ParentIDVisitor(), nt));
         }
     }
@@ -211,7 +212,8 @@ bool AppState::parent_disabled(size_t id) const noexcept {
 bool AppState::parent_selected(size_t id) const noexcept {
     assert(this->tests.contains(id));
 
-    return this->selected_tests.contains(std::visit(ParentIDVisitor(), this->tests.at(id)));
+    return this->tree_view.selected_tests.contains(
+        std::visit(ParentIDVisitor(), this->tests.at(id)));
 }
 
 ClientSettings AppState::get_cli_settings(size_t id) const noexcept {
@@ -234,7 +236,7 @@ ClientSettings AppState::get_cli_settings(size_t id) const noexcept {
 
 std::vector<size_t> AppState::select_top_layer() noexcept {
     std::vector<size_t> result;
-    for (auto sel_id : this->selected_tests) {
+    for (auto sel_id : this->tree_view.selected_tests) {
         if (!this->parent_selected(sel_id)) {
             result.push_back(sel_id);
         }
@@ -245,7 +247,7 @@ std::vector<size_t> AppState::select_top_layer() noexcept {
 
 AppState::SelectAnalysisResult AppState::select_analysis() const noexcept {
     SelectAnalysisResult result;
-    result.top_selected_count = this->selected_tests.size();
+    result.top_selected_count = this->tree_view.selected_tests.size();
 
     auto check_parent = [&result](size_t id) {
         if (!result.same_parent || result.selected_root) {
@@ -259,7 +261,7 @@ AppState::SelectAnalysisResult AppState::select_analysis() const noexcept {
         }
     };
 
-    for (auto test_id : this->selected_tests) {
+    for (auto test_id : this->tree_view.selected_tests) {
         if (this->parent_selected(test_id)) {
             result.top_selected_count--;
             continue;
@@ -346,8 +348,8 @@ void AppState::delete_test(size_t id) noexcept {
     // remove from tests
     this->tests.erase(id);
 
-    this->editor_open_tabs.erase(id);
-    this->selected_tests.erase(id);
+    this->editor.open_tabs.erase(id);
+    this->tree_view.selected_tests.erase(id);
 }
 
 void AppState::delete_selected() noexcept {
@@ -357,7 +359,7 @@ void AppState::delete_selected() noexcept {
 }
 
 void AppState::enable_selected(bool enable) noexcept {
-    for (size_t it_idx : this->selected_tests) {
+    for (size_t it_idx : this->tree_view.selected_tests) {
         assert(this->tests.contains(it_idx));
         NestedTest* it_nt = &this->tests.at(it_idx);
 
@@ -392,7 +394,7 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
 
     // remove selected from old parent
     size_t count = std::erase_if(parent_group.children_ids,
-                                 [&sel_tests = this->selected_tests](size_t child_id) {
+                                 [&sel_tests = this->tree_view.selected_tests](size_t child_id) {
                                      return sel_tests.contains(child_id);
                                  });
     assert(count >= 1);
@@ -409,14 +411,14 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     };
 
     // Copy selected to new group
-    std::copy_if(this->selected_tests.begin(), this->selected_tests.end(),
+    std::copy_if(this->tree_view.selected_tests.begin(), this->tree_view.selected_tests.end(),
                  std::back_inserter(new_group.children_ids), [this](size_t selected_id) {
                      assert(this->tests.contains(selected_id));
                      return !this->parent_selected(selected_id);
                  });
 
     // Set selected parent id to new group's id
-    std::for_each(this->selected_tests.begin(), this->selected_tests.end(),
+    std::for_each(this->tree_view.selected_tests.begin(), this->tree_view.selected_tests.end(),
                   [this, id](size_t test_id) {
                       assert(this->tests.contains(test_id));
 
@@ -434,8 +436,8 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
 void AppState::copy() noexcept {
     std::unordered_map<size_t, NestedTest> to_copy = {};
 
-    to_copy.reserve(this->selected_tests.size());
-    for (auto sel_id : this->selected_tests) {
+    to_copy.reserve(this->tree_view.selected_tests.size());
+    for (auto sel_id : this->tree_view.selected_tests) {
         assert(this->tests.contains(sel_id));
 
         to_copy.emplace(sel_id, this->tests.at(sel_id));
@@ -524,9 +526,9 @@ void AppState::paste(Group* group) noexcept {
 
 void AppState::move(Group* group, size_t idx) noexcept {
     // Not moving into itself
-    assert(!this->selected_tests.contains(group->id));
+    assert(!this->tree_view.selected_tests.contains(group->id));
 
-    for (size_t id : this->selected_tests) {
+    for (size_t id : this->tree_view.selected_tests) {
         assert(this->tests.contains(id));
 
         if (this->parent_selected(id)) {
@@ -567,7 +569,7 @@ bool AppState::filter(Group& group) noexcept {
     for (size_t child_id : group.children_ids) {
         result &= this->filter(&this->tests[child_id]);
     }
-    result &= !str_contains(group.name, this->tree_view_filter);
+    result &= !str_contains(group.name, this->tree_view.filter);
 
     if (result) {
         group.flags &= ~GROUP_OPEN;
@@ -578,30 +580,30 @@ bool AppState::filter(Group& group) noexcept {
 }
 
 bool AppState::filter(Test& test) noexcept {
-    return !str_contains(test.endpoint, this->tree_view_filter);
+    return !str_contains(test.endpoint, this->tree_view.filter);
 }
 
 bool AppState::filter(NestedTest* nt) noexcept {
     bool filter = std::visit([this](auto& elem) { return this->filter(elem); }, *nt);
 
     if (filter) {
-        this->filtered_tests.insert(std::visit(IDVisitor(), *nt));
+        this->tree_view.filtered_tests.insert(std::visit(IDVisitor(), *nt));
     } else {
-        this->filtered_tests.erase(std::visit(IDVisitor(), *nt));
+        this->tree_view.filtered_tests.erase(std::visit(IDVisitor(), *nt));
     }
     return filter;
 }
 
 void AppState::save_file(std::ostream& out) noexcept {
     if (!out) {
-        Log(LogLevel::Error, "Failed to save to file '%s'", this->filename->c_str());
+        Log(LogLevel::Error, "Failed to save to file '%s'", this->local_filename->c_str());
         return;
     }
 
     SaveState save{};
     save.save(*this);
     save.finish_save();
-    Log(LogLevel::Info, "Saving to '%s': %zuB", this->filename->c_str(), save.original_size);
+    Log(LogLevel::Info, "Saving to '%s': %zuB", this->local_filename->c_str(), save.original_size);
     if (!save.write(out)) {
         Log(LogLevel::Error, "Failed to save, likely size exeeds maximum");
     }
@@ -609,7 +611,7 @@ void AppState::save_file(std::ostream& out) noexcept {
 
 void AppState::open_file(std::istream& in) noexcept {
     if (!in) {
-        Log(LogLevel::Error, "Failed to open file \"%s\"", this->filename->c_str());
+        Log(LogLevel::Error, "Failed to open file \"%s\"", this->local_filename->c_str());
         return;
     }
 
@@ -619,7 +621,8 @@ void AppState::open_file(std::istream& in) noexcept {
         return;
     }
 
-    Log(LogLevel::Info, "Loading from '%s': %zuB", this->filename->c_str(), save.original_size);
+    Log(LogLevel::Info, "Loading from '%s': %zuB", this->local_filename->c_str(),
+        save.original_size);
     if (!save.can_load(*this) || save.load_idx != save.original_size) {
         Log(LogLevel::Error, "Failed to load, likely file is invalid");
         return;
@@ -632,7 +635,7 @@ void AppState::open_file(std::istream& in) noexcept {
 
 void AppState::load_i18n() noexcept {
     std::ifstream in(
-        HelloImGui::AssetFileFullPath(this->language + ".json")); // TODO: Add to assets
+        HelloImGui::AssetFileFullPath(this->conf.language + ".json")); // TODO: Add to assets
     this->i18n = nlohmann::json::parse(in).template get<I18N>();
 }
 
@@ -641,8 +644,8 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     this->undo_history.reset_undo_history(this);
 
     // this->language = HelloImGui::LoadUserPref("language");
-    if (this->language.empty()) {
-        this->language = "en";
+    if (this->conf.language.empty()) {
+        this->conf.language = "en";
     }
 
     this->load_i18n();

@@ -17,6 +17,12 @@
 
 using std::to_string;
 
+#ifndef WIN32
+#define FS_SLASH "/"
+#else
+#define FS_SLASH "\\"
+#endif
+
 template <typename R> bool is_ready(std::future<R> const& f) noexcept {
     assert(f.valid());
     return f.wait_until(0) == std::future_status::ready;

@@ -15,6 +15,8 @@
 #include "variant"
 #include "vector"
 
+// TODO: Add unit tests for save_state
+
 static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
 
 struct SaveState {

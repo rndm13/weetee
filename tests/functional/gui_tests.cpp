@@ -254,13 +254,13 @@ void register_tests(AppState* app) noexcept {
 
         ctx->SetRef("");
 
-        app->filename = "/tmp/test.wt";
+        app->local_filename = "/tmp/test.wt";
         ctx->ItemClick(file_menu_selectable, ImGuiMouseButton_Left);
         ctx->ItemClick(save_menu_selectable, ImGuiMouseButton_Left);
 
         tree_view__delete_all(ctx);
 
-        std::ifstream in(app->filename.value());
+        std::ifstream in(app->local_filename.value());
         app->open_file(in);
 
         IM_CHECK_EQ(std::get<Group>(app->tests[0]).children_ids.size(), 3);

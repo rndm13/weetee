@@ -19,6 +19,8 @@
 #include "unordered_map"
 #include "variant"
 
+// TODO: Add unit tests to app_state
+
 using HelloImGui::Log;
 using HelloImGui::LogLevel;
 
@@ -37,11 +39,54 @@ enum RequestableStatus : uint8_t {
     REQUESTABLE_COUNT,
 };
 
-template <class Data>
-struct Requestable {
+template <class Data> struct Requestable {
     RequestableStatus status = REQUESTABLE_NONE;
     std::string error = "";
     Data data = {};
+};
+
+struct UserConfig {
+    std::string language = "en";
+
+    std::string sync_hostname = "https://weetee-sync.vercel.app";
+    Requestable<std::string> sync_session = {};
+};
+
+struct SyncState {
+    bool show = false;
+
+    std::string name = "";
+    std::string password = "";
+    bool remember_me = false;
+
+    Requestable<std::vector<std::string>> files = {};
+    Requestable<std::string> file_open = {};
+
+    std::string file_name = "";
+    Requestable<bool> file_save = {};
+};
+
+struct TreeViewState {
+    size_t last_selected_idx = 0;
+
+    std::string filter;
+    std::unordered_set<size_t> filtered_tests = {};
+    std::unordered_set<size_t> selected_tests = {};
+
+    // Updated every frame
+    bool window_focused;
+};
+
+struct EditorState {
+    bool show_homepage = true;
+    std::unordered_map<size_t, EditorTab> open_tabs = {};
+};
+
+struct ResultsState {
+    size_t last_selected_id = 0;
+    size_t last_selected_idx = 0;
+    TestResultStatus filter = STATUS_OK;
+    bool filter_cumulative = true;
 };
 
 struct AppState {
@@ -49,44 +94,20 @@ struct AppState {
 
     static const Group root_initial;
 
-    std::unordered_map<size_t, NestedTest> tests = {
-        {0, root_initial},
-    };
-    size_t tree_view_last_selected_idx = 0;
+    std::unordered_map<size_t, NestedTest> tests = {{0, root_initial}};
+    std::unordered_map<size_t, std::vector<TestResult>> test_results = {};
 
-    std::string tree_view_filter;
-    std::unordered_set<size_t> filtered_tests = {};
-    std::unordered_set<size_t> selected_tests = {};
+    UserConfig conf = {};
+
+    TreeViewState tree_view = {};
+    EditorState editor = {};
+    ResultsState results = {};
+    SyncState sync = {};
 
     SaveState clipboard;
     UndoHistory undo_history;
 
-    bool editor_show_homepage = true;
-    std::unordered_map<size_t, EditorTab> editor_open_tabs = {};
-
-    std::unordered_map<size_t, std::vector<TestResult>> test_results;
-    size_t test_results_last_selected_id = 0;
-    size_t test_results_last_selected_idx = 0;
-    TestResultStatus test_results_filter = STATUS_OK;
-    bool test_results_filter_cumulative = true;
-
-    std::optional<std::string> filename;
-
-    bool sync_show = false;
-
-    // TODO: Save
-    std::string sync_hostname = "https://weetee-sync.vercel.app";
-    Requestable<std::string> sync_session = {};
-    std::string sync_name = "";
-    std::string sync_password = "";
-    bool sync_remember_me = false;
-
-    Requestable<std::vector<std::string>> sync_files = {};
-    Requestable<std::string> sync_file_open = {};
-
-    // TODO: Save files with Ctrl+S into remote storage when this is set
-    std::string sync_file_name = "";
-    Requestable<bool> sync_file_save = {};
+    std::optional<std::string> local_filename;
 
     BS::thread_pool thr_pool;
 
@@ -95,11 +116,7 @@ struct AppState {
     ImFont* awesome_font;
     HelloImGui::RunnerParams* runner_params;
 
-    // TODO: Save
-    std::string language = "en";
     I18N i18n;
-
-    bool tree_view_focused; // Updated every frame
 
     Group* root_group() noexcept;
     const Group* root_group() const noexcept;
@@ -139,9 +156,9 @@ struct AppState {
         assert(this->tests.contains(id));
 
         if constexpr (select) {
-            this->selected_tests.insert(id);
+            this->tree_view.selected_tests.insert(id);
         } else if (!this->parent_selected(id)) {
-            this->selected_tests.erase(id);
+            this->tree_view.selected_tests.erase(id);
         }
 
         NestedTest& nt = this->tests.at(id);
@@ -155,9 +172,9 @@ struct AppState {
         for (size_t child_id : group.children_ids) {
             assert(this->tests.contains(child_id));
             if constexpr (select) {
-                this->selected_tests.insert(child_id);
+                this->tree_view.selected_tests.insert(child_id);
             } else if (!this->parent_selected(id)) {
-                this->selected_tests.erase(child_id);
+                this->tree_view.selected_tests.erase(child_id);
             }
 
             select_with_children<select>(child_id);

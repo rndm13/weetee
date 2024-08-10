@@ -10,7 +10,12 @@
 #include "../tests/functional/gui_tests.hpp"
 
 // TODO: Add a better icon
-// TODO: Add Head, Options, Trace
+// TODO: Add Head, Options, Trace HTTP Methods
+// TODO: Finish i18n
+// TODO: Make remote file saving UI suck less
+// TODO: Make a crash report UI
+// TODO: Make automatic backups
+// TODO: Save a config somewhere for a user
 
 void post_init(AppState* app) noexcept;
 
@@ -38,6 +43,9 @@ int main(int argc, char** argv) {
     runner_params.dockingParams = layout(&app);
     runner_params.fpsIdling.enableIdling = false;
     runner_params.useImGuiTestEngine = true;
+
+    runner_params.iniFilename = "weetee" FS_SLASH "imgui.ini";
+    runner_params.iniFolderType = HelloImGui::IniFolderType::AppUserConfigFolder;
 
     ImmApp::AddOnsParams addOnsParams;
     // addOnsParams.withMarkdown = true;

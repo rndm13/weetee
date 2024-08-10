@@ -77,7 +77,7 @@ enum ResponseBodyType : uint8_t {
 };
 
 struct Response {
-    std::string status = "2XX"; // a string so user can get hints and write their own status code
+    std::string status = "2XX"; // A string so user can get hints and write their own status code
     ResponseBodyType body_type = RESPONSE_ANY;
     std::string other_content_type;
     std::string body = "";
