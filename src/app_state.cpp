@@ -6,7 +6,7 @@
 
 #include "http.hpp"
 #include "partial_dict.hpp"
-#include "test.hpp"
+#include "tests.hpp"
 #include "utility"
 #include "utils.hpp"
 

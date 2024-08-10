@@ -4,7 +4,7 @@
 #include "app_state.hpp"
 #include "http.hpp"
 #include "partial_dict.hpp"
-#include "test.hpp"
+#include "tests.hpp"
 #include "utils.hpp"
 
 using nljson = nlohmann::json;

@@ -11,7 +11,7 @@
 
 #include "partial_dict.hpp"
 #include "save_state.hpp"
-#include "test.hpp"
+#include "tests.hpp"
 
 #include "cmath"
 #include "optional"

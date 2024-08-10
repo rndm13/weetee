@@ -2,8 +2,6 @@
 
 using json = nlohmann::json;
 
-// TODO: Add unit tests
-
 std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept {
     std::string result = target;
 

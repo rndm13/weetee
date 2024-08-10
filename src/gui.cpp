@@ -22,7 +22,7 @@
 #include "http.hpp"
 #include "json.hpp"
 #include "partial_dict.hpp"
-#include "test.hpp"
+#include "tests.hpp"
 #include "textinputcombo.hpp"
 #include "utils.hpp"
 

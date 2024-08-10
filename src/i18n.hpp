@@ -1,7 +1,11 @@
 #pragma once
 
+#include "json.hpp"
+
 #include "string"
 #include "vector"
+
+#include "hello_imgui/icons_font_awesome_4.h"
 
 struct I18N {
     std::string win_tests;
@@ -108,4 +112,4 @@ struct I18N {
     std::string ed_cli_timeout;
 };
 
-// Loaded in json.cpp
+void from_json(const nlohmann::json& j, I18N& i18n) noexcept;

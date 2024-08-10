@@ -7,7 +7,7 @@
 #include "app_state.hpp"
 #include "imgui_toggle/imgui_toggle.h"
 #include "partial_dict.hpp"
-#include "test.hpp"
+#include "tests.hpp"
 
 #include "cmath"
 

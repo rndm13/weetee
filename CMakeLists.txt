@@ -90,6 +90,10 @@ FetchContent_MakeAvailable(googletest)
 # Add tests
 # ===============
 
+enable_testing()
+
+include(GoogleTest)
+
 add_subdirectory(tests)
 
 # Add src
@@ -99,7 +103,7 @@ add_subdirectory(src)
 
 target_link_libraries(weetee PRIVATE 
     utils textinputcombo
-    app_state save_state test 
+    app_state save_state tests
     json http
     gui gui_tests)
 

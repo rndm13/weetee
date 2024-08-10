@@ -8,8 +8,6 @@
 #include "string"
 #include "variant"
 
-#define WEETEE_VARIABLE_KEY "__weetee_variable"
-
 // returns an error message, if there isn't returns null pointer
 const char* json_format(std::string& json) noexcept;
 const char* json_compare(const std::string&, const std::string&) noexcept;
@@ -39,5 +37,3 @@ template <class... Args> struct adl_serializer<std::variant<Args...>> {
     }
 };
 } // namespace nlohmann
-
-void from_json(const nlohmann::json& j, I18N& i18n) noexcept;
