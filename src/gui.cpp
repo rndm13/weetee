@@ -2047,10 +2047,11 @@ void remote_file_sync(AppState* app) noexcept {
                 ImGui::Checkbox("Remember Me##remember", &app->sync.remember_me);
 
                 if (ImGui::Button("Login")) {
-                    httplib::Params params;
-                    params.emplace("name", app->conf.sync_name);
-                    params.emplace("password", app->conf.sync_password);
-                    params.emplace("remember_me", app->sync.remember_me ? "1" : "0");
+                    httplib::Params params = {
+                        {"name", app->conf.sync_name},
+                        {"password", app->conf.sync_password},
+                        {"remember_me", app->sync.remember_me ? "1" : "0"},
+                    };
                     execute_requestable(app, app->conf.sync_session, HTTP_GET,
                                         app->conf.sync_hostname, "/login", "", params,
                                         [app](auto& sync_session, std::string data) {
@@ -2062,9 +2063,10 @@ void remote_file_sync(AppState* app) noexcept {
                 ImGui::SameLine();
 
                 if (ImGui::Button("Register")) {
-                    httplib::Params params;
-                    params.emplace("name", app->conf.sync_name);
-                    params.emplace("password", app->conf.sync_password);
+                    httplib::Params params = {
+                        {"name", app->conf.sync_name},
+                        {"password", app->conf.sync_password},
+                    };
                     execute_requestable(app, app->conf.sync_session, HTTP_GET,
                                         app->conf.sync_hostname, "/register", "", params,
                                         [](auto& requestable, const std::string& data) {
@@ -2078,22 +2080,22 @@ void remote_file_sync(AppState* app) noexcept {
             ImGui::SameLine();
 
             if (ImGui::Button("Logout")) {
-                httplib::Params params;
-                params.emplace("session_token", app->conf.sync_session.data);
+                httplib::Params params = {
+                    {"session_token", app->conf.sync_session.data},
+                };
                 execute_requestable(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
                                     "/logout", "", params,
                                     [app](auto& requestable, std::string data) {
                                         app->conf.sync_session.status = REQUESTABLE_NONE;
                                     });
-                app->sync = {};
-                app->sync.show = true;
-
                 app->conf.sync_session.data = "";
+                app->sync = {.show = true};
             }
 
             if (app->sync.files.status == REQUESTABLE_NONE) {
                 request_file_list();
             }
+
             if (show_requestable_wait(app->sync.files, "Fetching a list of your files")) {
                 if (ImGui::Button("Retry Fetch")) {
                     request_file_list();

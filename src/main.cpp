@@ -12,10 +12,8 @@
 // TODO: Add a better icon
 // TODO: Add Head, Options, Trace HTTP Methods
 // TODO: Finish i18n
-// TODO: Make remote file saving UI suck less
 // TODO: Make a crash report UI
 // TODO: Make automatic backups
-// TODO: Save a config somewhere for a user
 
 void post_init(AppState* app) noexcept;
 
