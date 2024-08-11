@@ -1378,3 +1378,112 @@ void stop_tests(AppState* app) noexcept {
 
     app->thr_pool.purge();
 }
+
+void remote_file_list(AppState* app) noexcept {
+    httplib::Params params = {
+        {"session_token", app->conf.sync_session.data},
+    };
+    auto proc = [](Requestable<std::vector<std::string>>& requestable, const std::string& data) {
+        requestable.data.clear();
+
+        auto json_data = nlohmann::json::parse(data, nullptr, false);
+
+        if (json_data.is_discarded()) {
+            requestable.error = "Failed to parse received JSON";
+            requestable.status = REQUESTABLE_ERROR;
+            return;
+        }
+
+        if (json_data.is_array()) {
+            for (auto& item : json_data) {
+                if (item.is_object() && item.contains("name")) {
+                    requestable.data.push_back(item["name"]);
+                }
+            }
+        }
+    };
+    execute_requestable(app, app->sync.files, HTTP_GET, app->conf.sync_hostname, "/file-list", "",
+                        params, proc);
+}
+
+void remote_file_open(AppState* app, const std::string& name) noexcept {
+    httplib::Params params = {
+        {"session_token", app->conf.sync_session.data},
+        {"file_name", name},
+    };
+    auto proc = [app, name](Requestable<std::string>& requestable, const std::string& data) {
+        app->local_filename = std::nullopt;
+
+        app->sync.file_name = name;
+
+        requestable.data = data;
+    };
+    execute_requestable(app, app->sync.file_open, HTTP_GET, app->conf.sync_hostname, "/file", "",
+                        params, proc);
+};
+
+void remote_file_delete(AppState* app, const std::string& name) noexcept {
+    httplib::Params params = {
+        {"session_token", app->conf.sync_session.data},
+        {"file_name", name},
+    };
+
+    auto proc = [app, name](Requestable<bool>& requestable, const std::string& data) {
+        app->sync.files.data.erase(
+            std::remove(app->sync.files.data.begin(), app->sync.files.data.end(), name));
+
+        if (app->sync.file_name == name) {
+            app->sync.file_name = "";
+        }
+
+        requestable.data = true;
+    };
+
+    execute_requestable(app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname, "/file",
+                        "", params, proc);
+};
+
+void remote_file_rename(AppState* app, std::string& old_name,
+                        const std::string& new_name) noexcept {
+    httplib::Params params = {
+        {"session_token", app->conf.sync_session.data},
+        {"file_name", old_name},
+        {"new_file_name", new_name},
+    };
+
+    auto proc = [app, &old_name, new_name](auto& requestable, const std::string& data) {
+        old_name = new_name;
+
+        if (app->sync.file_name == old_name) {
+            app->sync.file_name = new_name;
+        }
+
+        requestable.data = true;
+    };
+    execute_requestable(app, app->sync.file_delete, HTTP_PATCH, app->conf.sync_hostname, "/file",
+                        "", params, proc);
+};
+
+void remote_file_save(AppState* app, const std::string& name) noexcept {
+    std::stringstream out;
+    app->save_file(out);
+    std::string body = out.str();
+
+    httplib::Params params;
+    params.emplace("session_token", app->conf.sync_session.data);
+    params.emplace("file_name", name);
+
+    auto proc = [app, name](auto& requestable, const std::string& data) {
+        requestable.data = true;
+
+        app->local_filename = std::nullopt;
+
+        if (std::find(app->sync.files.data.begin(), app->sync.files.data.end(), name) ==
+            app->sync.files.data.end()) {
+            app->sync.files.data.push_back(name);
+        }
+    };
+
+    execute_requestable(app, app->sync.file_save, HTTP_POST, app->conf.sync_hostname, "/file", body,
+                        params, proc);
+};

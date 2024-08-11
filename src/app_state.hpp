@@ -301,3 +301,61 @@ const char* header_match(const VariablesMap&, const Test* test,
                          const httplib::Result& result) noexcept;
 bool test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept;
+
+template <class Data, class Process>
+void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType type,
+                         const std::string& hostname, const std::string& destination,
+                         const std::string& body, const httplib::Params& params,
+                         Process&& process) noexcept {
+    app->thr_pool.detach_task(
+        [app, &requestable, type, hostname, destination, params, body, process]() mutable {
+            requestable.status = REQUESTABLE_WAIT;
+
+            httplib::Client cli(hostname);
+
+            cli.set_follow_location(true);
+
+            httplib::Result result;
+            std::string dest_params = httplib::append_query_params(destination, params);
+            switch (type) {
+            case HTTP_GET:
+                result = cli.Get(dest_params);
+                break;
+            case HTTP_POST:
+                result = cli.Post(dest_params, body, "application/octet-stream");
+                break;
+            case HTTP_DELETE:
+                result = cli.Delete(dest_params, body, "application/octet-stream");
+                break;
+            case HTTP_PATCH:
+                result = cli.Patch(dest_params, body, "application/octet-stream");
+                break;
+            default:
+                break;
+            }
+
+            if (result.error() != httplib::Error::Success) {
+                requestable.status = REQUESTABLE_ERROR;
+                requestable.error = to_string(result.error());
+            } else {
+                if (result->status != 200) {
+                    requestable.status = REQUESTABLE_ERROR;
+                    if (result->body != "") {
+                        requestable.error = result->body;
+                    } else {
+                        requestable.error = httplib::status_message(result->status);
+                    }
+                } else {
+                    requestable.status = REQUESTABLE_FOUND;
+                    requestable.error = "";
+                    process(requestable, result->body);
+                }
+            }
+        });
+}
+
+void remote_file_list(AppState* app) noexcept;
+void remote_file_open(AppState* app, const std::string&) noexcept;
+void remote_file_delete(AppState* app, const std::string&) noexcept;
+void remote_file_rename(AppState* app, std::string&, const std::string&) noexcept;
+void remote_file_save(AppState* app, const std::string&) noexcept;

@@ -46,6 +46,7 @@ json pack_variables(std::string str, const VariablesMap& vars) noexcept {
         }
 
         static constexpr const char variable_key[] = "\"" WEETEE_VARIABLE_KEY "\":";
+
         // Wrap variable name in quotes
         str.insert(idx + size, "\"");
         str.insert(idx + 1, "\"");
