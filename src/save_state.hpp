@@ -46,6 +46,16 @@ struct SaveState {
         return true;
     }
 
+    template <class T = void> bool can_load_reset(const char* ptr, size_t size = sizeof(T)) noexcept {
+        assert(ptr);
+        assert(size > 0);
+        if (!can_offset(size)) {
+            return false;
+        }
+
+        return true;
+    }
+
     char* load_offset(size_t offset = 0) noexcept;
 
     template <class T = void> void load(char* ptr, size_t size = sizeof(T)) noexcept {
@@ -66,6 +76,12 @@ struct SaveState {
         requires(std::is_trivially_copyable<T>::value)
     bool can_load(const T& trivial) noexcept {
         return this->can_load(reinterpret_cast<const char*>(&trivial), sizeof(T));
+    }
+
+    template <class T>
+        requires(std::is_trivially_copyable<T>::value)
+    bool can_load_reset(const T& trivial) noexcept {
+        return this->can_load_reset(reinterpret_cast<const char*>(&trivial), sizeof(T));
     }
 
     template <class T>
@@ -126,6 +142,9 @@ struct SaveState {
 
     template <class K, class V> bool can_load(const std::unordered_map<K, V>&) noexcept {
         size_t size;
+        if (!this->can_load_reset(size)) {
+            return false;
+        }
         this->load(size);
 
         for (size_t i = 0; i < size; i++) {
@@ -167,6 +186,9 @@ struct SaveState {
 
     template <class... T> bool can_load(const std::variant<T...>& variant) noexcept {
         size_t index;
+        if (!this->can_load_reset(index)) {
+            return false;
+        }
         this->load(index);
 
         // if (index != std::variant_npos) {
@@ -203,6 +225,9 @@ struct SaveState {
 
     template <class Element> bool can_load(const std::vector<Element>& vec) noexcept {
         size_t size;
+        if (!this->can_load_reset(size)) {
+            return false;
+        }
         this->load(size);
 
         for (size_t i = 0; i < size; i++) {

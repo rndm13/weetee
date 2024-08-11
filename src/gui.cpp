@@ -101,7 +101,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     assert(app->tests.contains(nested_test_id));
     bool changed = false; // This also indicates that previous analysis data is no longer valid
 
-    if (ImGui::BeginPopupContextItem()) {
+    if (ImGui::BeginPopupContextItem("##tree_view_context")) {
         app->tree_view.window_focused = true;
 
         if (!app->tree_view.selected_tests.contains(nested_test_id)) {
@@ -683,7 +683,7 @@ bool partial_dict_data_row(AppState* app, Variables* vars_pd, VariablesElement* 
             changed |= ImGui::InputText("##data", &elem->data.data);
         }
 
-        if (ImGui::BeginPopupContextItem()) {
+        if (ImGui::BeginPopupContextItem("##partial_dict_data_context")) {
             partial_dict_data_context(app, vars_pd, elem, vars);
             ImGui::EndPopup();
         }
@@ -896,7 +896,7 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
                             json_format_variables(std::get<std::string>(test.request.body), vars);
 
                         if (error) {
-                            Log(LogLevel::Error, "Failed to parse json: ", error);
+                            Log(LogLevel::Error, "Failed to parse JSON: ", error);
                         }
                     }
 
@@ -998,7 +998,7 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
                         const char* error = json_format_variables(test.response.body, vars);
 
                         if (error) {
-                            Log(LogLevel::Error, "Failed to parse json: ", error);
+                            Log(LogLevel::Error, "Failed to parse JSON: ", error);
                         }
                     }
 
@@ -1730,7 +1730,7 @@ void testing_result_row(AppState* app, size_t result_id,
                 app->results.last_selected_idx = result_idx;
             }
 
-            if (ImGui::BeginPopupContextItem()) {
+            if (ImGui::BeginPopupContextItem("##testing_result_context")) {
                 if (!result.selected) {
                     deselect_all();
                     result.selected = true;
@@ -1849,13 +1849,22 @@ void testing_results(AppState* app) noexcept {
 }
 
 template <class Data>
-bool display_requestable_wait(const Requestable<Data>& requestable, std::string message) {
+bool show_requestable_wait(const Requestable<Data>& requestable, std::string message) {
     if (requestable.status == REQUESTABLE_WAIT) {
         ImSpinner::SpinnerIncDots("wait", 5, 1);
         ImGui::SameLine();
         ImGui::Text("%s", message.c_str());
     }
     return requestable.status != REQUESTABLE_WAIT;
+}
+
+template <class Data> bool show_requestable_error(const Requestable<Data>& requestable) {
+    if (requestable.status == REQUESTABLE_ERROR) {
+        ImGui::TextColored({1, 0, 0, 1}, "%s", requestable.error.c_str());
+        return true;
+    }
+
+    return false;
 }
 
 template <class Data, class Process>
@@ -1866,8 +1875,11 @@ void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType
     app->thr_pool.detach_task(
         [app, &requestable, type, hostname, destination, params, body, process]() mutable {
             requestable.status = REQUESTABLE_WAIT;
+
             httplib::Client cli(hostname);
-            // cli.set_follow_location(true);
+
+            cli.set_follow_location(true);
+
             httplib::Result result;
             std::string dest_params = httplib::append_query_params(destination, params);
             switch (type) {
@@ -1876,6 +1888,12 @@ void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType
                 break;
             case HTTP_POST:
                 result = cli.Post(dest_params, body, "application/octet-stream");
+                break;
+            case HTTP_DELETE:
+                result = cli.Delete(dest_params, body, "application/octet-stream");
+                break;
+            case HTTP_PATCH:
+                result = cli.Patch(dest_params, body, "application/octet-stream");
                 break;
             default:
                 break;
@@ -1887,7 +1905,11 @@ void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType
             } else {
                 if (result->status != 200) {
                     requestable.status = REQUESTABLE_ERROR;
-                    requestable.error = result->body;
+                    if (result->body != "") {
+                        requestable.error = result->body;
+                    } else {
+                        requestable.error = httplib::status_message(result->status);
+                    }
                 } else {
                     requestable.status = REQUESTABLE_FOUND;
                     requestable.error = "";
@@ -1905,43 +1927,156 @@ void remote_file_sync(AppState* app) noexcept {
             app->conf.save_file();
         }
 
+        auto request_file_list = [app]() {
+            httplib::Params params = {
+                {"session_token", app->conf.sync_session.data},
+            };
+            execute_requestable(
+                app, app->sync.files, HTTP_GET, app->conf.sync_hostname, "/file-list", "", params,
+                [](Requestable<std::vector<std::string>>& requestable, const std::string& data) {
+                    requestable.data.clear();
+
+                    auto json_data = nlohmann::json::parse(data, nullptr, false);
+
+                    if (json_data.is_discarded()) {
+                        requestable.error = "Failed to parse received JSON";
+                        requestable.status = REQUESTABLE_ERROR;
+                        return;
+                    }
+
+                    if (json_data.is_array()) {
+                        for (auto& item : json_data) {
+                            if (item.is_object() && item.contains("name")) {
+                                requestable.data.push_back(item["name"]);
+                            }
+                        }
+                    }
+                });
+        };
+
+        auto request_file_open = [app](const std::string& name) {
+            httplib::Params params = {
+                {"session_token", app->conf.sync_session.data},
+                {"file_name", name},
+            };
+            execute_requestable(app, app->sync.file_open, HTTP_GET, app->conf.sync_hostname,
+                                "/file", "", params,
+                                [app, name](auto& requestable, const std::string& data) {
+                                    app->local_filename = std::nullopt;
+
+                                    app->sync.file_name = name;
+
+                                    requestable.data = data;
+                                });
+        };
+
+        auto request_file_delete = [app](const std::string& name) {
+            httplib::Params params = {
+                {"session_token", app->conf.sync_session.data},
+                {"file_name", name},
+            };
+            execute_requestable(
+                app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname, "/file", "",
+                params, [app, name](auto& requestable, const std::string& data) {
+                    app->sync.files.data.erase(std::remove(app->sync.files.data.begin(),
+                                                           app->sync.files.data.end(), name));
+
+                    if (app->sync.file_name == name) {
+                        app->sync.file_name = "";
+                    }
+
+                    requestable.data = true;
+                });
+        };
+
+        auto request_file_rename = [app](std::string& old_name, const std::string& new_name) {
+            httplib::Params params = {
+                {"session_token", app->conf.sync_session.data},
+                {"file_name", old_name},
+                {"new_file_name", new_name},
+            };
+
+            execute_requestable(
+                app, app->sync.file_delete, HTTP_PATCH, app->conf.sync_hostname, "/file", "",
+                params, [app, &old_name, new_name](auto& requestable, const std::string& data) {
+                    old_name = new_name;
+
+                    if (app->sync.file_name == old_name) {
+                        app->sync.file_name = new_name;
+                    }
+
+                    requestable.data = true;
+                });
+        };
+
+        auto request_file_save = [app](const std::string& name) {
+            std::stringstream out;
+            app->save_file(out);
+            std::string body = out.str();
+
+            httplib::Params params;
+            params.emplace("session_token", app->conf.sync_session.data);
+            params.emplace("file_name", name);
+
+            execute_requestable(
+                app, app->sync.file_save, HTTP_POST, app->conf.sync_hostname, "/file", body, params,
+                [app, name](auto& requestable, const std::string& data) {
+                    requestable.data = true;
+
+                    app->local_filename = std::nullopt;
+
+                    if (std::find(app->sync.files.data.begin(), app->sync.files.data.end(), name) ==
+                        app->sync.files.data.end()) {
+                        app->sync.files.data.push_back(name);
+                    }
+                });
+        };
+
         if (app->conf.sync_session.status != REQUESTABLE_FOUND) {
-            if (display_requestable_wait(
+            if (show_requestable_wait(
                     app->conf.sync_session,
                     "Please wait, your authentication request is being processed")) {
                 ImGui::Text("Login/Register");
-                ImGui::Text("%s", app->conf.sync_session.error.c_str());
-                ImGui::InputText("Name##name", &app->sync.name);
-                ImGui::InputText("Password##password", &app->sync.password,
+                ImGui::TextColored({1, 0, 0, 1}, "%s", app->conf.sync_session.error.c_str());
+
+                ImGui::InputText("Name##name", &app->conf.sync_name);
+
+                ImGui::InputText("Password##password", &app->conf.sync_password,
                                  ImGuiInputTextFlags_Password);
+
                 ImGui::Checkbox("Remember Me##remember", &app->sync.remember_me);
+
                 if (ImGui::Button("Login")) {
                     httplib::Params params;
-                    params.emplace("name", app->sync.name);
-                    params.emplace("password", app->sync.password);
+                    params.emplace("name", app->conf.sync_name);
+                    params.emplace("password", app->conf.sync_password);
                     params.emplace("remember_me", app->sync.remember_me ? "1" : "0");
-                    execute_requestable(
-                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/login",
-                        "", params,
-                        [app](auto& sync_session, std::string data) { 
-                            sync_session.data = data; 
-                            app->conf.save_file();
-                        });
+                    execute_requestable(app, app->conf.sync_session, HTTP_GET,
+                                        app->conf.sync_hostname, "/login", "", params,
+                                        [app](auto& sync_session, std::string data) {
+                                            sync_session.data = data;
+                                            app->conf.save_file();
+                                        });
                 }
+
                 ImGui::SameLine();
+
                 if (ImGui::Button("Register")) {
                     httplib::Params params;
-                    params.emplace("name", app->sync.name);
-                    params.emplace("password", app->sync.password);
-                    execute_requestable(
-                        app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/register",
-                        "", params,
-                        [](auto& requestable, std::string data) { requestable.data = data; });
+                    params.emplace("name", app->conf.sync_name);
+                    params.emplace("password", app->conf.sync_password);
+                    execute_requestable(app, app->conf.sync_session, HTTP_GET,
+                                        app->conf.sync_hostname, "/register", "", params,
+                                        [](auto& requestable, const std::string& data) {
+                                            requestable.data = data;
+                                        });
                 }
             }
         } else {
-            ImGui::Text("You are logged in as %s", app->sync.name.c_str());
+            ImGui::Text("You are logged in as %s", app->conf.sync_name.c_str());
+
             ImGui::SameLine();
+
             if (ImGui::Button("Logout")) {
                 httplib::Params params;
                 params.emplace("session_token", app->conf.sync_session.data);
@@ -1956,36 +2091,23 @@ void remote_file_sync(AppState* app) noexcept {
                 app->conf.sync_session.data = "";
             }
 
-            auto request_file_list = [app]() {
-                httplib::Params params;
-                params.emplace("session_token", app->conf.sync_session.data);
-                execute_requestable(app, app->sync.files, HTTP_GET, app->conf.sync_hostname,
-                                    "/file-list", "", params,
-                                    [](auto& requestable, std::string data) {
-                                        auto json_data = nlohmann::json::parse(data);
-                                        if (json_data.is_array()) {
-                                            for (auto& item : json_data) {
-                                                if (item.is_object() && item.contains("name")) {
-                                                    requestable.data.push_back(item["name"]);
-                                                }
-                                            }
-                                        }
-                                    });
-            };
-
             if (app->sync.files.status == REQUESTABLE_NONE) {
                 request_file_list();
             }
-            if (display_requestable_wait(app->sync.files, "Fetching a list of your files")) {
+            if (show_requestable_wait(app->sync.files, "Fetching a list of your files")) {
                 if (ImGui::Button("Retry Fetch")) {
                     request_file_list();
                 }
             }
 
             if (app->sync.files.status == REQUESTABLE_FOUND) {
-                ImGui::Text("%s", app->sync.file_open.error.c_str());
-                ImGui::Text("%s", app->sync.files.error.c_str());
-                if (display_requestable_wait(app->sync.file_open, "Opening file...")) {
+                show_requestable_error(app->sync.files);
+                show_requestable_error(app->sync.file_open);
+                show_requestable_error(app->sync.file_save);
+                show_requestable_error(app->sync.file_delete);
+                show_requestable_error(app->sync.file_rename);
+
+                if (show_requestable_wait(app->sync.file_open, "Opening file...")) {
                     if (app->sync.file_open.status == REQUESTABLE_FOUND) {
                         std::stringstream ss;
                         ss << app->sync.file_open.data;
@@ -1995,50 +2117,58 @@ void remote_file_sync(AppState* app) noexcept {
                         app->sync.file_open = {};
                     }
 
-                    for (const std::string& name : app->sync.files.data) {
+                    for (size_t i = 0; i < app->sync.files.data.size(); i++) {
+                        std::string& name = app->sync.files.data[i];
+
                         ImGui::PushID(name.c_str());
-                        ImGui::Text("%s", name.c_str());
-                        ImGui::SameLine();
-                        if (ImGui::Button("Open##open")) {
-                            httplib::Params params;
-                            params.emplace("session_token", app->conf.sync_session.data);
-                            params.emplace("file_name", name);
-                            execute_requestable(app, app->sync.file_open, HTTP_GET,
-                                                app->conf.sync_hostname, "/file", "", params,
-                                                [app, name](auto& requestable, std::string data) {
-                                                    app->local_filename = name;
-                                                    requestable.data = data;
-                                                });
+
+                        if (ImGui::Selectable((name + "##selectable").c_str(), false,
+                                              ImGuiSelectableFlags_AllowDoubleClick)) {
+                            request_file_open(name);
                         }
+
+                        if (ImGui::BeginPopupContextItem("##sync_filename_context")) {
+                            if (ImGui::MenuItem("Open")) {
+                                request_file_open(name);
+                            }
+                            if (ImGui::MenuItem("Save")) {
+                                request_file_save(name);
+                            }
+                            if (ImGui::MenuItem("Delete")) {
+                                request_file_delete(name);
+                            }
+                            if (ImGui::BeginMenu("Rename##rename-menu")) {
+                                static std::string new_file_name;
+
+                                ImGui::InputText("##new_file_name", &new_file_name);
+                                ImGui::SameLine();
+                                if (ImGui::Button("Rename##rename-confirm")) {
+                                    request_file_rename(name, new_file_name);
+                                }
+
+                                ImGui::EndMenu();
+                            }
+                            ImGui::EndPopup();
+                        }
+
                         ImGui::PopID();
                     }
                 }
             }
 
-            if (display_requestable_wait(app->sync.file_save, "Saving file...")) {
-                ImGui::Text("%s", app->sync.file_save.error.c_str());
+            if (show_requestable_wait(app->sync.file_save, "Saving file...")) {
+                ImGui::Text("Save a file:");
                 ImGui::InputText("##file_name", &app->sync.file_name);
+
                 ImGui::SameLine();
+
                 if (ImGui::Button("Save")) {
-                    app->local_filename = app->sync.file_name;
-                    std::stringstream out;
-                    app->save_file(out);
-                    std::string body = out.str();
-
-                    httplib::Params params;
-                    params.emplace("session_token", app->conf.sync_session.data);
-                    params.emplace("file_name", app->sync.file_name);
-
-                    execute_requestable(app, app->sync.file_save, HTTP_POST,
-                                        app->conf.sync_hostname, "/file", body, params,
-                                        [app](auto& requestable, std::string data) {
-                                            requestable.data = true;
-                                            app->sync.files = {};
-                                        });
+                    request_file_save(app->sync.file_name);
                 }
             }
         }
     }
+
     ImGui::End();
 }
 
@@ -2153,9 +2283,6 @@ void show_menus(AppState* app) noexcept {
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem("Remote File Sync")) {
-            app->sync.show = true;
-        }
         ImGui::EndMenu();
     }
 
@@ -2188,6 +2315,10 @@ void show_menus(AppState* app) noexcept {
     }
     ImGui::PopStyleColor(1);
     end_transparent_button();
+
+    if (ImGui::MenuItem("Remote File Sync")) {
+        app->sync.show = true;
+    }
 }
 
 void show_app_menu_items(AppState* app) noexcept {
@@ -2311,8 +2442,7 @@ void show_gui(AppState* app) noexcept {
     }
 }
 
-void pre_frame(AppState* app) noexcept {
-}
+void pre_frame(AppState* app) noexcept {}
 
 void load_fonts(AppState* app) noexcept {
     app->regular_font =

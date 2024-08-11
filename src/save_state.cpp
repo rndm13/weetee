@@ -41,6 +41,9 @@ bool SaveState::can_load(const std::string& str) noexcept {
     }
 
     size_t length = 0;
+    if (!this->can_load_reset(length)) {
+        return false;
+    }
     this->load(length);
 
     if (length > 0 && !this->can_load(str.data(), length)) {

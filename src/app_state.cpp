@@ -23,6 +23,9 @@ void UserConfig::save(SaveState* save) const noexcept {
     save->save(this->sync_hostname);
     save->save(this->sync_session.status);
     save->save(this->sync_session.data);
+    save->save(this->sync_name);
+    save->save(this->sync_password); // Save a password clientside for future encryption
+                                     // Worry about it being in plain text?
     save->save(this->language);
 }
 
@@ -38,6 +41,12 @@ bool UserConfig::can_load(SaveState* save) const noexcept {
     if (!save->can_load(this->sync_session.data)) {
         return false;
     }
+    if (!save->can_load(this->sync_name)) {
+        return false;
+    }
+    if (!save->can_load(this->sync_password)) {
+        return false;
+    }
     if (!save->can_load(this->language)) {
         return false;
     }
@@ -51,11 +60,15 @@ void UserConfig::load(SaveState* save) noexcept {
     save->load(this->sync_hostname);
     save->load(this->sync_session.status);
     save->load(this->sync_session.data);
+    save->load(this->sync_name);
+    save->load(this->sync_password);
     save->load(this->language);
 }
 
 void UserConfig::open_file() noexcept {
-    std::string filename = HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + UserConfig::filename;
+    std::string filename =
+        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) +
+        UserConfig::filename;
 
     std::ifstream in(filename);
     if (!in) {
@@ -65,7 +78,9 @@ void UserConfig::open_file() noexcept {
 
     SaveState save{};
     if (!save.read(in) || !save.can_load(*this) || save.load_idx != save.original_size) {
-        Log(LogLevel::Error, "Failed to read user config in '%s', likely file is invalid or size exceeds maximum", filename.c_str());
+        Log(LogLevel::Error,
+            "Failed to read user config in '%s', likely file is invalid or size exceeds maximum",
+            filename.c_str());
         Log(LogLevel::Warning, "Copying the old user config file, and creating a new one");
 
         std::string new_filename = filename + ".old";
@@ -84,7 +99,9 @@ void UserConfig::open_file() noexcept {
 }
 
 void UserConfig::save_file() noexcept {
-    std::string filename = HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + UserConfig::filename;
+    std::string filename =
+        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) +
+        UserConfig::filename;
 
     std::ofstream out(filename);
     if (!out) {
@@ -95,7 +112,7 @@ void UserConfig::save_file() noexcept {
     SaveState save{};
     save.save(*this);
     save.finish_save();
-    
+
     if (!save.write(out)) {
         Log(LogLevel::Error, "Failed to save", filename.c_str());
         return;
@@ -691,7 +708,7 @@ void AppState::save_file(std::ostream& out) noexcept {
     SaveState save{};
     save.save(*this);
     save.finish_save();
-    Log(LogLevel::Info, "Saving to '%s': %zuB", this->local_filename->c_str(), save.original_size);
+    Log(LogLevel::Info, "Saving file: %zuB", save.original_size);
     if (!save.write(out)) {
         Log(LogLevel::Error, "Failed to save");
     }
@@ -709,8 +726,7 @@ void AppState::open_file(std::istream& in) noexcept {
         return;
     }
 
-    Log(LogLevel::Info, "Loading from '%s': %zuB", this->local_filename->c_str(),
-        save.original_size);
+    Log(LogLevel::Info, "Loading file: %zuB", save.original_size);
     if (!save.can_load(*this) || save.load_idx != save.original_size) {
         Log(LogLevel::Error, "Failed to load, likely file is invalid");
         return;

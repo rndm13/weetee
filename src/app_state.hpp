@@ -50,6 +50,8 @@ struct UserConfig {
 
     std::string sync_hostname = "https://weetee-sync.vercel.app";
     Requestable<std::string> sync_session = {};
+    std::string sync_name = "";
+    std::string sync_password = "";
 
     static constexpr const char* filename = FS_SLASH "weetee" FS_SLASH "user_config.wt";
 
@@ -64,15 +66,15 @@ struct UserConfig {
 struct SyncState {
     bool show = false;
 
-    std::string name = "";
-    std::string password = "";
     bool remember_me = false;
 
     Requestable<std::vector<std::string>> files = {};
     Requestable<std::string> file_open = {};
+    Requestable<bool> file_delete = {};
+    Requestable<bool> file_rename = {};
+    Requestable<bool> file_save = {};
 
     std::string file_name = "";
-    Requestable<bool> file_save = {};
 };
 
 struct TreeViewState {

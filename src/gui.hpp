@@ -114,7 +114,7 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
             pd->last_selected_idx = elem - pd->elements.data();
         }
 
-        if (ImGui::BeginPopupContextItem()) {
+        if (ImGui::BeginPopupContextItem("##partial_dict_context")) {
             if (!(elem->flags & PARTIAL_DICT_ELEM_SELECTED)) {
                 select_only_this();
             }
