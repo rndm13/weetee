@@ -15,7 +15,7 @@
 #include "algorithm"
 #include "fstream"
 #include "iterator"
-#include <filesystem>
+#include "filesystem"
 
 void UserConfig::save(SaveState* save) const noexcept {
     assert(save);
@@ -85,7 +85,7 @@ void UserConfig::open_file() noexcept {
 
         std::string new_filename = filename + ".old";
 
-        if (std::filesystem::copy_file(filename, new_filename)) {
+        if (!std::filesystem::copy_file(filename, new_filename)) {
             Log(LogLevel::Error, "Failed to copy old user config file '%s'", new_filename.c_str());
         }
 
@@ -1428,7 +1428,7 @@ void remote_file_delete(AppState* app, const std::string& name) noexcept {
         {"file_name", name},
     };
 
-    auto proc = [app, name](Requestable<bool>& requestable, const std::string& data) {
+    auto proc = [app, &name](Requestable<bool>& requestable, const std::string& data) {
         app->sync.files.data.erase(
             std::remove(app->sync.files.data.begin(), app->sync.files.data.end(), name));
 
