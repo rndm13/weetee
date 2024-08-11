@@ -699,42 +699,44 @@ bool AppState::filter(NestedTest* nt) noexcept {
     return filter;
 }
 
-void AppState::save_file(std::ostream& out) noexcept {
+bool AppState::save_file(std::ostream& out) noexcept {
     if (!out) {
-        Log(LogLevel::Error, "Failed to save to file '%s'", this->local_filename->c_str());
-        return;
+        Log(LogLevel::Error, "Failed to save to file");
+        return false;
     }
 
     SaveState save{};
     save.save(*this);
     save.finish_save();
-    Log(LogLevel::Info, "Saving file: %zuB", save.original_size);
     if (!save.write(out)) {
         Log(LogLevel::Error, "Failed to save");
+        return false;
     }
+
+    return true;
 }
 
-void AppState::open_file(std::istream& in) noexcept {
+bool AppState::open_file(std::istream& in) noexcept {
     if (!in) {
-        Log(LogLevel::Error, "Failed to open file \"%s\"", this->local_filename->c_str());
-        return;
+        Log(LogLevel::Error, "Failed to open file");
+        return false;
     }
 
     SaveState save{};
     if (!save.read(in)) {
         Log(LogLevel::Error, "Failed to read, likely file is invalid or size exceeds maximum");
-        return;
+        return false;
     }
 
-    Log(LogLevel::Info, "Loading file: %zuB", save.original_size);
     if (!save.can_load(*this) || save.load_idx != save.original_size) {
         Log(LogLevel::Error, "Failed to load, likely file is invalid");
-        return;
+        return false;
     }
 
     save.reset_load();
     save.load(*this);
     this->post_open();
+    return true;
 }
 
 void AppState::load_i18n() noexcept {
@@ -1412,9 +1414,7 @@ void remote_file_open(AppState* app, const std::string& name) noexcept {
         {"file_name", name},
     };
     auto proc = [app, name](Requestable<std::string>& requestable, const std::string& data) {
-        app->local_filename = std::nullopt;
-
-        app->sync.file_name = name;
+        app->saved_file = RemoteFile{name};
 
         requestable.data = data;
     };
@@ -1432,8 +1432,9 @@ void remote_file_delete(AppState* app, const std::string& name) noexcept {
         app->sync.files.data.erase(
             std::remove(app->sync.files.data.begin(), app->sync.files.data.end(), name));
 
-        if (app->sync.file_name == name) {
-            app->sync.file_name = "";
+        app->saved_file = {};
+        if (app->sync.filename == name) {
+            app->sync.filename = "";
         }
 
         requestable.data = true;
@@ -1443,7 +1444,7 @@ void remote_file_delete(AppState* app, const std::string& name) noexcept {
                         "", params, proc);
 };
 
-void remote_file_rename(AppState* app, std::string& old_name,
+void remote_file_rename(AppState* app, const std::string& old_name,
                         const std::string& new_name) noexcept {
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
@@ -1451,11 +1452,16 @@ void remote_file_rename(AppState* app, std::string& old_name,
         {"new_file_name", new_name},
     };
 
-    auto proc = [app, &old_name, new_name](auto& requestable, const std::string& data) {
-        old_name = new_name;
+    auto proc = [app, old_name, new_name](auto& requestable, const std::string& data) {
+        app->sync.files = {};
 
-        if (app->sync.file_name == old_name) {
-            app->sync.file_name = new_name;
+        if (std::holds_alternative<RemoteFile>(app->saved_file) &&
+            std::get<RemoteFile>(app->saved_file).filename == old_name) {
+            std::get<RemoteFile>(app->saved_file).filename = new_name;
+        }
+
+        if (app->sync.filename == old_name) {
+            app->sync.filename = new_name;
         }
 
         requestable.data = true;
@@ -1469,14 +1475,15 @@ void remote_file_save(AppState* app, const std::string& name) noexcept {
     app->save_file(out);
     std::string body = out.str();
 
-    httplib::Params params;
-    params.emplace("session_token", app->conf.sync_session.data);
-    params.emplace("file_name", name);
+    httplib::Params params = {
+        {"session_token", app->conf.sync_session.data},
+        {"file_name", name},
+    };
 
     auto proc = [app, name](auto& requestable, const std::string& data) {
         requestable.data = true;
 
-        app->local_filename = std::nullopt;
+        app->saved_file = RemoteFile{name};
 
         if (std::find(app->sync.files.data.begin(), app->sync.files.data.end(), name) ==
             app->sync.files.data.end()) {

@@ -74,7 +74,7 @@ struct SyncState {
     Requestable<bool> file_rename = {};
     Requestable<bool> file_save = {};
 
-    std::string file_name = "";
+    std::string filename = "";
 };
 
 struct TreeViewState {
@@ -100,6 +100,20 @@ struct ResultsState {
     bool filter_cumulative = true;
 };
 
+struct RemoteFile {
+    std::string filename;
+};
+
+struct LocalFile {
+    std::string filename;
+};
+
+enum SavedFileType : uint8_t {
+    SAVED_FILE_NONE,
+    SAVED_FILE_REMOTE,
+    SAVED_FILE_LOCAL,
+};
+
 struct AppState {
     size_t id_counter = 0;
 
@@ -118,7 +132,7 @@ struct AppState {
     SaveState clipboard;
     UndoHistory undo_history;
 
-    std::optional<std::string> local_filename;
+    std::variant<std::monostate, RemoteFile, LocalFile> saved_file;
 
     BS::thread_pool thr_pool;
 
@@ -216,8 +230,8 @@ struct AppState {
     bool filter(Test& test) noexcept;
     bool filter(NestedTest* nt) noexcept;
 
-    void save_file(std::ostream&) noexcept;
-    void open_file(std::istream&) noexcept;
+    bool save_file(std::ostream&) noexcept;
+    bool open_file(std::istream&) noexcept;
     void post_open() noexcept;
 
     void import_swagger_paths(const nlohmann::json& paths, const nlohmann::json& swagger) noexcept;
@@ -357,5 +371,5 @@ void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType
 void remote_file_list(AppState* app) noexcept;
 void remote_file_open(AppState* app, const std::string&) noexcept;
 void remote_file_delete(AppState* app, const std::string&) noexcept;
-void remote_file_rename(AppState* app, std::string&, const std::string&) noexcept;
+void remote_file_rename(AppState* app, const std::string&, const std::string&) noexcept;
 void remote_file_save(AppState* app, const std::string&) noexcept;

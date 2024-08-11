@@ -370,7 +370,7 @@ void AppState::import_swagger(const std::string& swagger_file) noexcept {
         {0, root_initial},
     };
 
-    this->local_filename = std::nullopt;
+    this->saved_file = {};
     this->id_counter = 0;
     this->test_results.clear();
     this->tree_view.filtered_tests.clear();

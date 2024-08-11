@@ -80,6 +80,7 @@ std::string load_from_file() noexcept {
     auto open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
 
     std::vector<std::string> result = open_file_dialog.result();
+
     if (result.size() > 0) {
         std::ifstream in(result.at(0));
         if (in) {
@@ -88,6 +89,7 @@ std::string load_from_file() noexcept {
             return ss.str();
         }
     }
+
     return "";
 }
 
@@ -1980,12 +1982,12 @@ void remote_file_editor(AppState* app) noexcept {
 
     if (show_requestable_wait(app->sync.file_save, "Saving file...")) {
         ImGui::Text("Save a file:");
-        ImGui::InputText("##file_name", &app->sync.file_name);
+        ImGui::InputText("##file_name", &app->sync.filename);
 
         ImGui::SameLine();
 
         if (ImGui::Button("Save")) {
-            remote_file_save(app, app->sync.file_name);
+            remote_file_save(app, app->sync.filename);
         }
     }
 }
@@ -2062,21 +2064,36 @@ void save_as_file_dialog(AppState* app) noexcept {
     auto save_file_dialog =
         pfd::save_file("Save To", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
 
-    std::string result = save_file_dialog.result();
+    std::string name = save_file_dialog.result();
 
-    if (result.size() > 0) {
-        app->local_filename = result;
-        std::ofstream out(app->local_filename.value());
-        app->save_file(out);
+    if (name.size() > 0) {
+        app->saved_file = LocalFile{name};
+        std::ofstream out(name);
+        Log(LogLevel::Info, "Saving to local file '%s'", name.c_str());
+        if (app->save_file(out)) {
+            Log(LogLevel::Info, "Successfully saved to '%s'!", name.c_str());
+        }
     }
 }
 
 void save_file_dialog(AppState* app) noexcept {
-    if (!app->local_filename.has_value()) {
+    switch (app->saved_file.index()) {
+    case SAVED_FILE_NONE: {
         save_as_file_dialog(app);
-    } else {
-        std::ofstream out(app->local_filename.value());
-        app->save_file(out);
+    } break;
+    case SAVED_FILE_REMOTE: {
+        std::string name = std::get<RemoteFile>(app->saved_file).filename;
+        Log(LogLevel::Info, "Saving to remote file '%s'", name.c_str());
+        remote_file_save(app, name);
+    } break;
+    case SAVED_FILE_LOCAL: {
+        std::string name = std::get<LocalFile>(app->saved_file).filename;
+        std::ofstream out(name);
+        Log(LogLevel::Info, "Saving to local file '%s'", name.c_str());
+        if (app->save_file(out)) {
+            Log(LogLevel::Info, "Successfully saved to '%s'!", name.c_str());
+        }
+    } break;
     }
 }
 
@@ -2086,8 +2103,8 @@ void open_file_dialog(AppState* app) noexcept {
 
     std::vector<std::string> result = open_file_dialog.result();
     if (result.size() > 0) {
-        app->local_filename = result[0];
-        std::ifstream in(app->local_filename.value());
+        app->saved_file = LocalFile{result[0]};
+        std::ifstream in(result[0]);
         app->open_file(in);
     }
 }
