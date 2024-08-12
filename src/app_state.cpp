@@ -13,9 +13,47 @@
 #include "utils.hpp"
 
 #include "algorithm"
+#include "filesystem"
 #include "fstream"
 #include "iterator"
-#include "filesystem"
+#include <filesystem>
+
+void BackupConfig::save(SaveState* save) const noexcept {
+    assert(save);
+
+    save->save(this->time_to_backup);
+    save->save(this->local_to_keep);
+    save->save(this->remote_to_keep);
+    save->save(this->local_dir);
+}
+
+bool BackupConfig::can_load(SaveState* save) const noexcept {
+    assert(save);
+
+    if (!save->can_load(this->time_to_backup)) {
+        return false;
+    }
+    if (!save->can_load(this->local_to_keep)) {
+        return false;
+    }
+    if (!save->can_load(this->remote_to_keep)) {
+        return false;
+    }
+    if (!save->can_load(this->local_dir)) {
+        return false;
+    }
+
+    return true;
+}
+
+void BackupConfig::load(SaveState* save) noexcept {
+    assert(save);
+
+    save->load(this->time_to_backup);
+    save->load(this->local_to_keep);
+    save->load(this->remote_to_keep);
+    save->load(this->local_dir);
+}
 
 void UserConfig::save(SaveState* save) const noexcept {
     assert(save);
@@ -26,6 +64,8 @@ void UserConfig::save(SaveState* save) const noexcept {
     save->save(this->sync_name);
     save->save(this->sync_password); // Save a password clientside for future encryption
                                      // Worry about it being in plain text?
+    save->save(this->backup);
+
     save->save(this->language);
 }
 
@@ -50,6 +90,9 @@ bool UserConfig::can_load(SaveState* save) const noexcept {
     if (!save->can_load(this->language)) {
         return false;
     }
+    if (save->save_version >= 2 && !save->can_load(this->backup)) {
+        return false;
+    }
 
     return true;
 }
@@ -63,6 +106,9 @@ void UserConfig::load(SaveState* save) noexcept {
     save->load(this->sync_name);
     save->load(this->sync_password);
     save->load(this->language);
+    if (save->save_version >= 2) {
+        save->load(this->backup);
+    }
 }
 
 void UserConfig::open_file() noexcept {
@@ -748,7 +794,23 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     : runner_params(_runner_params) {
     this->undo_history.reset_undo_history(this);
 
+    std::string conf_path =
+        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + FS_SLASH "weetee" FS_SLASH;
+
+    if (!std::filesystem::is_directory(conf_path)) {
+        std::filesystem::remove(conf_path);
+        std::filesystem::create_directory(conf_path);
+    }
+
     this->conf.open_file();
+
+    std::string backup_path = 
+        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH "backups" FS_SLASH;
+
+    if (!std::filesystem::is_directory(backup_path)) {
+        std::filesystem::remove(backup_path);
+        std::filesystem::create_directory(backup_path);
+    }
 
     this->load_i18n();
 }

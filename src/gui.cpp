@@ -2007,7 +2007,7 @@ void remote_file_sync(AppState* app) noexcept {
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Logout", {100, 24})) {
+            if (ImGui::Button("Logout", {100, 0})) {
                 httplib::Params params = {
                     {"session_token", app->conf.sync_session.data},
                 };

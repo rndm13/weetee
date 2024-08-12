@@ -20,7 +20,7 @@
 static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
 
 struct SaveState {
-    size_t save_version = {1};
+    size_t save_version = {2};
     size_t original_size = {};
     size_t load_idx = {};
     std::vector<char> original_buffer;

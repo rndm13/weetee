@@ -45,6 +45,19 @@ template <class Data> struct Requestable {
     Data data = {};
 };
 
+struct BackupConfig {
+    float time_to_backup = 1000 * 60 * 5;
+
+    uint8_t local_to_keep = 5;
+    uint8_t remote_to_keep = 0;
+
+    std::optional<std::string> local_dir = std::nullopt;
+
+    void save(SaveState* save) const noexcept;
+    bool can_load(SaveState* save) const noexcept;
+    void load(SaveState* save) noexcept;
+};
+
 struct UserConfig {
     std::string language = "en";
 
@@ -52,6 +65,8 @@ struct UserConfig {
     Requestable<std::string> sync_session = {};
     std::string sync_name = "";
     std::string sync_password = "";
+
+    BackupConfig backup = {};
 
     static constexpr const char* filename = FS_SLASH "weetee" FS_SLASH "user_config.wt";
 
@@ -114,6 +129,14 @@ enum SavedFileType : uint8_t {
     SAVED_FILE_LOCAL,
 };
 
+using SavedFile = std::variant<std::monostate, RemoteFile, LocalFile>;
+
+struct BackupState {
+    float time_since_last_backup = 0;
+
+    size_t backup_id = 0;
+};
+
 struct AppState {
     size_t id_counter = 0;
 
@@ -132,7 +155,7 @@ struct AppState {
     SaveState clipboard;
     UndoHistory undo_history;
 
-    std::variant<std::monostate, RemoteFile, LocalFile> saved_file;
+    SavedFile saved_file;
 
     BS::thread_pool thr_pool;
 
