@@ -46,12 +46,14 @@ template <class Data> struct Requestable {
 };
 
 struct BackupConfig {
-    float time_to_backup = 1000 * 60 * 5;
+    uint32_t time_to_backup = 1000 * 60 * 5;
 
     uint8_t local_to_keep = 5;
     uint8_t remote_to_keep = 0;
 
     std::optional<std::string> local_dir = std::nullopt;
+    std::string get_default_local_dir() const noexcept;
+    std::string get_local_dir() const noexcept;
 
     void save(SaveState* save) const noexcept;
     bool can_load(SaveState* save) const noexcept;
@@ -137,6 +139,12 @@ struct BackupState {
     size_t backup_id = 0;
 };
 
+struct SettingsState {
+    bool show = false;
+
+    std::string search = "";
+};
+
 struct AppState {
     size_t id_counter = 0;
 
@@ -151,6 +159,7 @@ struct AppState {
     EditorState editor = {};
     ResultsState results = {};
     SyncState sync = {};
+    SettingsState settings = {};
 
     SaveState clipboard;
     UndoHistory undo_history;

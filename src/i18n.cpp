@@ -6,9 +6,14 @@
         (i18n.id) = std::string((j).at(#id));                                                      \
     }
 
-#define I18N_LOAD_VEC(j, i18n, id)                                                                 \
+#define I18N_LOAD_ARR(j, i18n, id)                                                                 \
     if ((j).contains(#id)) {                                                                       \
         (i18n.id) = std::vector<std::string>((j).at(#id));                                         \
+    }
+
+#define I18N_LOAD_OBJ(j, i18n, id)                                                                 \
+    if ((j).contains(#id)) {                                                                       \
+        (i18n.id) = std::unordered_map<std::string, std::string>((j).at(#id));                     \
     }
 
 #define I18N_LOAD_ID(j, i18n, icon, id)                                                            \
@@ -22,9 +27,8 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
         return;
     }
 
-    I18N_LOAD_ID(j, i18n, "", menu_languages);
-    I18N_LOAD_ID(j, i18n, "", menu_languages_english);
-    I18N_LOAD_ID(j, i18n, "", menu_languages_ukrainian);
+    I18N_LOAD_ID(j, i18n, "", settings_language);
+    I18N_LOAD_OBJ(j, i18n, settings_language_selection);
 
     I18N_LOAD_ID(j, i18n, ICON_FA_EDIT, menu_edit);
     I18N_LOAD_ID(j, i18n, ICON_FA_UNDO, menu_edit_undo);
@@ -74,7 +78,7 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
     I18N_LOAD_ID(j, i18n, "", ed_rq_body_type);
     I18N_LOAD_ID(j, i18n, "", ed_rq_cookies);
     I18N_LOAD_ID(j, i18n, "", ed_rq_headers);
-    I18N_LOAD_VEC(j, i18n, ed_rq_body_types);
+    I18N_LOAD_ARR(j, i18n, ed_rq_body_types);
 
     I18N_LOAD_ID(j, i18n, "", ed_rs_status);
     I18N_LOAD_ID(j, i18n, "", ed_rs_response);
@@ -83,7 +87,7 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
     I18N_LOAD_ID(j, i18n, "", ed_rs_body_type);
     I18N_LOAD_ID(j, i18n, "", ed_rs_set_cookies);
     I18N_LOAD_ID(j, i18n, "", ed_rs_headers);
-    I18N_LOAD_VEC(j, i18n, ed_rs_body_types);
+    I18N_LOAD_ARR(j, i18n, ed_rs_body_types);
 
     I18N_LOAD_ID(j, i18n, "", ed_pd_name);
     I18N_LOAD_ID(j, i18n, "", ed_pd_data);
@@ -92,7 +96,7 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
     I18N_LOAD_ID(j, i18n, "", ed_mpbd_type);
     I18N_LOAD_ID(j, i18n, "", ed_mpbd_data);
     I18N_LOAD_ID(j, i18n, "", ed_mpbd_content_type);
-    I18N_LOAD_VEC(j, i18n, ed_mpbd_types);
+    I18N_LOAD_ARR(j, i18n, ed_mpbd_types);
 
     I18N_LOAD_ID(j, i18n, "", ed_variables);
     I18N_LOAD(j, i18n, "", ed_variables_hint);
@@ -122,5 +126,6 @@ void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
 }
 
 #undef I18N_LOAD
-#undef I18N_LOAD_VEC
+#undef I18N_LOAD_ARR
+#undef I18N_LOAD_OBJ
 #undef I18N_LOAD_ID

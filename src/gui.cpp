@@ -2027,6 +2027,88 @@ void remote_file_sync(AppState* app) noexcept {
     ImGui::End();
 }
 
+void settings(AppState* app) noexcept {
+    if (ImGui::Begin("Settings", &app->settings.show)) {
+        ImGui::InputText("Search", &app->settings.search);
+
+        if (ImGui::BeginChild("settings_scroll", {-1, -1})) {
+            if (str_contains("Language" + app->i18n.settings_language, app->settings.search)) {
+                if (ImGui::BeginCombo(
+                        app->i18n.settings_language.c_str(),
+                        app->i18n.settings_language_selection[app->conf.language].c_str())) {
+                    for (const auto& [key, value] : app->i18n.settings_language_selection) {
+                        if (ImGui::Selectable(value.c_str(), app->conf.language == key)) {
+                            app->conf.language = key;
+
+                            app->load_i18n(); // references to key and value are invalidated
+
+                            app->conf.save_file();
+
+                            break; // break to stop accessing key and value
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+
+            if (str_contains("Backups", app->settings.search)) {
+                bool changed = false;
+
+                ImGui::Separator();
+                ImGui::Text("Backups");
+
+                {
+                    uint32_t time = app->conf.backup.time_to_backup;
+                    static char buffer[32] = {0};
+                    snprintf(buffer, 31, "%02d:%02d:%02d", time / 3600000 % 24, time / 60000 % 60,
+                             time / 1000 % 60);
+
+                    uint32_t min = 1000 * 60;
+                    uint32_t max = 1000 * 60 * 60;
+
+                    changed |=
+                        ImGui::SliderScalar("Time to backup", ImGuiDataType_U32,
+                                            &app->conf.backup.time_to_backup, &min, &max, buffer);
+                }
+
+                changed |= ImGui::InputScalar("Local backups", ImGuiDataType_U8,
+                                              &app->conf.backup.local_to_keep);
+                changed |= ImGui::InputScalar("Remote backups", ImGuiDataType_U8,
+                                              &app->conf.backup.remote_to_keep);
+
+                static bool override = app->conf.backup.local_dir.has_value();
+
+                ImGui::Text("Local backup directory");
+                if (ImGui::Checkbox("##override_local_dir", &override)) {
+                    changed = true;
+
+                    if (override) {
+                        app->conf.backup.local_dir = app->conf.backup.get_local_dir();
+                    } else {
+                        app->conf.backup.local_dir = std::nullopt;
+                    }
+                }
+
+                ImGui::SameLine();
+
+                static std::string default_local_dir = app->conf.backup.get_default_local_dir();
+
+                ImGui::BeginDisabled(!override);
+                changed |= ImGui::InputText(
+                    "##local_dir",
+                    override ? &app->conf.backup.local_dir.value() : &default_local_dir);
+                ImGui::EndDisabled();
+
+                if (changed) {
+                    app->conf.save_file();
+                }
+            }
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
 std::vector<HelloImGui::DockingSplit> splits() noexcept {
     auto log_split =
         HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.35f);
@@ -2167,6 +2249,14 @@ void show_menus(AppState* app) noexcept {
         ImGui::EndMenu();
     }
 
+    if (ImGui::MenuItem("Remote File Sync")) {
+        app->sync.show = true;
+    }
+
+    if (ImGui::MenuItem("Settings")) {
+        app->settings.show = true;
+    }
+
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (!app->is_running_tests() && arrow("start", ImGuiDir_Right)) {
         std::vector<size_t> tests_to_run =
@@ -2185,33 +2275,9 @@ void show_menus(AppState* app) noexcept {
     }
     ImGui::PopStyleColor(1);
     end_transparent_button();
-
-    if (ImGui::MenuItem("Remote File Sync")) {
-        app->sync.show = true;
-    }
 }
 
-void show_app_menu_items(AppState* app) noexcept {
-    if (ImGui::BeginMenu(app->i18n.menu_languages.c_str())) {
-        if (ImGui::MenuItem(app->i18n.menu_languages_english.c_str())) {
-            app->conf.language = "en";
-
-            app->load_i18n();
-
-            app->conf.save_file();
-        }
-
-        if (ImGui::MenuItem(app->i18n.menu_languages_ukrainian.c_str())) {
-            app->conf.language = "ua";
-
-            app->load_i18n();
-
-            app->conf.save_file();
-        }
-
-        ImGui::EndMenu();
-    }
-}
+void show_app_menu_items(AppState* app) noexcept {}
 
 void show_gui(AppState* app) noexcept {
     auto io = ImGui::GetIO();
@@ -2233,6 +2299,10 @@ void show_gui(AppState* app) noexcept {
 
     if (app->sync.show) {
         remote_file_sync(app);
+    }
+
+    if (app->settings.show) {
+        settings(app);
     }
 
     bool changed = false;

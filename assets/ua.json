@@ -1,7 +1,9 @@
 {
-    "menu_languages": "Мови",
-    "menu_languages_english": "Англійська",
-    "menu_languages_ukrainian": "Українська",
+    "settings_language": "Мови",
+    "settings_language_selection": {
+        "en": "Англійська", 
+        "ua": "Українська"
+    },
 
     "menu_edit": "Змінити",
     "menu_edit_undo": "Відмінити",

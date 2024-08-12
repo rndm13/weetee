@@ -4,6 +4,7 @@
 
 #include "string"
 #include "vector"
+#include "unordered_map"
 
 #include "hello_imgui/icons_font_awesome_4.h"
 
@@ -19,9 +20,8 @@ struct I18N {
     std::string menu_file_import;
     std::string menu_file_export;
 
-    std::string menu_languages;
-    std::string menu_languages_english;
-    std::string menu_languages_ukrainian;
+    std::string settings_language;
+    std::unordered_map<std::string, std::string> settings_language_selection;
 
     std::string tv_new_group_name;
 

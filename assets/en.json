@@ -1,7 +1,9 @@
 {
-    "menu_languages": "Languages",
-    "menu_languages_english": "English",
-    "menu_languages_ukrainian": "Ukrainian",
+    "settings_language": "Languages",
+    "settings_language_selection": {
+        "en": "English",
+        "ua": "Ukrainian"
+    },
 
     "menu_edit": "Edit",
     "menu_edit_undo": "Undo",

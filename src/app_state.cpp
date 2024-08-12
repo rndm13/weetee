@@ -55,6 +55,15 @@ void BackupConfig::load(SaveState* save) noexcept {
     save->load(this->local_dir);
 }
 
+std::string BackupConfig::get_default_local_dir() const noexcept {
+    return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) +
+           FS_SLASH "backups" FS_SLASH;
+}
+
+std::string BackupConfig::get_local_dir() const noexcept {
+    return this->local_dir.value_or(this->get_default_local_dir());
+}
+
 void UserConfig::save(SaveState* save) const noexcept {
     assert(save);
 
@@ -64,9 +73,8 @@ void UserConfig::save(SaveState* save) const noexcept {
     save->save(this->sync_name);
     save->save(this->sync_password); // Save a password clientside for future encryption
                                      // Worry about it being in plain text?
-    save->save(this->backup);
-
     save->save(this->language);
+    save->save(this->backup);
 }
 
 bool UserConfig::can_load(SaveState* save) const noexcept {
@@ -131,6 +139,9 @@ void UserConfig::open_file() noexcept {
 
         std::string new_filename = filename + ".old";
 
+        if (std::filesystem::exists(new_filename)) {
+            std::filesystem::remove(new_filename);
+        }
         if (!std::filesystem::copy_file(filename, new_filename)) {
             Log(LogLevel::Error, "Failed to copy old user config file '%s'", new_filename.c_str());
         }
@@ -803,14 +814,6 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     }
 
     this->conf.open_file();
-
-    std::string backup_path = 
-        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH "backups" FS_SLASH;
-
-    if (!std::filesystem::is_directory(backup_path)) {
-        std::filesystem::remove(backup_path);
-        std::filesystem::create_directory(backup_path);
-    }
 
     this->load_i18n();
 }
