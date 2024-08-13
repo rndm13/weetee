@@ -14,11 +14,14 @@ bool str_contains(const std::string& haystack, const std::string& needle) noexce
 }
 
 std::string get_filename(const std::string& path) noexcept {
-#ifndef WIN32
-    size_t slash = path.rfind("/");
-#else
-    size_t slash = path.rfind("\\");
-#endif
+    std::string filename = get_full_filename(path);
+
+    size_t name_end = filename.rfind('.');
+    return filename.substr(0, name_end);
+}
+
+std::string get_full_filename(const std::string& path) noexcept {
+    size_t slash = path.rfind(FS_SLASH);
 
     if (slash == std::string::npos) {
         slash = 0;

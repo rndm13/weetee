@@ -33,7 +33,9 @@
 #include "string"
 #include "utility"
 #include "variant"
+#include <filesystem>
 #include <fstream>
+#include <string>
 
 void begin_transparent_button() noexcept {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
@@ -1888,7 +1890,7 @@ void remote_auth(AppState* app) noexcept {
                 {"password", app->conf.sync_password},
                 {"remember_me", app->sync.remember_me ? "1" : "0"},
             };
-            execute_requestable(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
+            execute_requestable_async(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
                                 "/login", "", params, [app](auto& sync_session, std::string data) {
                                     sync_session.data = data;
                                     app->conf.save_file();
@@ -1902,7 +1904,7 @@ void remote_auth(AppState* app) noexcept {
                 {"name", app->conf.sync_name},
                 {"password", app->conf.sync_password},
             };
-            execute_requestable(
+            execute_requestable_async(
                 app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/register", "",
                 params,
                 [](auto& requestable, const std::string& data) { requestable.data = data; });
@@ -1956,6 +1958,8 @@ void remote_file_editor(AppState* app) noexcept {
                     }
                     if (ImGui::MenuItem("Save")) {
                         remote_file_save(app, name);
+
+                        app->saved_file = RemoteFile{name};
                     }
                     if (ImGui::MenuItem("Delete")) {
                         remote_file_delete(app, name);
@@ -1988,6 +1992,8 @@ void remote_file_editor(AppState* app) noexcept {
 
         if (ImGui::Button("Save")) {
             remote_file_save(app, app->sync.filename);
+
+            app->saved_file = RemoteFile{app->sync.filename};
         }
     }
 }
@@ -2011,7 +2017,7 @@ void remote_file_sync(AppState* app) noexcept {
                 httplib::Params params = {
                     {"session_token", app->conf.sync_session.data},
                 };
-                execute_requestable(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
+                execute_requestable_async(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
                                     "/logout", "", params,
                                     [app](auto& requestable, std::string data) {
                                         app->conf.sync_session.status = REQUESTABLE_NONE;
@@ -2060,11 +2066,11 @@ void settings(AppState* app) noexcept {
                 {
                     uint32_t time = app->conf.backup.time_to_backup;
                     static char buffer[32] = {0};
-                    snprintf(buffer, 31, "%02d:%02d:%02d", time / 3600000 % 24, time / 60000 % 60,
-                             time / 1000 % 60);
+                    snprintf(buffer, 31, "%02d:%02d:%02d", time / 3600 % 24, time / 60 % 60,
+                             time % 60);
 
-                    uint32_t min = 1000 * 60;
-                    uint32_t max = 1000 * 60 * 60;
+                    uint32_t min = 60;
+                    uint32_t max = 60 * 60;
 
                     changed |=
                         ImGui::SliderScalar("Time to backup", ImGuiDataType_U32,
@@ -2094,9 +2100,9 @@ void settings(AppState* app) noexcept {
                 static std::string default_local_dir = app->conf.backup.get_default_local_dir();
 
                 ImGui::BeginDisabled(!override);
-                changed |= ImGui::InputText(
-                    "##local_dir",
-                    override ? &app->conf.backup.local_dir.value() : &default_local_dir);
+                changed |=
+                    ImGui::InputText("##local_dir", override ? &app->conf.backup.local_dir.value()
+                                                             : &default_local_dir);
                 ImGui::EndDisabled();
 
                 if (changed) {
@@ -2382,7 +2388,15 @@ void show_gui(AppState* app) noexcept {
     }
 }
 
-void pre_frame(AppState* app) noexcept {}
+void pre_frame(AppState* app) noexcept {
+    app->backup.time_since_last_backup += ImGui::GetIO().DeltaTime;
+
+    if (app->backup.time_since_last_backup > app->conf.backup.time_to_backup) {
+        app->backup.time_since_last_backup = 0;
+
+        make_backups(app);
+    }
+}
 
 void load_fonts(AppState* app) noexcept {
     app->regular_font =

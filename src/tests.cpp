@@ -547,7 +547,7 @@ RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexc
                     httplib::MultipartFormData data = {
                         .name = elem.key,
                         .content = file_content,
-                        .filename = get_filename(file),
+                        .filename = get_full_filename(file),
                         .content_type = content_type,
                     };
                     form.push_back(data);

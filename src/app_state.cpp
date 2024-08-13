@@ -16,7 +16,8 @@
 #include "filesystem"
 #include "fstream"
 #include "iterator"
-#include <filesystem>
+#include "filesystem"
+#include <cstdio>
 
 void BackupConfig::save(SaveState* save) const noexcept {
     assert(save);
@@ -56,8 +57,8 @@ void BackupConfig::load(SaveState* save) noexcept {
 }
 
 std::string BackupConfig::get_default_local_dir() const noexcept {
-    return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) +
-           FS_SLASH "backups" FS_SLASH;
+    return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH
+           "backups" FS_SLASH;
 }
 
 std::string BackupConfig::get_local_dir() const noexcept {
@@ -174,6 +175,18 @@ void UserConfig::save_file() noexcept {
         Log(LogLevel::Error, "Failed to save", filename.c_str());
         return;
     }
+}
+
+std::string get_saved_path(const SavedFile& saved) {
+    switch (saved.index()) {
+    case SAVED_FILE_NONE:
+        return "Untitled";
+    case SAVED_FILE_REMOTE:
+        return std::get<RemoteFile>(saved).filename;
+    case SAVED_FILE_LOCAL:
+        return std::get<LocalFile>(saved).filename;
+    }
+    return "Unknown";
 }
 
 const Group AppState::root_initial = Group{
@@ -806,11 +819,19 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
     this->undo_history.reset_undo_history(this);
 
     std::string conf_path =
-        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + FS_SLASH "weetee" FS_SLASH;
+        HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) + FS_SLASH
+        "weetee" FS_SLASH;
 
     if (!std::filesystem::is_directory(conf_path)) {
         std::filesystem::remove(conf_path);
         std::filesystem::create_directory(conf_path);
+    }
+
+    std::string backup_path = this->conf.backup.get_default_local_dir();
+
+    if (!std::filesystem::is_directory(backup_path)) {
+        std::filesystem::remove(backup_path);
+        std::filesystem::create_directory(backup_path);
     }
 
     this->conf.open_file();
@@ -1446,10 +1467,16 @@ void stop_tests(AppState* app) noexcept {
     app->thr_pool.purge();
 }
 
-void remote_file_list(AppState* app) noexcept {
+void remote_file_list(AppState* app, bool sync,
+                      Requestable<std::vector<std::string>>* result) noexcept {
+    if (result == nullptr) {
+        result = &app->sync.files;
+    }
+
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
     };
+
     auto proc = [](Requestable<std::vector<std::string>>& requestable, const std::string& data) {
         requestable.data.clear();
 
@@ -1469,8 +1496,14 @@ void remote_file_list(AppState* app) noexcept {
             }
         }
     };
-    execute_requestable(app, app->sync.files, HTTP_GET, app->conf.sync_hostname, "/file-list", "",
-                        params, proc);
+
+    if (sync) {
+        execute_requestable_sync(app, *result, HTTP_GET, app->conf.sync_hostname, "/file-list", "",
+                                 params, proc);
+    } else {
+        execute_requestable_async(app, *result, HTTP_GET, app->conf.sync_hostname, "/file-list", "",
+                                  params, proc);
+    }
 }
 
 void remote_file_open(AppState* app, const std::string& name) noexcept {
@@ -1483,30 +1516,32 @@ void remote_file_open(AppState* app, const std::string& name) noexcept {
 
         requestable.data = data;
     };
-    execute_requestable(app, app->sync.file_open, HTTP_GET, app->conf.sync_hostname, "/file", "",
-                        params, proc);
+    execute_requestable_async(app, app->sync.file_open, HTTP_GET, app->conf.sync_hostname, "/file",
+                              "", params, proc);
 };
 
-void remote_file_delete(AppState* app, const std::string& name) noexcept {
+void remote_file_delete(AppState* app, const std::string& name, bool sync) noexcept {
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
         {"file_name", name},
     };
 
     auto proc = [app, &name](Requestable<bool>& requestable, const std::string& data) {
-        app->sync.files.data.erase(
-            std::remove(app->sync.files.data.begin(), app->sync.files.data.end(), name));
-
-        app->saved_file = {};
-        if (app->sync.filename == name) {
-            app->sync.filename = "";
-        }
+        app->sync.files = {};
+        // Commented out because of race conditions when files could be invalidated
+        // app->sync.files.data.erase(
+        //     std::remove(app->sync.files.data.begin(), app->sync.files.data.end(), name));
 
         requestable.data = true;
     };
 
-    execute_requestable(app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname, "/file",
-                        "", params, proc);
+    if (sync) {
+        execute_requestable_sync(app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname,
+                                 "/file", "", params, proc);
+    } else {
+        execute_requestable_async(app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname,
+                                  "/file", "", params, proc);
+    }
 };
 
 void remote_file_rename(AppState* app, const std::string& old_name,
@@ -1531,11 +1566,15 @@ void remote_file_rename(AppState* app, const std::string& old_name,
 
         requestable.data = true;
     };
-    execute_requestable(app, app->sync.file_delete, HTTP_PATCH, app->conf.sync_hostname, "/file",
-                        "", params, proc);
+    execute_requestable_async(app, app->sync.file_delete, HTTP_PATCH, app->conf.sync_hostname,
+                              "/file", "", params, proc);
 };
 
-void remote_file_save(AppState* app, const std::string& name) noexcept {
+void remote_file_save(AppState* app, const std::string& name, bool sync, Requestable<bool>* result) noexcept {
+    if (result == nullptr) {
+        result = &app->sync.file_save;
+    }
+
     std::stringstream out;
     app->save_file(out);
     std::string body = out.str();
@@ -1548,14 +1587,149 @@ void remote_file_save(AppState* app, const std::string& name) noexcept {
     auto proc = [app, name](auto& requestable, const std::string& data) {
         requestable.data = true;
 
-        app->saved_file = RemoteFile{name};
-
         if (std::find(app->sync.files.data.begin(), app->sync.files.data.end(), name) ==
             app->sync.files.data.end()) {
             app->sync.files.data.push_back(name);
         }
     };
 
-    execute_requestable(app, app->sync.file_save, HTTP_POST, app->conf.sync_hostname, "/file", body,
-                        params, proc);
+    if (sync) {
+        execute_requestable_sync(app, *result, HTTP_POST, app->conf.sync_hostname,
+                                 "/file", body, params, proc);
+    } else {
+        execute_requestable_async(app, *result, HTTP_POST, app->conf.sync_hostname,
+                                  "/file", body, params, proc);
+    }
 };
+
+std::optional<BackupInfo> get_backup_info(const std::string& filename) noexcept {
+    BackupInfo result{};
+
+    size_t id_end = filename.rfind('.');
+    size_t id_start = filename.rfind('_', id_end);
+    size_t name_start = filename.rfind(FS_SLASH, id_start);
+    if (name_start == std::string::npos) {
+        name_start = 0;
+    } else {
+        name_start += 1; // Skip over FS_SLASH
+    }
+
+    if (id_end == std::string::npos || id_start == std::string::npos) {
+        return std::nullopt;
+    }
+
+    result.id = atoi(filename.substr(id_start + 1, id_end - id_start - 1).c_str());
+    result.name = filename.substr(name_start, id_start - name_start);
+
+    return result;
+}
+
+// TODO: backup only when file was changed
+void make_local_backup(AppState* app) noexcept {
+    namespace fs = std::filesystem;
+
+    std::string dir = app->conf.backup.get_local_dir();
+
+    std::string name = get_filename(get_saved_path(app->saved_file));
+    int64_t max_id = 0;
+
+    // Find a max ID of a backup
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        std::optional<BackupInfo> opt_info = get_backup_info(entry.path());
+        if (!opt_info.has_value()) {
+            continue;
+        }
+
+        BackupInfo info = opt_info.value();
+
+        if (info.name == name && info.id > max_id) {
+            max_id = info.id;
+        }
+    }
+
+    max_id += 1;
+
+    std::string new_backup_path =
+        app->conf.backup.get_local_dir() + name + '_' + to_string(max_id) + ".wt";
+
+    std::ofstream out(new_backup_path);
+    Log(LogLevel::Info, "Saving backup to local file '%s'", new_backup_path.c_str());
+    if (app->save_file(out)) {
+        Log(LogLevel::Info, "Successfully saved to '%s'!", new_backup_path.c_str());
+    }
+
+    // Remove entries with lower id
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        std::optional<BackupInfo> opt_info = get_backup_info(entry.path());
+        if (!opt_info.has_value()) {
+            continue;
+        }
+
+        BackupInfo info = opt_info.value();
+        if (info.name == name && info.id <= max_id - app->conf.backup.local_to_keep) {
+            fs::remove(entry);
+        }
+    }
+}
+
+void make_remote_backup(AppState* app) noexcept {
+    Log(LogLevel::Info, "Making a remote backup...");
+
+    app->thr_pool.detach_task([app]() {
+        Requestable<std::vector<std::string>> file_list;
+        remote_file_list(app, true, &file_list);
+
+        if (file_list.status != REQUESTABLE_FOUND) {
+            // TODO: Show these errors and a success message when finishing
+            // Log(LogLevel::Error, "Failed to fetch a list of remote files: %s",
+            //     file_list.error.c_str());
+            // Log(LogLevel::Error, "Failed to make a remote backup");
+            return;
+        }
+
+        std::string name = get_filename(get_saved_path(app->saved_file));
+        int64_t max_id = 0;
+
+        // Find a max ID of a backup
+        for (const std::string& filename : file_list.data) {
+            std::optional<BackupInfo> opt_info = get_backup_info(filename);
+
+            if (!opt_info.has_value()) {
+                continue;
+            }
+
+            BackupInfo info = opt_info.value();
+            if (info.name == name && info.id > max_id) {
+                max_id = info.id;
+            }
+        }
+
+        max_id += 1;
+
+        std::string new_backup_filename = name + '_' + to_string(max_id) + ".wt";
+
+        remote_file_save(app, new_backup_filename);
+
+        // Remove entries with lower id
+        for (const std::string& filename : file_list.data) {
+            std::optional<BackupInfo> opt_info = get_backup_info(filename);
+            if (!opt_info.has_value()) {
+                continue;
+            }
+
+            BackupInfo info = opt_info.value();
+            if (info.name == name && info.id <= max_id - app->conf.backup.remote_to_keep) {
+                remote_file_delete(app, filename);
+            }
+        }
+    });
+}
+
+void make_backups(AppState* app) noexcept {
+    if (app->conf.backup.local_to_keep > 0) {
+        make_local_backup(app);
+    }
+    if (app->conf.backup.remote_to_keep > 0) {
+        make_remote_backup(app);
+    }
+}

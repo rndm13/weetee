@@ -46,7 +46,7 @@ template <class Data> struct Requestable {
 };
 
 struct BackupConfig {
-    uint32_t time_to_backup = 1000 * 60 * 5;
+    uint32_t time_to_backup = 60 * 5;
 
     uint8_t local_to_keep = 5;
     uint8_t remote_to_keep = 0;
@@ -101,7 +101,7 @@ struct TreeViewState {
     std::unordered_set<size_t> filtered_tests = {};
     std::unordered_set<size_t> selected_tests = {};
 
-    // Updated every frame
+    // Updated every frame, needed for shortcuts to work
     bool window_focused;
 };
 
@@ -132,11 +132,10 @@ enum SavedFileType : uint8_t {
 };
 
 using SavedFile = std::variant<std::monostate, RemoteFile, LocalFile>;
+std::string get_saved_path(const SavedFile& saved);
 
 struct BackupState {
     float time_since_last_backup = 0;
-
-    size_t backup_id = 0;
 };
 
 struct SettingsState {
@@ -160,6 +159,7 @@ struct AppState {
     ResultsState results = {};
     SyncState sync = {};
     SettingsState settings = {};
+    BackupState backup = {};
 
     SaveState clipboard;
     UndoHistory undo_history;
@@ -349,59 +349,81 @@ bool test_analysis(AppState*, const Test* test, TestResult* test_result,
                    httplib::Result&& http_result, const VariablesMap& vars) noexcept;
 
 template <class Data, class Process>
-void execute_requestable(AppState* app, Requestable<Data>& requestable, HTTPType type,
-                         const std::string& hostname, const std::string& destination,
-                         const std::string& body, const httplib::Params& params,
-                         Process&& process) noexcept {
+void execute_requestable_sync(AppState* app, Requestable<Data>& requestable, HTTPType type,
+                              const std::string& hostname, const std::string& destination,
+                              const std::string& body, const httplib::Params& params,
+                              Process&& process) noexcept {
+    requestable.status = REQUESTABLE_WAIT;
+
+    httplib::Client cli(hostname);
+
+    cli.set_follow_location(true);
+
+    httplib::Result result;
+    std::string dest_params = httplib::append_query_params(destination, params);
+    switch (type) {
+    case HTTP_GET:
+        result = cli.Get(dest_params);
+        break;
+    case HTTP_POST:
+        result = cli.Post(dest_params, body, "application/octet-stream");
+        break;
+    case HTTP_DELETE:
+        result = cli.Delete(dest_params, body, "application/octet-stream");
+        break;
+    case HTTP_PATCH:
+        result = cli.Patch(dest_params, body, "application/octet-stream");
+        break;
+    default:
+        break;
+    }
+
+    if (result.error() != httplib::Error::Success) {
+        requestable.status = REQUESTABLE_ERROR;
+        requestable.error = to_string(result.error());
+    } else {
+        if (result->status != 200) {
+            requestable.status = REQUESTABLE_ERROR;
+            if (result->body != "") {
+                requestable.error = result->body;
+            } else {
+                requestable.error = httplib::status_message(result->status);
+            }
+        } else {
+            requestable.status = REQUESTABLE_FOUND;
+            requestable.error = "";
+            process(requestable, result->body);
+        }
+    }
+}
+
+template <class Data, class Process>
+void execute_requestable_async(AppState* app, Requestable<Data>& requestable, HTTPType type,
+                               const std::string& hostname, const std::string& destination,
+                               const std::string& body, const httplib::Params& params,
+                               Process&& process) noexcept {
     app->thr_pool.detach_task(
         [app, &requestable, type, hostname, destination, params, body, process]() mutable {
-            requestable.status = REQUESTABLE_WAIT;
-
-            httplib::Client cli(hostname);
-
-            cli.set_follow_location(true);
-
-            httplib::Result result;
-            std::string dest_params = httplib::append_query_params(destination, params);
-            switch (type) {
-            case HTTP_GET:
-                result = cli.Get(dest_params);
-                break;
-            case HTTP_POST:
-                result = cli.Post(dest_params, body, "application/octet-stream");
-                break;
-            case HTTP_DELETE:
-                result = cli.Delete(dest_params, body, "application/octet-stream");
-                break;
-            case HTTP_PATCH:
-                result = cli.Patch(dest_params, body, "application/octet-stream");
-                break;
-            default:
-                break;
-            }
-
-            if (result.error() != httplib::Error::Success) {
-                requestable.status = REQUESTABLE_ERROR;
-                requestable.error = to_string(result.error());
-            } else {
-                if (result->status != 200) {
-                    requestable.status = REQUESTABLE_ERROR;
-                    if (result->body != "") {
-                        requestable.error = result->body;
-                    } else {
-                        requestable.error = httplib::status_message(result->status);
-                    }
-                } else {
-                    requestable.status = REQUESTABLE_FOUND;
-                    requestable.error = "";
-                    process(requestable, result->body);
-                }
-            }
+            execute_requestable_sync(app, requestable, type, hostname, destination, body, params,
+                                     process);
         });
 }
 
-void remote_file_list(AppState* app) noexcept;
+void remote_file_list(AppState* app, bool sync = false, Requestable<std::vector<std::string>>* result = nullptr) noexcept;
 void remote_file_open(AppState* app, const std::string&) noexcept;
-void remote_file_delete(AppState* app, const std::string&) noexcept;
+void remote_file_delete(AppState* app, const std::string&, bool sync = false) noexcept;
 void remote_file_rename(AppState* app, const std::string&, const std::string&) noexcept;
-void remote_file_save(AppState* app, const std::string&) noexcept;
+void remote_file_save(AppState* app, const std::string&, bool sync = false, Requestable<bool>* result = nullptr) noexcept;
+
+// Backup naming scheme
+// name_id.wt
+struct BackupInfo {
+    std::string name;
+    uint32_t id;
+};
+
+std::optional<BackupInfo> get_backup_info(const std::string& filename) noexcept;
+
+void make_local_backup(AppState* app) noexcept;
+void make_remote_backup(AppState* app) noexcept;
+void make_backups(AppState* app) noexcept;

@@ -36,7 +36,7 @@ TEST(utils, get_filename) {
     std::string file_path = "C:\\path\\to\\a\\file.txt";
 #endif
 
-    EXPECT_EQ(get_filename(file_path), "file.txt");
+    EXPECT_EQ(get_full_filename(file_path), "file.txt");
 }
 
 TEST(utils, split_string) {

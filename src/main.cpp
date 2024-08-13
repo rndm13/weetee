@@ -13,7 +13,6 @@
 // TODO: Add Head, Options, Trace HTTP Methods
 // TODO: Finish i18n
 // TODO: Make a crash report UI
-// TODO: Make automatic backups
 
 void post_init(AppState* app) noexcept;
 
