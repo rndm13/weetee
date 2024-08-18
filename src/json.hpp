@@ -10,8 +10,9 @@
 
 // returns an error message, if there isn't returns null pointer
 const char* json_format(std::string& json) noexcept;
-const char* json_compare(const std::string&, const std::string&) noexcept;
+const char* json_compare(const std::string& expected, const std::string& response) noexcept;
 
+// This doesn't work on windows...
 namespace nlohmann {
 template <class... Args> struct adl_serializer<std::variant<Args...>> {
     static void to_json(json& j, const std::variant<Args...>& variant) {

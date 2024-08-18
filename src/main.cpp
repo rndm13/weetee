@@ -13,6 +13,7 @@
 // TODO: Add Head, Options, Trace HTTP Methods
 // TODO: Finish i18n
 // TODO: Make a crash report UI
+// TODO: Update README
 
 void post_init(AppState* app) noexcept;
 

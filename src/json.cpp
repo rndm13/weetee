@@ -11,7 +11,7 @@ const char* json_format(std::string& input) noexcept {
     return nullptr;
 }
 
-const char* json_compare(const std::string& expected, const std::string& got) noexcept {
+const char* json_compare(const std::string& expected, const std::string& response) noexcept {
     json json_expected, json_got;
 
     json_expected = json::parse(expected, nullptr, false);
@@ -19,7 +19,7 @@ const char* json_compare(const std::string& expected, const std::string& got) no
         return "Invalid Expected JSON";
     }
 
-    json_got = json::parse(got, nullptr, false);
+    json_got = json::parse(response, nullptr, false);
     if (json_got.is_discarded()) {
         return "Invalid Response JSON";
     }
