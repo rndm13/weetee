@@ -286,8 +286,6 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
 
     if (changed) {
         app->tree_view.selected_tests.clear();
-
-        app->undo_history.push_undo_history(app);
     }
 
     return changed;
@@ -389,18 +387,18 @@ bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) noexcept {
     return point.x > min.x && point.x < max.x && point.y > min.y && point.y < max.y;
 }
 
-bool tree_view_show(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
+bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
                     float indentation) noexcept {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ImGui::GetStyle().FramePadding.x, 0});
-    bool changed =
-        std::visit([app, &min, &max, idx, indentation](
-                       auto& val) { return tree_view_show(app, val, min, max, idx, indentation); },
-                   nt);
+    auto visitor = [app, &min, &max, idx, indentation](auto& val) {
+        return show_tree_view_row(app, val, min, max, idx, indentation);
+    };
+    bool changed = std::visit(visitor, nt);
     ImGui::PopStyleVar();
     return changed;
 }
 
-bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx,
+bool show_tree_view_row(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx,
                     float indentation) noexcept {
     size_t id = test.id;
     bool changed = false;
@@ -468,7 +466,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
     max.x += 40;
     max.y += 40;
 
-    tree_view_dnd_target(app, test.parent_id, idx);
+    changed |= tree_view_dnd_target(app, test.parent_id, idx);
 
     changed |= tree_view_context(app, id);
 
@@ -481,7 +479,7 @@ bool tree_view_show(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t 
     return changed;
 }
 
-bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_t idx,
+bool show_tree_view_row(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_t idx,
                     float indentation) noexcept {
     size_t id = group.id;
     bool changed = false;
@@ -506,11 +504,14 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
     ImGui::SameLine();
     ImGui::Text("%s", group.name.c_str());
     ImGui::SameLine();
+
     // Add test button
     begin_transparent_button();
 
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (ImGui::Button(ICON_FA_PLUS_CIRCLE "##add")) {
+        changed = true;
+
         group.flags |= GROUP_OPEN;
 
         auto id = ++app->id_counter;
@@ -582,7 +583,7 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
     max.x += 40;
     max.y += 40;
 
-    tree_view_dnd_target(app, group.id, 0);
+    changed |= tree_view_dnd_target(app, group.id, 0);
 
     changed |= tree_view_context(app, id);
 
@@ -594,12 +595,13 @@ bool tree_view_show(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_
         for (size_t child_id : group.children_ids) {
             assert(app->tests.contains(child_id));
 
-            changed |= tree_view_show(app, app->tests.at(child_id), min, max, index,
+            changed |= show_tree_view_row(app, app->tests.at(child_id), min, max, index,
                                       indentation + INDENTATION_INCREMENT);
 
             if (changed) {
                 break;
             }
+
             index += 1;
         }
 
@@ -621,7 +623,8 @@ void tree_view(AppState* app) noexcept {
     ImGui::PushFont(app->regular_font);
 
     ImGui::SetNextItemWidth(-1);
-    bool changed = ImGui::InputText("##tree_view_search", &app->tree_view.filter);
+    bool changed_search = ImGui::InputText("##tree_view_search", &app->tree_view.filter);
+    bool changed_data = false;
 
     if (ImGui::BeginTable("tests", 4)) {
         ImGui::TableSetupColumn("test");
@@ -631,12 +634,16 @@ void tree_view(AppState* app) noexcept {
 
         ImVec2 min;
         ImVec2 max;
-        changed |= tree_view_show(app, app->tests[0], min, max, 0, 0.0f);
+        changed_data |= show_tree_view_row(app, app->tests[0], min, max, 0, 0.0f);
 
         ImGui::EndTable();
     }
 
-    if (changed) {
+    if (changed_data) {
+        app->undo_history.push_undo_history(app);
+    }
+
+    if (changed_search || changed_data) {
         app->filter(&app->tests[0]);
     }
 
@@ -1890,11 +1897,12 @@ void remote_auth(AppState* app) noexcept {
                 {"password", app->conf.sync_password},
                 {"remember_me", app->sync.remember_me ? "1" : "0"},
             };
-            execute_requestable_async(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
-                                "/login", "", params, [app](auto& sync_session, std::string data) {
-                                    sync_session.data = data;
-                                    app->conf.save_file();
-                                });
+            execute_requestable_async(app, app->conf.sync_session, HTTP_GET,
+                                      app->conf.sync_hostname, "/login", "", params,
+                                      [app](auto& sync_session, std::string data) {
+                                          sync_session.data = data;
+                                          app->conf.save_file();
+                                      });
         }
 
         ImGui::SameLine();
@@ -2017,11 +2025,11 @@ void remote_file_sync(AppState* app) noexcept {
                 httplib::Params params = {
                     {"session_token", app->conf.sync_session.data},
                 };
-                execute_requestable_async(app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname,
-                                    "/logout", "", params,
-                                    [app](auto& requestable, std::string data) {
-                                        app->conf.sync_session.status = REQUESTABLE_NONE;
-                                    });
+                execute_requestable_async(app, app->conf.sync_session, HTTP_GET,
+                                          app->conf.sync_hostname, "/logout", "", params,
+                                          [app](auto& requestable, std::string data) {
+                                              app->conf.sync_session.status = REQUESTABLE_NONE;
+                                          });
                 app->conf.sync_session.data = "";
                 app->sync = {.show = true};
             }

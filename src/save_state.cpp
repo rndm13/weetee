@@ -10,14 +10,6 @@ char* SaveState::load_offset(size_t offset) noexcept {
 }
 
 void SaveState::save(const std::string& str) noexcept {
-    if (this->save_version <= 0) {
-        if (str.length() > 0) { // To avoid failing 0 size assertion in save
-            this->save(str.data(), str.length());
-        }
-        this->save('\0');
-        return;
-    }
-
     size_t length = str.length();
     this->save(reinterpret_cast<char*>(&length), sizeof(length));
     if (length > 0) {
@@ -27,19 +19,6 @@ void SaveState::save(const std::string& str) noexcept {
 }
 
 bool SaveState::can_load(const std::string& str) noexcept {
-    if (this->save_version <= 0) {
-        size_t length = 0;
-        while (this->can_offset(length) && *this->load_offset(length) != char(0)) {
-            length++;
-        }
-        if (!this->can_offset(length)) {
-            return false;
-        }
-
-        this->load_idx += length + 1; // Skip over null terminator
-        return true;
-    }
-
     size_t length = 0;
     if (!this->can_load_reset(length)) {
         return false;
@@ -54,21 +33,6 @@ bool SaveState::can_load(const std::string& str) noexcept {
 }
 
 void SaveState::load(std::string& str) noexcept {
-    if (this->save_version <= 0) {
-        size_t length = 0;
-        while (*this->load_offset(length) != char(0)) {
-            length++;
-        }
-
-        if (length > 0) { // To avoid failing 0 size assertion in load
-            str.resize(length);
-            this->load(str.data(), length);
-        }
-
-        this->load_idx++; // Skip over null terminator
-        return;
-    }
-
     size_t length;
     this->load(length);
     if (length > 0) { // To avoid failing 0 size assertion in load

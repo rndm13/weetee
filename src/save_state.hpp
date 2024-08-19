@@ -15,8 +15,6 @@
 #include "variant"
 #include "vector"
 
-// TODO: Add unit tests for save_state
-
 static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
 
 struct SaveState {
@@ -145,6 +143,9 @@ struct SaveState {
         if (!this->can_load_reset(size)) {
             return false;
         }
+        if (size > SAVE_STATE_MAX_SIZE) {
+            return false;
+        }
         this->load(size);
 
         for (size_t i = 0; i < size; i++) {
@@ -189,11 +190,12 @@ struct SaveState {
         if (!this->can_load_reset(index)) {
             return false;
         }
-        this->load(index);
 
-        // if (index != std::variant_npos) {
-        //     return false;
-        // }
+        if (!valid_variant_from_index<std::variant<T...>>(index)) {
+            return false;
+        }
+
+        this->load(index);
 
         if (!valid_variant_from_index<std::variant<T...>>(index)) {
             return false;
@@ -226,6 +228,9 @@ struct SaveState {
     template <class Element> bool can_load(const std::vector<Element>& vec) noexcept {
         size_t size;
         if (!this->can_load_reset(size)) {
+            return false;
+        }
+        if (size > SAVE_STATE_MAX_SIZE) {
             return false;
         }
         this->load(size);
@@ -288,20 +293,19 @@ struct SaveState {
 };
 
 struct UndoHistory {
-    size_t undo_idx = {};
-    std::vector<SaveState> undo_history;
+    size_t undo_idx = 0;
+    std::vector<SaveState> undo_history = {};
 
     // should be called after every edit
     template <class T> void push_undo_history(const T* obj) noexcept {
         assert(obj);
 
-        if (this->undo_idx < this->undo_history.size() - 1) {
-            // remove redos
-            this->undo_history.resize(this->undo_idx);
+        if (this->undo_idx + 1 < this->undo_history.size()) {
+            // Remove redos
+            this->undo_history.resize(this->undo_idx + 1);
         }
 
-        this->undo_history.emplace_back();
-        SaveState* new_save = &this->undo_history.back();
+        SaveState* new_save = &this->undo_history.emplace_back();
         new_save->save(*obj);
         new_save->finish_save();
 
