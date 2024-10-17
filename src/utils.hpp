@@ -10,6 +10,7 @@
 
 #include "cassert"
 #include "cmath"
+
 #include "future"
 #include "string"
 #include "variant"
@@ -35,22 +36,26 @@ template <class... Ts> struct overloaded : Ts... {
 
 #define GETTER_VISITOR(property)                                                                   \
     struct GETVISITOR##property {                                                                  \
-        constexpr const auto& operator()(const auto& visitee) const {                     \
+        constexpr const auto& operator()(const auto& visitee) const {                              \
             return visitee.property;                                                               \
         }                                                                                          \
                                                                                                    \
-        auto& operator()(auto& visitee) const { return visitee.property; }                \
+        auto& operator()(auto& visitee) const {                                                    \
+            return visitee.property;                                                               \
+        }                                                                                          \
     };
 
 #define COPY_GETTER_VISITOR(property, name)                                                        \
     struct COPYGETVISITOR##name {                                                                  \
-        constexpr auto operator()(const auto& visitee) const { return visitee.property; } \
+        constexpr auto operator()(const auto& visitee) const {                                     \
+            return visitee.property;                                                               \
+        }                                                                                          \
     };
 
 #define SETTER_VISITOR(property, type)                                                             \
     struct SETVISITOR##property {                                                                  \
         const type new_property;                                                                   \
-        type operator()(auto& visitee) const {                                            \
+        type operator()(auto& visitee) const {                                                     \
             return visitee.property = this->new_property;                                          \
         }                                                                                          \
     };
@@ -59,8 +64,7 @@ using EmptyVisitor = COPY_GETTER_VISITOR(empty(), empty);
 
 #define ARRAY_SIZE(arr) (sizeof((arr)) / sizeof(*(arr)))
 
-template <class T>
-constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) {
+template <class T> constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) {
     if (a.size() != b.size()) {
         return false;
     }
@@ -74,18 +78,20 @@ constexpr bool operator==(const std::vector<T>& a, const std::vector<T>& b) {
     return true;
 }
 
-template <class T>
-constexpr bool operator!=(const std::vector<T>& a, const std::vector<T>& b) {
+template <class T> constexpr bool operator!=(const std::vector<T>& a, const std::vector<T>& b) {
     return !(a == b);
 }
 
 constexpr ImVec4 rgb_to_ImVec4(int r, int g, int b, int a) {
-    return ImVec4(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f,
-                  static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
+    return ImVec4(
+        static_cast<float>(r) / 255.0f,
+        static_cast<float>(g) / 255.0f,
+        static_cast<float>(b) / 255.0f,
+        static_cast<float>(a) / 255.0f);
 }
 
-void find_and_replace(std::string& str, const std::string& to_replace,
-                      const std::string& replace_with);
+void find_and_replace(
+    std::string& str, const std::string& to_replace, const std::string& replace_with);
 
 // Case insensitive string comparison
 bool str_contains(const std::string& haystack, const std::string& needle);
@@ -122,24 +128,24 @@ std::string get_full_filename(const std::string& path);
 // Doesn't include extension
 std::string get_filename(const std::string& path);
 
-std::vector<std::string> split_string(const std::string& str,
-                                      const std::string& separator);
+std::vector<std::string> split_string(const std::string& str, const std::string& separator);
 
-std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
-                                                            char end);
+std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin, char end);
 
 template <typename Key, typename Value>
 using MapIterator = typename std::unordered_map<Key, Value>::iterator;
 
 template <typename Key, typename Value> class MapKeyIterator : public MapIterator<Key, Value> {
-  public:
+public:
     MapKeyIterator() : MapIterator<Key, Value>(){};
     MapKeyIterator(MapIterator<Key, Value> it_) : MapIterator<Key, Value>(it_){};
 
     Key* operator->() {
         return reinterpret_cast<Key* const>(&MapIterator<Key, Value>::operator->()->first);
     }
-    Key operator*() { return MapIterator<Key, Value>::operator*().first; }
+    Key operator*() {
+        return MapIterator<Key, Value>::operator*().first;
+    }
 };
 
 template <typename T> struct copy_atomic {
@@ -155,6 +161,10 @@ template <typename T> struct copy_atomic {
         return *this;
     }
 
-    T load() const { return this->value.load(); }
-    void store(const T& new_value) { return this->value.store(new_value); }
+    T load() const {
+        return this->value.load();
+    }
+    void store(const T& new_value) {
+        return this->value.store(new_value);
+    }
 };

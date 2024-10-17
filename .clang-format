@@ -1,8 +1,25 @@
 ---
 BasedOnStyle: LLVM
-IndentWidth: 4
 ---
 Language: Cpp
+IndentWidth: 4
+
+ColumnLimit: 100
+
+AllowShortEnumsOnASingleLine: False
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBinaryOperators: None
+# BreakBinaryOperations: Never only in clang-format 20
+
+AccessModifierOffset: -4
+AlignAfterOpenBracket: AlwaysBreak
+
+InsertBraces: true
+
 DerivePointerAlignment: false
 PointerAlignment: Left
-ColumnLimit: 100
+
+BinPackArguments: false
+BinPackParameters: false
+
+PackConstructorInitializers: CurrentLine
