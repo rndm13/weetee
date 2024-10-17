@@ -40,11 +40,11 @@ std::vector<std::string> split_string(const std::string& str,
         assert(end <= str.size());
 
         // Trimming
-        while (begin < str.size() && std::isspace(str.at(begin))) {
+        while (begin < str.size() && std::isspace(str[begin])) {
             begin += 1;
         }
         // End overflows
-        while (end - 1 < str.size() && std::isspace(str.at(end - 1))) {
+        while (end - 1 < str.size() && std::isspace(str[end - 1])) {
             end -= 1;
         }
 

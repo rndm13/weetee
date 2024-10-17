@@ -143,10 +143,10 @@ struct SaveState {
         if (!this->can_load_reset(size)) {
             return false;
         }
+        this->load(size);
         if (size > SAVE_STATE_MAX_SIZE) {
             return false;
         }
-        this->load(size);
 
         for (size_t i = 0; i < size; i++) {
             K k = {};
@@ -191,11 +191,11 @@ struct SaveState {
             return false;
         }
 
+        this->load(index);
+
         if (!valid_variant_from_index<std::variant<T...>>(index)) {
             return false;
         }
-
-        this->load(index);
 
         if (!valid_variant_from_index<std::variant<T...>>(index)) {
             return false;
@@ -230,10 +230,10 @@ struct SaveState {
         if (!this->can_load_reset(size)) {
             return false;
         }
+        this->load(size);
         if (size > SAVE_STATE_MAX_SIZE) {
             return false;
         }
-        this->load(size);
 
         for (size_t i = 0; i < size; i++) {
             Element elem = {};

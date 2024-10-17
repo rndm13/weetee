@@ -6,12 +6,11 @@ include(cotire)
 include(ExternalProject)
 
 set(CMAKE_GENERATOR "Ninja")
-# set(CMAKE_CXX_LINK_EXECUTABLE "ld")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if (!WIN32)
-    set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op")
+    set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wshadow -Wnon-virtual-dtor -pedantic -Wold-style-cast -Wcast-align -Wunused -Wconversion -Wuseless-cast -Wnull-dereference -Wlogical-op $<$<CONFIG:DEBUG>:-fsanitize=address,undefined,leak>")
 else ()
     set(CMAKE_CXX_FLAGS "")
 endif ()
@@ -83,8 +82,10 @@ FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
 )
+
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
 FetchContent_MakeAvailable(googletest)
 
 # Add tests
