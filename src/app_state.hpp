@@ -175,6 +175,8 @@ struct AppState {
 
     I18N i18n;
 
+    bool unit_testing = false;
+
     Group* root_group() noexcept;
     const Group* root_group() const noexcept;
 
@@ -276,7 +278,7 @@ struct AppState {
 
     void load_i18n() noexcept;
 
-    AppState(HelloImGui::RunnerParams* _runner_params) noexcept;
+    AppState(HelloImGui::RunnerParams* _runner_params, bool unit_testing = false) noexcept;
 
     // no copy/move
     AppState(const AppState&) = delete;

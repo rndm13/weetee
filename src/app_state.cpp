@@ -16,7 +16,6 @@
 #include "filesystem"
 #include "fstream"
 #include "iterator"
-#include "filesystem"
 #include <cstdio>
 
 void BackupConfig::save(SaveState* save) const noexcept {
@@ -810,12 +809,14 @@ bool AppState::open_file(std::istream& in) noexcept {
 }
 
 void AppState::load_i18n() noexcept {
-    std::ifstream in(HelloImGui::AssetFileFullPath(this->conf.language + ".json"));
-    this->i18n = nlohmann::json::parse(in, nullptr, false, true).template get<I18N>();
+    if (!this->unit_testing) {
+        std::ifstream in(HelloImGui::AssetFileFullPath(this->conf.language + ".json"));
+        this->i18n = nlohmann::json::parse(in, nullptr, false, true).template get<I18N>();
+    }
 }
 
-AppState::AppState(HelloImGui::RunnerParams* _runner_params) noexcept
-    : runner_params(_runner_params) {
+AppState::AppState(HelloImGui::RunnerParams* _runner_params, bool _unit_testing) noexcept
+    : runner_params(_runner_params), unit_testing(_unit_testing) {
     this->undo_history.reset_undo_history(this);
 
     std::string conf_path =
@@ -1570,7 +1571,8 @@ void remote_file_rename(AppState* app, const std::string& old_name,
                               "/file", "", params, proc);
 };
 
-void remote_file_save(AppState* app, const std::string& name, bool sync, Requestable<bool>* result) noexcept {
+void remote_file_save(AppState* app, const std::string& name, bool sync,
+                      Requestable<bool>* result) noexcept {
     if (result == nullptr) {
         result = &app->sync.file_save;
     }
@@ -1594,11 +1596,11 @@ void remote_file_save(AppState* app, const std::string& name, bool sync, Request
     };
 
     if (sync) {
-        execute_requestable_sync(app, *result, HTTP_POST, app->conf.sync_hostname,
-                                 "/file", body, params, proc);
+        execute_requestable_sync(app, *result, HTTP_POST, app->conf.sync_hostname, "/file", body,
+                                 params, proc);
     } else {
-        execute_requestable_async(app, *result, HTTP_POST, app->conf.sync_hostname,
-                                  "/file", body, params, proc);
+        execute_requestable_async(app, *result, HTTP_POST, app->conf.sync_hostname, "/file", body,
+                                  params, proc);
     }
 };
 
