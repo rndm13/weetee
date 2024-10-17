@@ -37,7 +37,7 @@
 #include <fstream>
 #include <string>
 
-void begin_transparent_button() noexcept {
+void begin_transparent_button() {
     ImGui::PushStyleColor(ImGuiCol_Button, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, 0x00000000);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, 0x00000000);
@@ -45,9 +45,9 @@ void begin_transparent_button() noexcept {
     ImGui::PushStyleColor(ImGuiCol_BorderShadow, 0x00000000);
 }
 
-void end_transparent_button() noexcept { ImGui::PopStyleColor(5); }
+void end_transparent_button() { ImGui::PopStyleColor(5); }
 
-bool arrow(const char* label, ImGuiDir dir) noexcept {
+bool arrow(const char* label, ImGuiDir dir) {
     assert(label);
 
     begin_transparent_button();
@@ -57,7 +57,7 @@ bool arrow(const char* label, ImGuiDir dir) noexcept {
     return result;
 }
 
-bool http_type_button(HTTPType type, ImVec2 size) noexcept {
+bool http_type_button(HTTPType type, ImVec2 size) {
     ImGui::PushStyleColor(ImGuiCol_Button, HTTPTypeColor[type]);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, HTTPTypeColor[type]);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, HTTPTypeColor[type]);
@@ -72,13 +72,13 @@ bool http_type_button(HTTPType type, ImVec2 size) noexcept {
     return pressed;
 }
 
-template <class... Args> void tooltip(const char* format, Args... args) noexcept {
+template <class... Args> void tooltip(const char* format, Args... args) {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip(format, args...);
     }
 }
 
-std::string load_from_file() noexcept {
+std::string load_from_file() {
     auto open_file_dialog = pfd::open_file("Open File", ".", {"All Files", "*"}, pfd::opt::none);
 
     std::vector<std::string> result = open_file_dialog.result();
@@ -95,13 +95,13 @@ std::string load_from_file() noexcept {
     return "";
 }
 
-template <class... Args> bool hint(const char* format, Args... args) noexcept {
+template <class... Args> bool hint(const char* format, Args... args) {
     bool result = ImGui::Button(ICON_FA_QUESTION);
     tooltip(format, args...);
     return result;
 }
 
-bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
+bool tree_view_context(AppState* app, size_t nested_test_id) {
     assert(app->tests.contains(nested_test_id));
     bool changed = false; // This also indicates that previous analysis data is no longer valid
 
@@ -291,7 +291,7 @@ bool tree_view_context(AppState* app, size_t nested_test_id) noexcept {
     return changed;
 }
 
-bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept {
+bool tree_view_selectable(AppState* app, size_t id, const char* label) {
     bool item_is_selected = app->tree_view.selected_tests.contains(id);
 
     bool clicked = false;
@@ -349,7 +349,7 @@ bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept 
     return clicked;
 }
 
-bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) noexcept {
+bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) {
     bool changed = false;
     // Don't allow move into itself
     if (app->tree_view.selected_tests.contains(nested_test_id)) {
@@ -369,7 +369,7 @@ bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) noex
 }
 
 bool tree_view_dnd_target_row(AppState* app, size_t nested_test_id, size_t idx,
-                              float indentation) noexcept {
+                              float indentation) {
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 5);
     ImGui::PushID(static_cast<int32_t>(nested_test_id));
     ImGui::TableNextColumn();
@@ -383,12 +383,12 @@ bool tree_view_dnd_target_row(AppState* app, size_t nested_test_id, size_t idx,
     return changed;
 }
 
-bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) noexcept {
+bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) {
     return point.x > min.x && point.x < max.x && point.y > min.y && point.y < max.y;
 }
 
 bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
-                    float indentation) noexcept {
+                    float indentation) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ImGui::GetStyle().FramePadding.x, 0});
     auto visitor = [app, &min, &max, idx, indentation](auto& val) {
         return show_tree_view_row(app, val, min, max, idx, indentation);
@@ -399,7 +399,7 @@ bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max,
 }
 
 bool show_tree_view_row(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx,
-                    float indentation) noexcept {
+                    float indentation) {
     size_t id = test.id;
     bool changed = false;
 
@@ -480,7 +480,7 @@ bool show_tree_view_row(AppState* app, Test& test, ImVec2& min, ImVec2& max, siz
 }
 
 bool show_tree_view_row(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_t idx,
-                    float indentation) noexcept {
+                    float indentation) {
     size_t id = group.id;
     bool changed = false;
 
@@ -617,7 +617,7 @@ bool show_tree_view_row(AppState* app, Group& group, ImVec2& min, ImVec2& max, s
     return changed;
 }
 
-void tree_view(AppState* app) noexcept {
+void tree_view(AppState* app) {
     app->tree_view.window_focused = ImGui::IsWindowFocused();
 
     ImGui::PushFont(app->regular_font);
@@ -651,7 +651,7 @@ void tree_view(AppState* app) noexcept {
 }
 
 bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem,
-                           const VariablesMap& vars) noexcept {
+                           const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -662,7 +662,7 @@ bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem,
 }
 
 bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem,
-                           const VariablesMap& vars) noexcept {
+                           const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -673,7 +673,7 @@ bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem,
 }
 
 bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
-                           const VariablesMap& vars) noexcept {
+                           const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -684,7 +684,7 @@ bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
 }
 
 bool partial_dict_data_row(AppState* app, Variables* vars_pd, VariablesElement* elem,
-                           const VariablesMap& vars) noexcept {
+                           const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -705,7 +705,7 @@ bool partial_dict_data_row(AppState* app, Variables* vars_pd, VariablesElement* 
 }
 
 bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem,
-                               const VariablesMap& vars) noexcept {
+                               const VariablesMap& vars) {
     bool changed = false;
 
     if (ImGui::BeginMenu("Fuzzing Separator")) {
@@ -760,7 +760,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
 }
 
 bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* elem,
-                           const VariablesMap& vars) noexcept {
+                           const VariablesMap& vars) {
     bool changed = false;
 
     if (ImGui::TableNextColumn()) { // type
@@ -841,7 +841,7 @@ bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* 
     return changed;
 }
 
-bool editor_test_request(AppState* app, Test& test) noexcept {
+bool editor_test_request(AppState* app, Test& test) {
     const VariablesMap& vars = app->get_test_variables(test.id);
 
     bool changed = false;
@@ -961,7 +961,7 @@ bool editor_test_request(AppState* app, Test& test) noexcept {
     return changed;
 }
 
-bool editor_test_response(AppState* app, Test& test) noexcept {
+bool editor_test_response(AppState* app, Test& test) {
     const VariablesMap& vars = app->get_test_variables(test.id);
 
     bool changed = false;
@@ -1052,7 +1052,7 @@ bool editor_test_response(AppState* app, Test& test) noexcept {
     return changed;
 }
 
-ModalResult unsaved_changes(AppState*) noexcept {
+ModalResult unsaved_changes(AppState*) {
     if (!ImGui::IsPopupOpen("Unsaved Changes")) {
         ImGui::OpenPopup("Unsaved Changes");
     }
@@ -1082,7 +1082,7 @@ ModalResult unsaved_changes(AppState*) noexcept {
     return result;
 }
 
-bool editor_auth(const std::string& label, const I18N* i18n, AuthVariant* auth) noexcept {
+bool editor_auth(const std::string& label, const I18N* i18n, AuthVariant* auth) {
     std::string idless_label = label.substr(0, label.find("#"));
     bool changed = false;
     COMBO_VARIANT(label.c_str(), *auth, changed, AuthTypeLabels, AuthVariant);
@@ -1108,7 +1108,7 @@ bool editor_auth(const std::string& label, const I18N* i18n, AuthVariant* auth) 
     return changed;
 }
 
-bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool enable_dynamic) noexcept {
+bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool enable_dynamic) {
     assert(set);
 
     bool changed = false;
@@ -1149,7 +1149,7 @@ bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool enable_d
     return changed;
 }
 
-void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept {
+void show_httplib_headers(AppState* app, const httplib::Headers& headers) {
     if (ImGui::BeginTable("headers", 2, TABLE_FLAGS)) {
         ImGui::TableSetupColumn("Key");
         ImGui::TableSetupColumn("Value");
@@ -1177,7 +1177,7 @@ void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexce
     }
 }
 
-void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept {
+void show_httplib_cookies(AppState* app, const httplib::Headers& headers) {
     if (ImGui::BeginTable("cookies", 3, TABLE_FLAGS)) {
         ImGui::TableSetupColumn(" ");
         ImGui::TableSetupColumn("Key");
@@ -1261,7 +1261,7 @@ void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexce
     }
 }
 
-ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
+ModalResult open_result_details(AppState* app, TestResult* tr) {
     if (!ImGui::IsPopupOpen("Test Result Details")) {
         ImGui::OpenPopup("Test Result Details");
     }
@@ -1404,7 +1404,7 @@ ModalResult open_result_details(AppState* app, TestResult* tr) noexcept {
     return result;
 }
 
-EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
+EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) {
     auto edit = &app->tests[tab.original_idx];
 
     assert(std::holds_alternative<Test>(*edit));
@@ -1512,7 +1512,7 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept {
     return result;
 }
 
-EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
+EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) {
     auto edit = &app->tests[tab.original_idx];
 
     assert(std::holds_alternative<Group>(*edit));
@@ -1615,7 +1615,7 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept {
     return result;
 }
 
-void tabbed_editor(AppState* app) noexcept {
+void tabbed_editor(AppState* app) {
     ImGui::PushFont(app->regular_font);
 
     static bool show_homepage = true;
@@ -1671,7 +1671,7 @@ void tabbed_editor(AppState* app) noexcept {
 }
 
 void testing_result_row(AppState* app, size_t result_id,
-                        std::vector<TestResult>& results) noexcept {
+                        std::vector<TestResult>& results) {
     auto deselect_all = [app]() {
         for (auto& [_, results] : app->test_results) {
             for (auto& result : results) {
@@ -1829,7 +1829,7 @@ void testing_result_row(AppState* app, size_t result_id,
     ImGui::PopID();
 }
 
-void testing_results(AppState* app) noexcept {
+void testing_results(AppState* app) {
     ImGui::PushFont(app->regular_font);
 
     if (ImGui::BeginCombo(ICON_FA_FILTER " Filter", TestResultStatusLabels[app->results.filter])) {
@@ -1878,7 +1878,7 @@ template <class Data> bool show_requestable_error(const Requestable<Data>& reque
     return false;
 }
 
-void remote_auth(AppState* app) noexcept {
+void remote_auth(AppState* app) {
     if (show_requestable_wait(app->conf.sync_session,
                               "Please wait, your authentication request is being processed")) {
         ImGui::Text("Login/Register");
@@ -1920,7 +1920,7 @@ void remote_auth(AppState* app) noexcept {
     }
 }
 
-void remote_file_editor(AppState* app) noexcept {
+void remote_file_editor(AppState* app) {
     if (app->sync.files.status == REQUESTABLE_NONE) {
         remote_file_list(app);
     }
@@ -2006,7 +2006,7 @@ void remote_file_editor(AppState* app) noexcept {
     }
 }
 
-void remote_file_sync(AppState* app) noexcept {
+void remote_file_sync(AppState* app) {
     if (ImGui::Begin("Remote File Sync", &app->sync.show)) {
         ImGui::InputText("Remote Host##host", &app->conf.sync_hostname);
 
@@ -2041,7 +2041,7 @@ void remote_file_sync(AppState* app) noexcept {
     ImGui::End();
 }
 
-void settings(AppState* app) noexcept {
+void settings(AppState* app) {
     if (ImGui::Begin("Settings", &app->settings.show)) {
         ImGui::InputText("Search", &app->settings.search);
 
@@ -2123,7 +2123,7 @@ void settings(AppState* app) noexcept {
     ImGui::End();
 }
 
-std::vector<HelloImGui::DockingSplit> splits() noexcept {
+std::vector<HelloImGui::DockingSplit> splits() {
     auto log_split =
         HelloImGui::DockingSplit("MainDockSpace", "LogDockSpace", ImGuiDir_Down, 0.35f);
     auto tests_split =
@@ -2131,7 +2131,7 @@ std::vector<HelloImGui::DockingSplit> splits() noexcept {
     return {log_split, tests_split};
 }
 
-std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
+std::vector<HelloImGui::DockableWindow> windows(AppState* app) {
     auto tab_editor_window = HelloImGui::DockableWindow("Editor###win_editor", "MainDockSpace",
                                                         [app]() { tabbed_editor(app); });
 
@@ -2147,7 +2147,7 @@ std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept {
     return {tests_window, tab_editor_window, results_window, logs_window};
 }
 
-HelloImGui::DockingParams layout(AppState* app) noexcept {
+HelloImGui::DockingParams layout(AppState* app) {
     auto params = HelloImGui::DockingParams();
 
     params.dockableWindows = windows(app);
@@ -2156,7 +2156,7 @@ HelloImGui::DockingParams layout(AppState* app) noexcept {
     return params;
 }
 
-void save_as_file_dialog(AppState* app) noexcept {
+void save_as_file_dialog(AppState* app) {
     auto save_file_dialog =
         pfd::save_file("Save To", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
 
@@ -2172,7 +2172,7 @@ void save_as_file_dialog(AppState* app) noexcept {
     }
 }
 
-void save_file_dialog(AppState* app) noexcept {
+void save_file_dialog(AppState* app) {
     switch (app->saved_file.index()) {
     case SAVED_FILE_NONE: {
         save_as_file_dialog(app);
@@ -2193,7 +2193,7 @@ void save_file_dialog(AppState* app) noexcept {
     }
 }
 
-void open_file_dialog(AppState* app) noexcept {
+void open_file_dialog(AppState* app) {
     auto open_file_dialog = pfd::open_file(
         "Open File", ".", {"Weetee Files", "*.wt", "All Files", "*"}, pfd::opt::none);
 
@@ -2205,7 +2205,7 @@ void open_file_dialog(AppState* app) noexcept {
     }
 }
 
-void import_swagger_file_dialog(AppState* app) noexcept {
+void import_swagger_file_dialog(AppState* app) {
     auto import_swagger_file_dialog =
         pfd::open_file("Import Swagger JSON File", ".", {"JSON", "*.json"}, pfd::opt::none);
 
@@ -2215,7 +2215,7 @@ void import_swagger_file_dialog(AppState* app) noexcept {
     }
 }
 
-void export_swagger_file_dialog(AppState* app) noexcept {
+void export_swagger_file_dialog(AppState* app) {
     auto export_swagger_file_dialog =
         pfd::save_file("Export To", ".", {"JSON", "*.json"}, pfd::opt::none);
 
@@ -2225,7 +2225,7 @@ void export_swagger_file_dialog(AppState* app) noexcept {
     }
 }
 
-void show_menus(AppState* app) noexcept {
+void show_menus(AppState* app) {
     if (ImGui::BeginMenu(app->i18n.menu_file.c_str())) {
         if (ImGui::MenuItem(app->i18n.menu_file_save_as.c_str(), "Ctrl + Shift + S")) {
             save_as_file_dialog(app);
@@ -2291,9 +2291,9 @@ void show_menus(AppState* app) noexcept {
     end_transparent_button();
 }
 
-void show_app_menu_items(AppState* app) noexcept {}
+void show_app_menu_items(AppState* app) {}
 
-void show_gui(AppState* app) noexcept {
+void show_gui(AppState* app) {
     auto io = ImGui::GetIO();
 #ifndef NDEBUG
     // ImGui::ShowDemoWindow();
@@ -2396,7 +2396,7 @@ void show_gui(AppState* app) noexcept {
     }
 }
 
-void pre_frame(AppState* app) noexcept {
+void pre_frame(AppState* app) {
     app->backup.time_since_last_backup += ImGui::GetIO().DeltaTime;
 
     if (app->backup.time_since_last_backup > app->conf.backup.time_to_backup) {
@@ -2406,7 +2406,7 @@ void pre_frame(AppState* app) noexcept {
     }
 }
 
-void load_fonts(AppState* app) noexcept {
+void load_fonts(AppState* app) {
     app->regular_font =
         HelloImGui::LoadFont("fonts/DroidSans.ttf", 15, {.useFullGlyphRange = true});
     app->regular_font = HelloImGui::MergeFontAwesomeToLastFont(15);

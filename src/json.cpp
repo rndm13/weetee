@@ -2,7 +2,7 @@
 
 using json = nlohmann::json;
 
-const char* json_format(std::string& input) noexcept {
+const char* json_format(std::string& input) {
     json js = json::parse(input, nullptr, false);
     if (js.is_discarded()) {
         return "Invalid JSON";
@@ -11,7 +11,7 @@ const char* json_format(std::string& input) noexcept {
     return nullptr;
 }
 
-const char* json_compare(const std::string& expected, const std::string& response) noexcept {
+const char* json_compare(const std::string& expected, const std::string& response) {
     json json_expected, json_got;
 
     json_expected = json::parse(expected, nullptr, false);

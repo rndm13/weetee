@@ -1,10 +1,10 @@
 #include "partial_dict.hpp"
 
-bool MultiPartBodyElementData::operator==(const MultiPartBodyElementData& other) const noexcept {
+bool MultiPartBodyElementData::operator==(const MultiPartBodyElementData& other) const {
     return this->type != other.type && this->data != other.data;
 }
 
-void MultiPartBodyElementData::save(SaveState* save) const noexcept {
+void MultiPartBodyElementData::save(SaveState* save) const {
     assert(save);
 
     save->save(this->type);
@@ -12,7 +12,7 @@ void MultiPartBodyElementData::save(SaveState* save) const noexcept {
     save->save(this->content_type);
 }
 
-bool MultiPartBodyElementData::can_load(SaveState* save) const noexcept {
+bool MultiPartBodyElementData::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->type)) {
@@ -28,7 +28,7 @@ bool MultiPartBodyElementData::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void MultiPartBodyElementData::load(SaveState* save) noexcept {
+void MultiPartBodyElementData::load(SaveState* save) {
     assert(save);
 
     save->load(this->type);
@@ -36,7 +36,7 @@ void MultiPartBodyElementData::load(SaveState* save) noexcept {
     save->load(this->content_type);
 }
 
-void MultiPartBodyElementData::resolve_content_type() noexcept {
+void MultiPartBodyElementData::resolve_content_type() {
     switch (this->type) {
     case MPBD_FILES: {
         assert(std::holds_alternative<std::vector<std::string>>(this->data));
@@ -59,7 +59,7 @@ void MultiPartBodyElementData::resolve_content_type() noexcept {
 }
 
 std::array<const char*, MultiPartBodyElementData::field_count>
-MultiPartBodyElementData::field_labels(const I18N* i18n) noexcept {
+MultiPartBodyElementData::field_labels(const I18N* i18n) {
     return {
         i18n->ed_mpbd_type.c_str(),
         i18n->ed_mpbd_data.c_str(),
@@ -67,17 +67,17 @@ MultiPartBodyElementData::field_labels(const I18N* i18n) noexcept {
     };
 }
 
-bool CookiesElementData::operator!=(const CookiesElementData& other) const noexcept {
+bool CookiesElementData::operator!=(const CookiesElementData& other) const {
     return this->data != other.data;
 }
 
-void CookiesElementData::save(SaveState* save) const noexcept {
+void CookiesElementData::save(SaveState* save) const {
     assert(save);
 
     save->save(data);
 }
 
-bool CookiesElementData::can_load(SaveState* save) const noexcept {
+bool CookiesElementData::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(data)) {
@@ -87,30 +87,30 @@ bool CookiesElementData::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void CookiesElementData::load(SaveState* save) noexcept {
+void CookiesElementData::load(SaveState* save) {
     assert(save);
 
     save->load(data);
 }
 
 std::array<const char*, CookiesElementData::field_count>
-CookiesElementData::field_labels(const I18N* i18n) noexcept {
+CookiesElementData::field_labels(const I18N* i18n) {
     return {
         i18n->ed_pd_data.c_str(),
     };
 }
 
-bool ParametersElementData::operator!=(const ParametersElementData& other) const noexcept {
+bool ParametersElementData::operator!=(const ParametersElementData& other) const {
     return this->data != other.data;
 }
 
-void ParametersElementData::save(SaveState* save) const noexcept {
+void ParametersElementData::save(SaveState* save) const {
     assert(save);
 
     save->save(data);
 }
 
-bool ParametersElementData::can_load(SaveState* save) const noexcept {
+bool ParametersElementData::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(data)) {
@@ -120,30 +120,30 @@ bool ParametersElementData::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void ParametersElementData::load(SaveState* save) noexcept {
+void ParametersElementData::load(SaveState* save) {
     assert(save);
 
     save->load(data);
 }
 
 std::array<const char*, ParametersElementData::field_count>
-ParametersElementData::field_labels(const I18N* i18n) noexcept {
+ParametersElementData::field_labels(const I18N* i18n) {
     return {
         i18n->ed_pd_data.c_str(),
     };
 }
 
-bool HeadersElementData::operator!=(const HeadersElementData& other) const noexcept {
+bool HeadersElementData::operator!=(const HeadersElementData& other) const {
     return this->data != other.data;
 }
 
-void HeadersElementData::save(SaveState* save) const noexcept {
+void HeadersElementData::save(SaveState* save) const {
     assert(save);
 
     save->save(data);
 }
 
-bool HeadersElementData::can_load(SaveState* save) const noexcept {
+bool HeadersElementData::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(data)) {
@@ -153,27 +153,27 @@ bool HeadersElementData::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void HeadersElementData::load(SaveState* save) noexcept {
+void HeadersElementData::load(SaveState* save) {
     assert(save);
 
     save->load(data);
 }
 
 std::array<const char*, HeadersElementData::field_count>
-HeadersElementData::field_labels(const I18N* i18n) noexcept {
+HeadersElementData::field_labels(const I18N* i18n) {
     return {
         i18n->ed_pd_data.c_str(),
     };
 }
 
-void VariablesElementData::save(SaveState* save) const noexcept {
+void VariablesElementData::save(SaveState* save) const {
     assert(save);
 
     save->save(this->data);
     save->save(this->separator);
 }
 
-bool VariablesElementData::can_load(SaveState* save) const noexcept {
+bool VariablesElementData::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->data)) {
@@ -186,20 +186,20 @@ bool VariablesElementData::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void VariablesElementData::load(SaveState* save) noexcept {
+void VariablesElementData::load(SaveState* save) {
     assert(save);
 
     save->load(this->data);
     save->load(this->separator);
 }
 
-bool VariablesElementData::operator!=(const VariablesElementData& other) const noexcept {
+bool VariablesElementData::operator!=(const VariablesElementData& other) const {
     return this->data != other.data;
 }
 
 
 std::array<const char*, VariablesElementData::field_count>
-VariablesElementData::field_labels(const I18N* i18n) noexcept {
+VariablesElementData::field_labels(const I18N* i18n) {
     return {
         i18n->ed_pd_data.c_str(),
     };

@@ -22,7 +22,7 @@
         (i18n.id) += std::string((j).at(#id)) + "###" #id;                                         \
     }
 
-void from_json(const nlohmann::json& j, I18N& i18n) noexcept {
+void from_json(const nlohmann::json& j, I18N& i18n) {
     if (!j.is_object()) {
         return;
     }

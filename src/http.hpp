@@ -124,7 +124,7 @@ static ImVec4 HTTPTypeColor[] = {
     /* [HTTP_PATCH] = */ rgb_to_ImVec4(99, 22, 90, 255),
 };
 
-HTTPType http_type_from_label(std::string) noexcept;
+HTTPType http_type_from_label(std::string);
 
 static const char* HTTPStatusLabels[] = {
     reinterpret_cast<const char*>("100 Continue"),
@@ -192,21 +192,21 @@ static const char* HTTPStatusLabels[] = {
     reinterpret_cast<const char*>("511 Network Authentication Required"),
 };
 
-constexpr bool is_cookie_attribute(std::string key) noexcept {
+constexpr bool is_cookie_attribute(std::string key) {
     std::for_each(key.begin(), key.end(), [](char& c) { c = static_cast<char>(std::tolower(c)); });
     return key == "domain" || key == "expires" || key == "httponly" || key == "max-age" ||
            key == "partitioned" || key == "path" || key == "samesite" || key == "secure";
 }
 
-std::vector<std::string> parse_url_params(const std::string& endpoint) noexcept;
+std::vector<std::string> parse_url_params(const std::string& endpoint);
 
-std::pair<std::string, std::string> split_endpoint(std::string endpoint) noexcept;
+std::pair<std::string, std::string> split_endpoint(std::string endpoint);
 
 struct ContentType {
     std::string type;
     std::string name;
 
-    constexpr bool operator!=(const ContentType& other) noexcept {
+    constexpr bool operator!=(const ContentType& other) {
         if (this->type != "*" && other.type != "*" && other.type != this->type) {
             return true;
         }
@@ -214,7 +214,7 @@ struct ContentType {
     }
 };
 
-std::string to_string(const ContentType& cont) noexcept;
-ContentType parse_content_type(std::string input) noexcept;
+std::string to_string(const ContentType& cont);
+ContentType parse_content_type(std::string input);
 
-bool status_match(const std::string& match, int status) noexcept;
+bool status_match(const std::string& match, int status);

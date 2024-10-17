@@ -107,4 +107,4 @@ struct I18N {
     std::string ed_cli_timeout;
 };
 
-void from_json(const nlohmann::json& j, I18N& i18n) noexcept;
+void from_json(const nlohmann::json& j, I18N& i18n);

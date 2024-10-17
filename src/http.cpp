@@ -1,6 +1,6 @@
 #include "http.hpp"
 
-HTTPType http_type_from_label(std::string label) noexcept {
+HTTPType http_type_from_label(std::string label) {
     std::for_each(label.begin(), label.end(),
                   [](char& c) { c = static_cast<char>(std::toupper(c)); });
 
@@ -13,7 +13,7 @@ HTTPType http_type_from_label(std::string label) noexcept {
     return static_cast<HTTPType>(-1);
 }
 
-std::vector<std::string> parse_url_params(const std::string& endpoint) noexcept {
+std::vector<std::string> parse_url_params(const std::string& endpoint) {
     std::vector<std::string> result;
     size_t index = 0;
     do {
@@ -35,7 +35,7 @@ std::vector<std::string> parse_url_params(const std::string& endpoint) noexcept 
     return result;
 }
 
-std::pair<std::string, std::string> split_endpoint(std::string endpoint) noexcept {
+std::pair<std::string, std::string> split_endpoint(std::string endpoint) {
     size_t semicolon = endpoint.find(":");
     if (semicolon == std::string::npos) {
         semicolon = 0;
@@ -53,9 +53,9 @@ std::pair<std::string, std::string> split_endpoint(std::string endpoint) noexcep
     return {host, dest};
 }
 
-std::string to_string(const ContentType& cont) noexcept { return cont.type + '/' + cont.name; }
+std::string to_string(const ContentType& cont) { return cont.type + '/' + cont.name; }
 
-ContentType parse_content_type(std::string input) noexcept {
+ContentType parse_content_type(std::string input) {
     size_t slash = input.find("/");
     if (slash == std::string::npos) {
         return {"*", "*"};

@@ -15,7 +15,7 @@
 // TODO: Make a crash report UI
 // TODO: Update README
 
-void post_init(AppState* app) noexcept;
+void post_init(AppState* app);
 
 int main(int argc, char** argv) {
     HelloImGui::RunnerParams runner_params;
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
 }
 
 // Needs to be in this file for compile definitions
-void post_init(AppState* app) noexcept {
+void post_init(AppState* app) {
     std::string ini = HelloImGui::IniSettingsLocation(*app->runner_params);
     HelloImGui::HelloImGuiIniSettings::LoadHelloImGuiMiscSettings(ini, app->runner_params);
 

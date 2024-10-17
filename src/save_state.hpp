@@ -24,16 +24,16 @@ struct SaveState {
     std::vector<char> original_buffer;
 
     // helpers
-    template <class T = void> void save(const char* ptr, size_t size = sizeof(T)) noexcept {
+    template <class T = void> void save(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
         std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
     }
 
-    bool can_offset(size_t offset = 0) noexcept;
+    bool can_offset(size_t offset = 0);
 
     // modifies index, should be called before load and then reset
-    template <class T = void> bool can_load(const char* ptr, size_t size = sizeof(T)) noexcept {
+    template <class T = void> bool can_load(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
         if (!can_offset(size)) {
@@ -44,7 +44,7 @@ struct SaveState {
         return true;
     }
 
-    template <class T = void> bool can_load_reset(const char* ptr, size_t size = sizeof(T)) noexcept {
+    template <class T = void> bool can_load_reset(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
         if (!can_offset(size)) {
@@ -54,9 +54,9 @@ struct SaveState {
         return true;
     }
 
-    char* load_offset(size_t offset = 0) noexcept;
+    char* load_offset(size_t offset = 0);
 
-    template <class T = void> void load(char* ptr, size_t size = sizeof(T)) noexcept {
+    template <class T = void> void load(char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
 
@@ -66,37 +66,37 @@ struct SaveState {
 
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
-    void save(T trivial) noexcept {
+    void save(T trivial) {
         this->save<T>(reinterpret_cast<char*>(&trivial));
     }
 
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
-    bool can_load(const T& trivial) noexcept {
+    bool can_load(const T& trivial) {
         return this->can_load(reinterpret_cast<const char*>(&trivial), sizeof(T));
     }
 
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
-    bool can_load_reset(const T& trivial) noexcept {
+    bool can_load_reset(const T& trivial) {
         return this->can_load_reset(reinterpret_cast<const char*>(&trivial), sizeof(T));
     }
 
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
-    void load(T& trivial) noexcept {
+    void load(T& trivial) {
         this->load(reinterpret_cast<char*>(&trivial), sizeof(T));
     }
 
-    void save(const std::string& str) noexcept;
-    bool can_load(const std::string& str) noexcept;
-    void load(std::string& str) noexcept;
+    void save(const std::string& str);
+    bool can_load(const std::string& str);
+    void load(std::string& str);
 
-    void save(const std::monostate&) noexcept {}
-    bool can_load(const std::monostate&) noexcept { return true; }
-    void load(std::monostate&) noexcept {}
+    void save(const std::monostate&) {}
+    bool can_load(const std::monostate&) { return true; }
+    void load(std::monostate&) {}
 
-    template <class T> void save(const std::optional<T>& opt) noexcept {
+    template <class T> void save(const std::optional<T>& opt) {
         bool has_value = opt.has_value();
         this->save(has_value);
 
@@ -105,7 +105,7 @@ struct SaveState {
         }
     }
 
-    template <class T> bool can_load(const std::optional<T>& opt) noexcept {
+    template <class T> bool can_load(const std::optional<T>& opt) {
         bool has_value;
         this->load(has_value);
 
@@ -116,7 +116,7 @@ struct SaveState {
         return true;
     }
 
-    template <class T> void load(std::optional<T>& opt) noexcept {
+    template <class T> void load(std::optional<T>& opt) {
         bool has_value;
         this->load(has_value);
 
@@ -128,7 +128,7 @@ struct SaveState {
         }
     }
 
-    template <class K, class V> void save(const std::unordered_map<K, V>& map) noexcept {
+    template <class K, class V> void save(const std::unordered_map<K, V>& map) {
         size_t size = map.size();
         this->save(size);
 
@@ -138,7 +138,7 @@ struct SaveState {
         }
     }
 
-    template <class K, class V> bool can_load(const std::unordered_map<K, V>&) noexcept {
+    template <class K, class V> bool can_load(const std::unordered_map<K, V>&) {
         size_t size;
         if (!this->can_load_reset(size)) {
             return false;
@@ -162,7 +162,7 @@ struct SaveState {
         return true;
     }
 
-    template <class K, class V> void load(std::unordered_map<K, V>& map) noexcept {
+    template <class K, class V> void load(std::unordered_map<K, V>& map) {
         size_t size;
         this->load(size);
 
@@ -177,7 +177,7 @@ struct SaveState {
         }
     }
 
-    template <class... T> void save(const std::variant<T...>& variant) noexcept {
+    template <class... T> void save(const std::variant<T...>& variant) {
         assert(variant.index() != std::variant_npos);
         size_t index = variant.index();
         this->save(index);
@@ -185,7 +185,7 @@ struct SaveState {
         std::visit([this](const auto& s) { this->save(s); }, variant);
     }
 
-    template <class... T> bool can_load(const std::variant<T...>& variant) noexcept {
+    template <class... T> bool can_load(const std::variant<T...>& variant) {
         size_t index;
         if (!this->can_load_reset(index)) {
             return false;
@@ -205,7 +205,7 @@ struct SaveState {
         return std::visit([this](const auto& s) { return this->can_load(s); }, var);
     }
 
-    template <class... T> void load(std::variant<T...>& variant) noexcept {
+    template <class... T> void load(std::variant<T...>& variant) {
         size_t index;
         this->load(index);
         assert(index != std::variant_npos);
@@ -216,7 +216,7 @@ struct SaveState {
         std::visit([this](auto& s) { this->load(s); }, variant);
     }
 
-    template <class Element> void save(const std::vector<Element>& vec) noexcept {
+    template <class Element> void save(const std::vector<Element>& vec) {
         size_t size = vec.size();
         this->save(size);
 
@@ -225,7 +225,7 @@ struct SaveState {
         }
     }
 
-    template <class Element> bool can_load(const std::vector<Element>& vec) noexcept {
+    template <class Element> bool can_load(const std::vector<Element>& vec) {
         size_t size;
         if (!this->can_load_reset(size)) {
             return false;
@@ -245,7 +245,7 @@ struct SaveState {
         return true;
     }
 
-    template <class Element> void load(std::vector<Element>& vec) noexcept {
+    template <class Element> void load(std::vector<Element>& vec) {
         size_t size;
         this->load(size);
 
@@ -263,33 +263,33 @@ struct SaveState {
     // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
-    void save(const T& any) noexcept {
+    void save(const T& any) {
         any.save(this);
     }
 
     // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
-    bool can_load(const T& any) noexcept {
+    bool can_load(const T& any) {
         return any.can_load(this);
     }
 
     // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
-    void load(T& any) noexcept {
+    void load(T& any) {
         any.load(this);
     }
 
-    void finish_save() noexcept;
+    void finish_save();
 
-    void reset_load() noexcept;
-
-    // Returns false when failed
-    bool write(std::ostream& os) const noexcept;
+    void reset_load();
 
     // Returns false when failed
-    bool read(std::istream& is) noexcept;
+    bool write(std::ostream& os) const;
+
+    // Returns false when failed
+    bool read(std::istream& is);
 };
 
 struct UndoHistory {
@@ -297,7 +297,7 @@ struct UndoHistory {
     std::vector<SaveState> undo_history = {};
 
     // should be called after every edit
-    template <class T> void push_undo_history(const T* obj) noexcept {
+    template <class T> void push_undo_history(const T* obj) {
         assert(obj);
 
         if (this->undo_idx + 1 < this->undo_history.size()) {
@@ -312,16 +312,16 @@ struct UndoHistory {
         this->undo_idx = this->undo_history.size() - 1;
     }
 
-    template <class T> void reset_undo_history(const T* obj) noexcept {
+    template <class T> void reset_undo_history(const T* obj) {
         // add initial undo
         this->undo_history.clear();
         this->undo_idx = 0;
         this->push_undo_history(obj);
     }
 
-    constexpr bool can_undo() const noexcept { return this->undo_idx > 0; }
+    constexpr bool can_undo() const { return this->undo_idx > 0; }
 
-    template <class T> void undo(T* obj) noexcept {
+    template <class T> void undo(T* obj) {
         assert(this->can_undo());
 
         this->undo_idx--;
@@ -329,11 +329,11 @@ struct UndoHistory {
         this->undo_history[this->undo_idx].reset_load();
     }
 
-    constexpr bool can_redo() const noexcept {
+    constexpr bool can_redo() const {
         return this->undo_idx < this->undo_history.size() - 1;
     }
 
-    template <class T> void redo(T* obj) noexcept {
+    template <class T> void redo(T* obj) {
         assert(this->can_redo());
 
         this->undo_idx++;
@@ -342,7 +342,7 @@ struct UndoHistory {
     }
 
     UndoHistory() {}
-    template <class T> UndoHistory(const T* obj) noexcept { reset_undo_history(obj); }
+    template <class T> UndoHistory(const T* obj) { reset_undo_history(obj); }
 
     UndoHistory(const UndoHistory&) = default;
     UndoHistory(UndoHistory&&) = default;

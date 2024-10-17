@@ -18,7 +18,7 @@
 #include "iterator"
 #include <cstdio>
 
-void BackupConfig::save(SaveState* save) const noexcept {
+void BackupConfig::save(SaveState* save) const {
     assert(save);
 
     save->save(this->time_to_backup);
@@ -27,7 +27,7 @@ void BackupConfig::save(SaveState* save) const noexcept {
     save->save(this->local_dir);
 }
 
-bool BackupConfig::can_load(SaveState* save) const noexcept {
+bool BackupConfig::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->time_to_backup)) {
@@ -46,7 +46,7 @@ bool BackupConfig::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void BackupConfig::load(SaveState* save) noexcept {
+void BackupConfig::load(SaveState* save) {
     assert(save);
 
     save->load(this->time_to_backup);
@@ -55,16 +55,16 @@ void BackupConfig::load(SaveState* save) noexcept {
     save->load(this->local_dir);
 }
 
-std::string BackupConfig::get_default_local_dir() const noexcept {
+std::string BackupConfig::get_default_local_dir() const {
     return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH
            "backups" FS_SLASH;
 }
 
-std::string BackupConfig::get_local_dir() const noexcept {
+std::string BackupConfig::get_local_dir() const {
     return this->local_dir.value_or(this->get_default_local_dir());
 }
 
-void UserConfig::save(SaveState* save) const noexcept {
+void UserConfig::save(SaveState* save) const {
     assert(save);
 
     save->save(this->sync_hostname);
@@ -77,7 +77,7 @@ void UserConfig::save(SaveState* save) const noexcept {
     save->save(this->backup);
 }
 
-bool UserConfig::can_load(SaveState* save) const noexcept {
+bool UserConfig::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->sync_hostname)) {
@@ -105,7 +105,7 @@ bool UserConfig::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void UserConfig::load(SaveState* save) noexcept {
+void UserConfig::load(SaveState* save) {
     assert(save);
 
     save->load(this->sync_hostname);
@@ -119,7 +119,7 @@ void UserConfig::load(SaveState* save) noexcept {
     }
 }
 
-void UserConfig::open_file() noexcept {
+void UserConfig::open_file() {
     std::string filename =
         HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) +
         UserConfig::filename;
@@ -155,7 +155,7 @@ void UserConfig::open_file() noexcept {
     save.load(*this);
 }
 
-void UserConfig::save_file() noexcept {
+void UserConfig::save_file() {
     std::string filename =
         HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppUserConfigFolder) +
         UserConfig::filename;
@@ -198,21 +198,21 @@ const Group AppState::root_initial = Group{
     .variables = {},
 };
 
-Group* AppState::root_group() noexcept {
+Group* AppState::root_group() {
     assert(this->tests.contains(0));
     assert(std::holds_alternative<Group>(this->tests[0]));
 
     return &std::get<Group>(this->tests[0]);
 }
 
-const Group* AppState::root_group() const noexcept {
+const Group* AppState::root_group() const {
     assert(this->tests.contains(0));
     assert(std::holds_alternative<Group>(this->tests.at(0)));
 
     return &std::get<Group>(this->tests.at(0));
 }
 
-bool AppState::is_running_tests() const noexcept {
+bool AppState::is_running_tests() const {
     for (const auto& [id, results] : this->test_results) {
         for (const auto& result : results) {
             if (result.running.load()) {
@@ -224,7 +224,7 @@ bool AppState::is_running_tests() const noexcept {
     return false;
 }
 
-void AppState::save(SaveState* save) const noexcept {
+void AppState::save(SaveState* save) const {
     assert(save);
 
     // This save is obviously going to be pretty big so reserve instantly for speed
@@ -234,7 +234,7 @@ void AppState::save(SaveState* save) const noexcept {
     save->save(this->tests);
 }
 
-bool AppState::can_load(SaveState* save) const noexcept {
+bool AppState::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->id_counter)) {
@@ -247,14 +247,14 @@ bool AppState::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void AppState::load(SaveState* save) noexcept {
+void AppState::load(SaveState* save) {
     assert(save);
 
     save->load(this->id_counter);
     save->load(this->tests);
 }
 
-void AppState::editor_open_tab(size_t id) noexcept {
+void AppState::editor_open_tab(size_t id) {
     assert(this->tests.contains(id));
 
     this->runner_params->dockingParams.dockableWindowOfName("Editor###win_editor")
@@ -269,7 +269,7 @@ void AppState::editor_open_tab(size_t id) noexcept {
     }
 }
 
-void AppState::focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) noexcept {
+void AppState::focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) {
     assert(old_tests);
 
     for (auto& [id, test] : this->tests) {
@@ -283,13 +283,13 @@ void AppState::focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_test
     }
 }
 
-void AppState::post_open() noexcept {
+void AppState::post_open() {
     this->editor.open_tabs.clear();
     this->tree_view.selected_tests.clear();
     this->undo_history.reset_undo_history(this);
 }
 
-void AppState::post_undo() noexcept {
+void AppState::post_undo() {
     for (auto it = this->editor.open_tabs.begin(); it != this->editor.open_tabs.end();) {
         if (!this->tests.contains(it->first)) {
             it = this->editor.open_tabs.erase(it);
@@ -316,21 +316,21 @@ void AppState::post_undo() noexcept {
     }
 }
 
-void AppState::undo() noexcept {
+void AppState::undo() {
     auto old_tests = this->tests;
     this->undo_history.undo(this);
     this->focus_diff_tests(&old_tests);
     this->post_undo();
 }
 
-void AppState::redo() noexcept {
+void AppState::redo() {
     auto old_tests = this->tests;
     this->undo_history.redo(this);
     this->focus_diff_tests(&old_tests);
     this->post_undo();
 }
 
-VariablesMap AppState::get_test_variables(size_t id) const noexcept {
+VariablesMap AppState::get_test_variables(size_t id) const {
     VariablesMap result = {};
 
     while (this->tests.contains(id)) {
@@ -358,7 +358,7 @@ VariablesMap AppState::get_test_variables(size_t id) const noexcept {
     return result;
 }
 
-bool AppState::parent_disabled(size_t id) const noexcept {
+bool AppState::parent_disabled(size_t id) const {
     // OPTIM: maybe add some cache for every test that clears every frame?
     // if performance becomes a problem
     assert(this->tests.contains(id));
@@ -383,14 +383,14 @@ bool AppState::parent_disabled(size_t id) const noexcept {
     return false;
 }
 
-bool AppState::parent_selected(size_t id) const noexcept {
+bool AppState::parent_selected(size_t id) const {
     assert(this->tests.contains(id));
 
     return this->tree_view.selected_tests.contains(
         std::visit(ParentIDVisitor(), this->tests.at(id)));
 }
 
-ClientSettings AppState::get_cli_settings(size_t id) const noexcept {
+ClientSettings AppState::get_cli_settings(size_t id) const {
     assert(this->tests.contains(id));
 
     while (id != -1ull) {
@@ -408,7 +408,7 @@ ClientSettings AppState::get_cli_settings(size_t id) const noexcept {
     return {};
 }
 
-std::vector<size_t> AppState::select_top_layer() noexcept {
+std::vector<size_t> AppState::select_top_layer() {
     std::vector<size_t> result;
     for (auto sel_id : this->tree_view.selected_tests) {
         if (!this->parent_selected(sel_id)) {
@@ -419,7 +419,7 @@ std::vector<size_t> AppState::select_top_layer() noexcept {
     return result;
 }
 
-AppState::SelectAnalysisResult AppState::select_analysis() const noexcept {
+AppState::SelectAnalysisResult AppState::select_analysis() const {
     SelectAnalysisResult result;
     result.top_selected_count = this->tree_view.selected_tests.size();
 
@@ -468,7 +468,7 @@ AppState::SelectAnalysisResult AppState::select_analysis() const noexcept {
     return result;
 }
 
-void AppState::move_children_up(Group* group) noexcept {
+void AppState::move_children_up(Group* group) {
     assert(group);
     assert(group->id != 0); // not root
 
@@ -487,7 +487,7 @@ void AppState::move_children_up(Group* group) noexcept {
     group->children_ids.clear();
 }
 
-void AppState::delete_children(const Group* group) noexcept {
+void AppState::delete_children(const Group* group) {
     assert(group);
     std::vector<size_t> to_delete = group->children_ids;
     // delete_test also removes it from parent->children_idx
@@ -500,7 +500,7 @@ void AppState::delete_children(const Group* group) noexcept {
     assert(group->children_ids.size() <= 0); // no remaining children
 }
 
-void AppState::delete_test(size_t id) noexcept {
+void AppState::delete_test(size_t id) {
     assert(this->tests.contains(id));
     NestedTest* test = &this->tests[id];
 
@@ -526,13 +526,13 @@ void AppState::delete_test(size_t id) noexcept {
     this->tree_view.selected_tests.erase(id);
 }
 
-void AppState::delete_selected() noexcept {
+void AppState::delete_selected() {
     for (auto test_id : this->select_top_layer()) {
         this->delete_test(test_id);
     }
 }
 
-void AppState::enable_selected(bool enable) noexcept {
+void AppState::enable_selected(bool enable) {
     for (size_t it_idx : this->tree_view.selected_tests) {
         assert(this->tests.contains(it_idx));
         NestedTest* it_nt = &this->tests.at(it_idx);
@@ -560,7 +560,7 @@ void AppState::enable_selected(bool enable) noexcept {
     }
 }
 
-void AppState::group_selected(size_t common_parent_id) noexcept {
+void AppState::group_selected(size_t common_parent_id) {
     assert(this->tests.contains(common_parent_id));
     auto* parent_test = &this->tests[common_parent_id];
     assert(std::holds_alternative<Group>(*parent_test));
@@ -607,7 +607,7 @@ void AppState::group_selected(size_t common_parent_id) noexcept {
     this->tests.emplace(id, new_group);
 }
 
-void AppState::copy() noexcept {
+void AppState::copy() {
     std::unordered_map<size_t, NestedTest> to_copy = {};
 
     to_copy.reserve(this->tree_view.selected_tests.size());
@@ -622,12 +622,12 @@ void AppState::copy() noexcept {
     this->clipboard.finish_save();
 }
 
-void AppState::cut() noexcept {
+void AppState::cut() {
     this->copy();
     this->delete_selected();
 }
 
-void AppState::paste(Group* group) noexcept {
+void AppState::paste(Group* group) {
     std::unordered_map<size_t, NestedTest> to_paste = {};
     this->clipboard.load(to_paste);
     this->clipboard.reset_load();
@@ -698,7 +698,7 @@ void AppState::paste(Group* group) noexcept {
     this->tests.merge(to_paste);
 }
 
-void AppState::move(Group* group, size_t idx) noexcept {
+void AppState::move(Group* group, size_t idx) {
     // Not moving into itself
     assert(!this->tree_view.selected_tests.contains(group->id));
 
@@ -733,12 +733,12 @@ void AppState::move(Group* group, size_t idx) noexcept {
     group->flags |= GROUP_OPEN;
 }
 
-void AppState::sort(Group& group) noexcept {
+void AppState::sort(Group& group) {
     std::sort(group.children_ids.begin(), group.children_ids.end(),
               [this](size_t a, size_t b) { return test_comp(this->tests, a, b); });
 }
 
-bool AppState::filter(Group& group) noexcept {
+bool AppState::filter(Group& group) {
     bool result = true;
     for (size_t child_id : group.children_ids) {
         result &= this->filter(&this->tests[child_id]);
@@ -753,11 +753,11 @@ bool AppState::filter(Group& group) noexcept {
     return result;
 }
 
-bool AppState::filter(Test& test) noexcept {
+bool AppState::filter(Test& test) {
     return !str_contains(test.endpoint, this->tree_view.filter);
 }
 
-bool AppState::filter(NestedTest* nt) noexcept {
+bool AppState::filter(NestedTest* nt) {
     bool filter = std::visit([this](auto& elem) { return this->filter(elem); }, *nt);
 
     if (filter) {
@@ -768,7 +768,7 @@ bool AppState::filter(NestedTest* nt) noexcept {
     return filter;
 }
 
-bool AppState::save_file(std::ostream& out) noexcept {
+bool AppState::save_file(std::ostream& out) {
     if (!out) {
         Log(LogLevel::Error, "Failed to save to file");
         return false;
@@ -785,7 +785,7 @@ bool AppState::save_file(std::ostream& out) noexcept {
     return true;
 }
 
-bool AppState::open_file(std::istream& in) noexcept {
+bool AppState::open_file(std::istream& in) {
     if (!in) {
         Log(LogLevel::Error, "Failed to open file");
         return false;
@@ -808,14 +808,14 @@ bool AppState::open_file(std::istream& in) noexcept {
     return true;
 }
 
-void AppState::load_i18n() noexcept {
+void AppState::load_i18n() {
     if (!this->unit_testing) {
         std::ifstream in(HelloImGui::AssetFileFullPath(this->conf.language + ".json"));
         this->i18n = nlohmann::json::parse(in, nullptr, false, true).template get<I18N>();
     }
 }
 
-AppState::AppState(HelloImGui::RunnerParams* _runner_params, bool _unit_testing) noexcept
+AppState::AppState(HelloImGui::RunnerParams* _runner_params, bool _unit_testing)
     : runner_params(_runner_params), unit_testing(_unit_testing) {
     this->undo_history.reset_undo_history(this);
 
@@ -840,7 +840,7 @@ AppState::AppState(HelloImGui::RunnerParams* _runner_params, bool _unit_testing)
     this->load_i18n();
 }
 
-bool status_match(const std::string& match, int status) noexcept {
+bool status_match(const std::string& match, int status) {
     auto status_str = to_string(status);
     for (size_t i = 0; i < match.size() && i < 3; i++) {
         if (std::tolower(match[i]) == 'x') {
@@ -854,7 +854,7 @@ bool status_match(const std::string& match, int status) noexcept {
 }
 
 const char* body_match(const VariablesMap& vars, const Test* test,
-                       const httplib::Result& result) noexcept {
+                       const httplib::Result& result) {
     if (test->response.body_type == RESPONSE_ANY) {
         return nullptr; // Skip checks
     }
@@ -888,7 +888,7 @@ const char* body_match(const VariablesMap& vars, const Test* test,
 
 // TODO: Add wildcards to header matching (easy)
 const char* header_match(const VariablesMap& vars, const Test* test,
-                         const httplib::Result& result) noexcept {
+                         const httplib::Result& result) {
     httplib::Headers headers = response_headers(vars, test);
     for (const auto& elem : test->response.cookies.elements) {
         if (elem.flags & PARTIAL_DICT_ELEM_ENABLED) {
@@ -914,7 +914,7 @@ const char* header_match(const VariablesMap& vars, const Test* test,
 }
 
 bool test_analysis(AppState*, const Test* test, TestResult* test_result,
-                   httplib::Result&& http_result, const VariablesMap& vars) noexcept {
+                   httplib::Result&& http_result, const VariablesMap& vars) {
     bool success = true;
     switch (http_result.error()) {
     case httplib::Error::Success: {
@@ -965,7 +965,7 @@ bool test_analysis(AppState*, const Test* test, TestResult* test_result,
     return success;
 }
 
-httplib::Client make_client(const std::string& hostname, const ClientSettings& settings) noexcept {
+httplib::Client make_client(const std::string& hostname, const ClientSettings& settings) {
     httplib::Client cli(hostname);
 
     cli.set_compress(settings.flags & CLIENT_COMPRESSION);
@@ -1012,7 +1012,7 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
 }
 
 bool execute_test(AppState* app, const Test* test, size_t test_result_idx, httplib::Client& cli,
-                  const std::unordered_map<std::string, std::string>* overload_cookies) noexcept {
+                  const std::unordered_map<std::string, std::string>* overload_cookies) {
     TestResult* test_result = &app->test_results.at(test->id).at(test_result_idx);
 
     const auto params = request_params(test_result->variables, test);
@@ -1117,7 +1117,7 @@ bool execute_test(AppState* app, const Test* test, size_t test_result_idx, httpl
     return test_analysis(app, test, test_result, std::move(result), test_result->variables);
 }
 
-bool is_parent_id(const AppState* app, size_t group_id, size_t needle) noexcept {
+bool is_parent_id(const AppState* app, size_t group_id, size_t needle) {
     assert(app->tests.contains(group_id));
 
     while (app->tests.contains(group_id)) {
@@ -1138,7 +1138,7 @@ bool is_parent_id(const AppState* app, size_t group_id, size_t needle) noexcept 
 // TODO: Replace existing similar functionality with calls to this function
 // TODO: Add tests for this function
 void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
-                                  size_t breakpoint_group) noexcept {
+                                  size_t breakpoint_group) {
     assert(app->tests.contains(*id));
     const NestedTest& nt = app->tests.at(*id);
 
@@ -1202,7 +1202,7 @@ void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child
     }
 }
 
-void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
+void run_dynamic_tests(AppState* app, const NestedTest& nt) {
     assert(std::holds_alternative<Group>(nt));
     const Group& group = std::get<Group>(nt);
     assert(group.cli_settings.has_value());
@@ -1347,7 +1347,7 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept {
     }
 }
 
-void run_test(AppState* app, size_t test_id) noexcept {
+void run_test(AppState* app, size_t test_id) {
     assert(app->tests.contains(test_id));
     NestedTest& nt = app->tests.at(test_id);
 
@@ -1384,7 +1384,7 @@ void run_test(AppState* app, size_t test_id) noexcept {
     }
 }
 
-void run_tests(AppState* app, const std::vector<size_t>& test_ids) noexcept {
+void run_tests(AppState* app, const std::vector<size_t>& test_ids) {
     app->thr_pool.purge();
     app->test_results.clear();
 
@@ -1397,7 +1397,7 @@ void run_tests(AppState* app, const std::vector<size_t>& test_ids) noexcept {
     }
 }
 
-void rerun_test(AppState* app, TestResult* result) noexcept {
+void rerun_test(AppState* app, TestResult* result) {
     if (!app->tests.contains(result->original_test.id)) {
         Log(LogLevel::Error, "Missing original test");
         return;
@@ -1427,7 +1427,7 @@ void rerun_test(AppState* app, TestResult* result) noexcept {
         });
 }
 
-bool is_test_running(AppState* app, size_t id) noexcept {
+bool is_test_running(AppState* app, size_t id) {
     if (!app->test_results.contains(id)) {
         return false;
     }
@@ -1441,14 +1441,14 @@ bool is_test_running(AppState* app, size_t id) noexcept {
     return false;
 }
 
-void stop_test(TestResult* result) noexcept {
+void stop_test(TestResult* result) {
     assert(result->running.load());
 
     result->status.store(STATUS_CANCELLED);
     result->running.store(false);
 }
 
-void stop_test(AppState* app, size_t id) noexcept {
+void stop_test(AppState* app, size_t id) {
     assert(app->test_results.contains(id));
 
     for (auto& result : app->test_results.at(id)) {
@@ -1456,7 +1456,7 @@ void stop_test(AppState* app, size_t id) noexcept {
     }
 }
 
-void stop_tests(AppState* app) noexcept {
+void stop_tests(AppState* app) {
     for (auto& [id, results] : app->test_results) {
         for (auto& result : results) {
             if (result.running.load()) {
@@ -1469,7 +1469,7 @@ void stop_tests(AppState* app) noexcept {
 }
 
 void remote_file_list(AppState* app, bool sync,
-                      Requestable<std::vector<std::string>>* result) noexcept {
+                      Requestable<std::vector<std::string>>* result) {
     if (result == nullptr) {
         result = &app->sync.files;
     }
@@ -1507,7 +1507,7 @@ void remote_file_list(AppState* app, bool sync,
     }
 }
 
-void remote_file_open(AppState* app, const std::string& name) noexcept {
+void remote_file_open(AppState* app, const std::string& name) {
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
         {"file_name", name},
@@ -1521,7 +1521,7 @@ void remote_file_open(AppState* app, const std::string& name) noexcept {
                               "", params, proc);
 };
 
-void remote_file_delete(AppState* app, const std::string& name, bool sync) noexcept {
+void remote_file_delete(AppState* app, const std::string& name, bool sync) {
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
         {"file_name", name},
@@ -1546,7 +1546,7 @@ void remote_file_delete(AppState* app, const std::string& name, bool sync) noexc
 };
 
 void remote_file_rename(AppState* app, const std::string& old_name,
-                        const std::string& new_name) noexcept {
+                        const std::string& new_name) {
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
         {"file_name", old_name},
@@ -1572,7 +1572,7 @@ void remote_file_rename(AppState* app, const std::string& old_name,
 };
 
 void remote_file_save(AppState* app, const std::string& name, bool sync,
-                      Requestable<bool>* result) noexcept {
+                      Requestable<bool>* result) {
     if (result == nullptr) {
         result = &app->sync.file_save;
     }
@@ -1604,7 +1604,7 @@ void remote_file_save(AppState* app, const std::string& name, bool sync,
     }
 };
 
-std::optional<BackupInfo> get_backup_info(const std::string& filename) noexcept {
+std::optional<BackupInfo> get_backup_info(const std::string& filename) {
     BackupInfo result{};
 
     size_t id_end = filename.rfind('.');
@@ -1627,7 +1627,7 @@ std::optional<BackupInfo> get_backup_info(const std::string& filename) noexcept 
 }
 
 // TODO: backup only when file was changed
-void make_local_backup(AppState* app) noexcept {
+void make_local_backup(AppState* app) {
     namespace fs = std::filesystem;
 
     std::string dir = app->conf.backup.get_local_dir();
@@ -1674,7 +1674,7 @@ void make_local_backup(AppState* app) noexcept {
     }
 }
 
-void make_remote_backup(AppState* app) noexcept {
+void make_remote_backup(AppState* app) {
     Log(LogLevel::Info, "Making a remote backup...");
 
     app->thr_pool.detach_task([app]() {
@@ -1727,7 +1727,7 @@ void make_remote_backup(AppState* app) noexcept {
     });
 }
 
-void make_backups(AppState* app) noexcept {
+void make_backups(AppState* app) {
     if (app->conf.backup.local_to_keep > 0) {
         make_local_backup(app);
     }

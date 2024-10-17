@@ -9,8 +9,8 @@
 #include "variant"
 
 // returns an error message, if there isn't returns null pointer
-const char* json_format(std::string& json) noexcept;
-const char* json_compare(const std::string& expected, const std::string& response) noexcept;
+const char* json_format(std::string& json);
+const char* json_compare(const std::string& expected, const std::string& response);
 
 // This doesn't work on windows...
 namespace nlohmann {

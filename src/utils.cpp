@@ -1,6 +1,6 @@
 #include "utils.hpp"
 
-bool str_contains(const std::string& haystack, const std::string& needle) noexcept {
+bool str_contains(const std::string& haystack, const std::string& needle) {
     size_t need_idx = 0;
     for (char hay : haystack) {
         if (std::tolower(hay) == std::tolower(needle[need_idx])) {
@@ -13,14 +13,14 @@ bool str_contains(const std::string& haystack, const std::string& needle) noexce
     return false;
 }
 
-std::string get_filename(const std::string& path) noexcept {
+std::string get_filename(const std::string& path) {
     std::string filename = get_full_filename(path);
 
     size_t name_end = filename.rfind('.');
     return filename.substr(0, name_end);
 }
 
-std::string get_full_filename(const std::string& path) noexcept {
+std::string get_full_filename(const std::string& path) {
     size_t slash = path.rfind(FS_SLASH);
 
     if (slash == std::string::npos) {
@@ -32,7 +32,7 @@ std::string get_full_filename(const std::string& path) noexcept {
 }
 
 std::vector<std::string> split_string(const std::string& str,
-                                      const std::string& separator) noexcept {
+                                      const std::string& separator) {
     std::vector<std::string> result;
 
     auto push_result = [&result, &str](size_t begin, size_t end) {
@@ -76,7 +76,7 @@ std::vector<std::string> split_string(const std::string& str,
 
 // Returns a vector of pairs of index and size of found range in string including begin and end chars 
 std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, char begin,
-                                                            char end) noexcept {
+                                                            char end) {
     std::vector<std::pair<size_t, size_t>> result;
 
     size_t index = 0;
@@ -104,7 +104,7 @@ std::vector<std::pair<size_t, size_t>> encapsulation_ranges(std::string str, cha
 }
 
 void find_and_replace(std::string& str, const std::string& to_replace,
-                      const std::string& replace_with) noexcept {
+                      const std::string& replace_with) {
     size_t found = str.find(to_replace);
     while (found != std::string::npos) {
         str.replace(found, to_replace.size(), replace_with);

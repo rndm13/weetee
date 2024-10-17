@@ -24,7 +24,7 @@ bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id,
     return label_a > label_b;
 }
 
-MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcept {
+MultiPartBody request_multipart_convert_json(const nlohmann::json& json) {
     if (json.is_discarded()) {
         return {};
     }
@@ -78,7 +78,7 @@ MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcep
     return to_replace;
 }
 
-void Request::save(SaveState* save) const noexcept {
+void Request::save(SaveState* save) const {
     assert(save);
 
     save->save(this->body_type);
@@ -89,7 +89,7 @@ void Request::save(SaveState* save) const noexcept {
     save->save(this->headers);
 }
 
-bool Request::can_load(SaveState* save) const noexcept {
+bool Request::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->body_type)) {
@@ -114,7 +114,7 @@ bool Request::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void Request::load(SaveState* save) noexcept {
+void Request::load(SaveState* save) {
     assert(save);
 
     save->load(this->body_type);
@@ -125,7 +125,7 @@ void Request::load(SaveState* save) noexcept {
     save->load(this->headers);
 }
 
-void Response::save(SaveState* save) const noexcept {
+void Response::save(SaveState* save) const {
     assert(save);
 
     save->save(this->status);
@@ -136,7 +136,7 @@ void Response::save(SaveState* save) const noexcept {
     save->save(this->headers);
 }
 
-bool Response::can_load(SaveState* save) const noexcept {
+bool Response::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->status)) {
@@ -160,7 +160,7 @@ bool Response::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void Response::load(SaveState* save) noexcept {
+void Response::load(SaveState* save) {
     assert(save);
 
     save->load(this->status);
@@ -171,14 +171,14 @@ void Response::load(SaveState* save) noexcept {
     save->load(this->headers);
 }
 
-void AuthBasic::save(SaveState* save) const noexcept {
+void AuthBasic::save(SaveState* save) const {
     assert(save);
 
     save->save(this->name);
     save->save(this->password);
 }
 
-bool AuthBasic::can_load(SaveState* save) const noexcept {
+bool AuthBasic::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->name)) {
@@ -192,20 +192,20 @@ bool AuthBasic::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void AuthBasic::load(SaveState* save) noexcept {
+void AuthBasic::load(SaveState* save) {
     assert(save);
 
     save->load(this->name);
     save->load(this->password);
 }
 
-void AuthBearerToken::save(SaveState* save) const noexcept {
+void AuthBearerToken::save(SaveState* save) const {
     assert(save);
 
     save->save(this->token);
 }
 
-bool AuthBearerToken::can_load(SaveState* save) const noexcept {
+bool AuthBearerToken::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->token)) {
@@ -215,13 +215,13 @@ bool AuthBearerToken::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void AuthBearerToken::load(SaveState* save) noexcept {
+void AuthBearerToken::load(SaveState* save) {
     assert(save);
 
     save->load(this->token);
 }
 
-void ClientSettings::save(SaveState* save) const noexcept {
+void ClientSettings::save(SaveState* save) const {
     assert(save);
 
     save->save(this->flags);
@@ -236,7 +236,7 @@ void ClientSettings::save(SaveState* save) const noexcept {
     save->save(this->test_reruns);
 }
 
-bool ClientSettings::can_load(SaveState* save) const noexcept {
+bool ClientSettings::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->flags)) {
@@ -270,7 +270,7 @@ bool ClientSettings::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void ClientSettings::load(SaveState* save) noexcept {
+void ClientSettings::load(SaveState* save) {
     assert(save);
 
     save->load(this->flags);
@@ -285,9 +285,9 @@ void ClientSettings::load(SaveState* save) noexcept {
     save->load(this->test_reruns);
 }
 
-std::string Test::label() const noexcept { return this->endpoint + "##" + to_string(this->id); }
+std::string Test::label() const { return this->endpoint + "##" + to_string(this->id); }
 
-void Test::save(SaveState* save) const noexcept {
+void Test::save(SaveState* save) const {
     assert(save);
 
     save->save(this->id);
@@ -301,7 +301,7 @@ void Test::save(SaveState* save) const noexcept {
     save->save(this->cli_settings);
 }
 
-bool Test::can_load(SaveState* save) const noexcept {
+bool Test::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->id)) {
@@ -334,7 +334,7 @@ bool Test::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void Test::load(SaveState* save) noexcept {
+void Test::load(SaveState* save) {
     assert(save);
 
     save->load(this->id);
@@ -348,9 +348,9 @@ void Test::load(SaveState* save) noexcept {
     save->load(this->cli_settings);
 }
 
-std::string Group::label() const noexcept { return this->name + "##" + to_string(this->id); }
+std::string Group::label() const { return this->name + "##" + to_string(this->id); }
 
-void Group::save(SaveState* save) const noexcept {
+void Group::save(SaveState* save) const {
     assert(save);
 
     save->save(this->id);
@@ -362,7 +362,7 @@ void Group::save(SaveState* save) const noexcept {
     save->save(this->variables);
 }
 
-bool Group::can_load(SaveState* save) const noexcept {
+bool Group::can_load(SaveState* save) const {
     assert(save);
 
     if (!save->can_load(this->id)) {
@@ -390,7 +390,7 @@ bool Group::can_load(SaveState* save) const noexcept {
     return true;
 }
 
-void Group::load(SaveState* save) noexcept {
+void Group::load(SaveState* save) {
     assert(save);
 
     save->load(this->id);
@@ -402,7 +402,7 @@ void Group::load(SaveState* save) noexcept {
     save->load(this->variables);
 }
 
-RequestBodyType request_body_type(const std::string& str) noexcept {
+RequestBodyType request_body_type(const std::string& str) {
     if (str == "application/json") {
         return REQUEST_JSON;
     } else if (str == "text/plain") {
@@ -414,7 +414,7 @@ RequestBodyType request_body_type(const std::string& str) noexcept {
     return REQUEST_OTHER;
 }
 
-ContentType request_content_type(const Request* request) noexcept {
+ContentType request_content_type(const Request* request) {
     switch (request->body_type) {
     case REQUEST_JSON:
         return {.type = "application", .name = "json"};
@@ -429,7 +429,7 @@ ContentType request_content_type(const Request* request) noexcept {
     return {};
 }
 
-void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept {
+void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) {
     std::vector<std::string> param_names = parse_url_params(test->endpoint);
 
     // Add new required variables
@@ -468,7 +468,7 @@ void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noe
 
 httplib::Headers
 request_headers(const VariablesMap& vars, const Test* test,
-                const std::unordered_map<std::string, std::string>* overload_cookies) noexcept {
+                const std::unordered_map<std::string, std::string>* overload_cookies) {
     httplib::Headers result;
 
     for (const auto& header : test->request.headers.elements) {
@@ -496,7 +496,7 @@ request_headers(const VariablesMap& vars, const Test* test,
     return result;
 }
 
-httplib::Params request_params(const VariablesMap& vars, const Test* test) noexcept {
+httplib::Params request_params(const VariablesMap& vars, const Test* test) {
     httplib::Params result;
 
     for (const auto& param : test->request.parameters.elements) {
@@ -510,7 +510,7 @@ httplib::Params request_params(const VariablesMap& vars, const Test* test) noexc
     return result;
 }
 
-RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexcept {
+RequestBodyResult request_body(const VariablesMap& vars, const Test* test) {
     if (std::holds_alternative<std::string>(test->request.body)) {
         return {
             .content_type = to_string(request_content_type(&test->request)),
@@ -580,7 +580,7 @@ RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexc
     };
 }
 
-ContentType response_content_type(const Response* response) noexcept {
+ContentType response_content_type(const Response* response) {
     switch (response->body_type) {
     case RESPONSE_ANY:
         return {.type = "", .name = ""};
@@ -598,7 +598,7 @@ ContentType response_content_type(const Response* response) noexcept {
     return {};
 }
 
-httplib::Headers response_headers(const VariablesMap& vars, const Test* test) noexcept {
+httplib::Headers response_headers(const VariablesMap& vars, const Test* test) {
     httplib::Headers result;
 
     for (const auto& header : test->response.headers.elements) {

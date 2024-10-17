@@ -29,7 +29,7 @@ template <typename Data> struct PartialDictElement {
     // do not save
     std::optional<ComboFilterState> cfs; // If hints are given
 
-    void save(SaveState* save) const noexcept {
+    void save(SaveState* save) const {
         assert(save);
 
         save->save(this->flags);
@@ -37,7 +37,7 @@ template <typename Data> struct PartialDictElement {
         save->save(this->data);
     }
 
-    bool can_load(SaveState* save) const noexcept {
+    bool can_load(SaveState* save) const {
         assert(save);
 
         if (!save->can_load(this->flags)) {
@@ -53,7 +53,7 @@ template <typename Data> struct PartialDictElement {
         return true;
     }
 
-    void load(SaveState* save) noexcept {
+    void load(SaveState* save) {
         assert(save);
 
         save->load(this->flags);
@@ -61,7 +61,7 @@ template <typename Data> struct PartialDictElement {
         save->load(this->data);
     }
 
-    bool operator!=(const PartialDictElement<Data>& other) const noexcept {
+    bool operator!=(const PartialDictElement<Data>& other) const {
         return this->flags != other.flags || this->data != other.data;
     }
 };
@@ -76,26 +76,26 @@ template <typename Data> struct PartialDict {
     PartialDictElement<Data> add_element;
     size_t last_selected_idx = 0;
 
-    bool operator==(const PartialDict& other) const noexcept {
+    bool operator==(const PartialDict& other) const {
         return this->elements == other.elements;
     }
 
-    void save(SaveState* save) const noexcept {
+    void save(SaveState* save) const {
         assert(save);
         save->save(this->elements);
     }
 
-    bool can_load(SaveState* save) const noexcept {
+    bool can_load(SaveState* save) const {
         assert(save);
         return save->can_load(this->elements);
     }
 
-    void load(SaveState* save) noexcept {
+    void load(SaveState* save) {
         assert(save);
         return save->load(this->elements);
     }
 
-    constexpr bool empty() const noexcept { return this->elements.empty(); }
+    constexpr bool empty() const { return this->elements.empty(); }
 };
 
 enum PartialDictFlags : uint8_t {
@@ -123,15 +123,15 @@ struct MultiPartBodyElementData {
     std::string content_type;
 
     static constexpr size_t field_count = 3;
-    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
+    static std::array<const char*, field_count> field_labels(const I18N* i18n);
 
-    bool operator==(const MultiPartBodyElementData& other) const noexcept;
+    bool operator==(const MultiPartBodyElementData& other) const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 
-    void resolve_content_type() noexcept;
+    void resolve_content_type();
 };
 
 using MultiPartBody = PartialDict<MultiPartBodyElementData>;
@@ -141,13 +141,13 @@ struct CookiesElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
+    static std::array<const char*, field_count> field_labels(const I18N* i18n);
 
-    bool operator!=(const CookiesElementData& other) const noexcept;
+    bool operator!=(const CookiesElementData& other) const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 using Cookies = PartialDict<CookiesElementData>;
 using CookiesElement = Cookies::ElementType;
@@ -156,14 +156,14 @@ struct ParametersElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
+    static std::array<const char*, field_count> field_labels(const I18N* i18n);
     // static const char* field_labels[field_count];
 
-    bool operator!=(const ParametersElementData& other) const noexcept;
+    bool operator!=(const ParametersElementData& other) const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 using Parameters = PartialDict<ParametersElementData>;
 using ParametersElement = Parameters::ElementType;
@@ -172,13 +172,13 @@ struct HeadersElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
+    static std::array<const char*, field_count> field_labels(const I18N* i18n);
 
-    bool operator!=(const HeadersElementData& other) const noexcept;
+    bool operator!=(const HeadersElementData& other) const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
@@ -188,13 +188,13 @@ struct VariablesElementData {
     std::string data;
 
     static constexpr size_t field_count = 1;
-    static std::array<const char*, field_count> field_labels(const I18N* i18n) noexcept;
+    static std::array<const char*, field_count> field_labels(const I18N* i18n);
 
-    bool operator!=(const VariablesElementData& other) const noexcept;
+    bool operator!=(const VariablesElementData& other) const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 
 using Variables = PartialDict<VariablesElementData>;

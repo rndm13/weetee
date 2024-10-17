@@ -52,12 +52,12 @@ struct BackupConfig {
     uint8_t remote_to_keep = 0;
 
     std::optional<std::string> local_dir = std::nullopt;
-    std::string get_default_local_dir() const noexcept;
-    std::string get_local_dir() const noexcept;
+    std::string get_default_local_dir() const;
+    std::string get_local_dir() const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 
 struct UserConfig {
@@ -72,12 +72,12 @@ struct UserConfig {
 
     static constexpr const char* filename = FS_SLASH "weetee" FS_SLASH "user_config.wt";
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 
-    void open_file() noexcept;
-    void save_file() noexcept;
+    void open_file();
+    void save_file();
 };
 
 struct SyncState {
@@ -177,29 +177,29 @@ struct AppState {
 
     bool unit_testing = false;
 
-    Group* root_group() noexcept;
-    const Group* root_group() const noexcept;
+    Group* root_group();
+    const Group* root_group() const;
 
-    bool is_running_tests() const noexcept;
+    bool is_running_tests() const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 
-    void editor_open_tab(size_t id) noexcept;
+    void editor_open_tab(size_t id);
 
     // On undo/redo focus on new/changed tests
-    void focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests) noexcept;
+    void focus_diff_tests(std::unordered_map<size_t, NestedTest>* old_tests);
 
-    void undo() noexcept;
-    void redo() noexcept;
-    void post_undo() noexcept;
+    void undo();
+    void redo();
+    void post_undo();
 
-    VariablesMap get_test_variables(size_t id) const noexcept;
-    bool parent_disabled(size_t id) const noexcept;
-    bool parent_selected(size_t id) const noexcept;
-    ClientSettings get_cli_settings(size_t id) const noexcept;
-    std::vector<size_t> select_top_layer() noexcept;
+    VariablesMap get_test_variables(size_t id) const;
+    bool parent_disabled(size_t id) const;
+    bool parent_selected(size_t id) const;
+    ClientSettings get_cli_settings(size_t id) const;
+    std::vector<size_t> select_top_layer();
 
     struct SelectAnalysisResult {
         bool group = false;
@@ -210,8 +210,8 @@ struct AppState {
         size_t top_selected_count = 0;
     };
 
-    SelectAnalysisResult select_analysis() const noexcept;
-    template <bool select = true> void select_with_children(size_t id) noexcept {
+    SelectAnalysisResult select_analysis() const;
+    template <bool select = true> void select_with_children(size_t id) {
         assert(this->tests.contains(id));
 
         if constexpr (select) {
@@ -240,45 +240,45 @@ struct AppState {
         }
     }
 
-    void move_children_up(Group* group) noexcept;
+    void move_children_up(Group* group);
 
-    void delete_children(const Group* group) noexcept;
-    void delete_test(size_t id) noexcept;
-    void delete_selected() noexcept;
+    void delete_children(const Group* group);
+    void delete_test(size_t id);
+    void delete_selected();
 
-    void enable_selected(bool enable = true) noexcept;
+    void enable_selected(bool enable = true);
 
-    void group_selected(size_t common_parent_id) noexcept;
+    void group_selected(size_t common_parent_id);
 
-    void copy() noexcept;
-    void cut() noexcept;
+    void copy();
+    void cut();
 
-    constexpr bool can_paste() const noexcept { return this->clipboard.original_size > 0; }
-    void paste(Group* group) noexcept;
+    constexpr bool can_paste() const { return this->clipboard.original_size > 0; }
+    void paste(Group* group);
 
-    void move(Group* group, size_t idx) noexcept;
-    void sort(Group& group) noexcept;
+    void move(Group* group, size_t idx);
+    void sort(Group& group);
 
     // Returns true when the value should be filtered *OUT*
-    bool filter(Group& group) noexcept;
-    bool filter(Test& test) noexcept;
-    bool filter(NestedTest* nt) noexcept;
+    bool filter(Group& group);
+    bool filter(Test& test);
+    bool filter(NestedTest* nt);
 
-    bool save_file(std::ostream&) noexcept;
-    bool open_file(std::istream&) noexcept;
-    void post_open() noexcept;
+    bool save_file(std::ostream&);
+    bool open_file(std::istream&);
+    void post_open();
 
-    void import_swagger_paths(const nlohmann::json& paths, const nlohmann::json& swagger) noexcept;
-    void import_swagger_servers(const nlohmann::json&) noexcept;
-    void import_swagger(const std::string& filename) noexcept;
+    void import_swagger_paths(const nlohmann::json& paths, const nlohmann::json& swagger);
+    void import_swagger_servers(const nlohmann::json&);
+    void import_swagger(const std::string& filename);
 
-    void export_swagger_paths(nlohmann::json&) const noexcept;
-    void export_swagger_servers(nlohmann::json&) const noexcept;
-    void export_swagger(const std::string& filename) const noexcept;
+    void export_swagger_paths(nlohmann::json&) const;
+    void export_swagger_servers(nlohmann::json&) const;
+    void export_swagger(const std::string& filename) const;
 
-    void load_i18n() noexcept;
+    void load_i18n();
 
-    AppState(HelloImGui::RunnerParams* _runner_params, bool unit_testing = false) noexcept;
+    AppState(HelloImGui::RunnerParams* _runner_params, bool unit_testing = false);
 
     // no copy/move
     AppState(const AppState&) = delete;
@@ -287,9 +287,9 @@ struct AppState {
     AppState& operator=(AppState&&) = delete;
 };
 
-httplib::Client make_client(const std::string& hostname, const ClientSettings& settings) noexcept;
+httplib::Client make_client(const std::string& hostname, const ClientSettings& settings);
 
-template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin, It end) noexcept {
+template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin, It end) {
     std::vector<size_t> tests_to_run;
     for (It it = begin; it != end; it++) {
         assert(app->tests.contains(*it));
@@ -324,37 +324,37 @@ template <class It> std::vector<size_t> get_tests_to_run(AppState* app, It begin
     return tests_to_run;
 }
 
-bool is_parent_id(const AppState* app, size_t group_id, size_t parent_id) noexcept;
+bool is_parent_id(const AppState* app, size_t group_id, size_t parent_id);
 void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
-                                  size_t breakpoint_group) noexcept;
+                                  size_t breakpoint_group);
 
-void run_dynamic_tests(AppState* app, const NestedTest& nt) noexcept;
-void run_test(AppState* app, size_t test_id) noexcept;
+void run_dynamic_tests(AppState* app, const NestedTest& nt);
+void run_test(AppState* app, size_t test_id);
 bool execute_test(
     AppState* app, const Test* test, size_t test_result_idx, httplib::Client& cli,
-    const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
-void run_tests(AppState* app, const std::vector<size_t>& tests) noexcept;
-void rerun_test(AppState* app, TestResult* result) noexcept;
+    const std::unordered_map<std::string, std::string>* overload_cookies = nullptr);
+void run_tests(AppState* app, const std::vector<size_t>& tests);
+void rerun_test(AppState* app, TestResult* result);
 
-bool is_test_running(AppState* app, size_t id) noexcept;
+bool is_test_running(AppState* app, size_t id);
 
-void stop_test(TestResult* result) noexcept;
-void stop_test(AppState* app, size_t id) noexcept;
-void stop_tests(AppState* app) noexcept;
+void stop_test(TestResult* result);
+void stop_test(AppState* app, size_t id);
+void stop_tests(AppState* app);
 
-bool status_match(const std::string& match, int status) noexcept;
+bool status_match(const std::string& match, int status);
 const char* body_match(const VariablesMap& vars, const Test* test,
-                       const httplib::Result& result) noexcept;
+                       const httplib::Result& result);
 const char* header_match(const VariablesMap&, const Test* test,
-                         const httplib::Result& result) noexcept;
+                         const httplib::Result& result);
 bool test_analysis(AppState*, const Test* test, TestResult* test_result,
-                   httplib::Result&& http_result, const VariablesMap& vars) noexcept;
+                   httplib::Result&& http_result, const VariablesMap& vars);
 
 template <class Data, class Process>
 void execute_requestable_sync(AppState* app, Requestable<Data>& requestable, HTTPType type,
                               const std::string& hostname, const std::string& destination,
                               const std::string& body, const httplib::Params& params,
-                              Process&& process) noexcept {
+                              Process&& process) {
     requestable.status = REQUESTABLE_WAIT;
 
     httplib::Client cli(hostname);
@@ -403,7 +403,7 @@ template <class Data, class Process>
 void execute_requestable_async(AppState* app, Requestable<Data>& requestable, HTTPType type,
                                const std::string& hostname, const std::string& destination,
                                const std::string& body, const httplib::Params& params,
-                               Process&& process) noexcept {
+                               Process&& process) {
     app->thr_pool.detach_task(
         [app, &requestable, type, hostname, destination, params, body, process]() mutable {
             execute_requestable_sync(app, requestable, type, hostname, destination, body, params,
@@ -411,11 +411,11 @@ void execute_requestable_async(AppState* app, Requestable<Data>& requestable, HT
         });
 }
 
-void remote_file_list(AppState* app, bool sync = false, Requestable<std::vector<std::string>>* result = nullptr) noexcept;
-void remote_file_open(AppState* app, const std::string&) noexcept;
-void remote_file_delete(AppState* app, const std::string&, bool sync = false) noexcept;
-void remote_file_rename(AppState* app, const std::string&, const std::string&) noexcept;
-void remote_file_save(AppState* app, const std::string&, bool sync = false, Requestable<bool>* result = nullptr) noexcept;
+void remote_file_list(AppState* app, bool sync = false, Requestable<std::vector<std::string>>* result = nullptr);
+void remote_file_open(AppState* app, const std::string&);
+void remote_file_delete(AppState* app, const std::string&, bool sync = false);
+void remote_file_rename(AppState* app, const std::string&, const std::string&);
+void remote_file_save(AppState* app, const std::string&, bool sync = false, Requestable<bool>* result = nullptr);
 
 // Backup naming scheme
 // name_id.wt
@@ -424,8 +424,8 @@ struct BackupInfo {
     uint32_t id;
 };
 
-std::optional<BackupInfo> get_backup_info(const std::string& filename) noexcept;
+std::optional<BackupInfo> get_backup_info(const std::string& filename);
 
-void make_local_backup(AppState* app) noexcept;
-void make_remote_backup(AppState* app) noexcept;
-void make_backups(AppState* app) noexcept;
+void make_local_backup(AppState* app);
+void make_remote_backup(AppState* app);
+void make_backups(AppState* app);

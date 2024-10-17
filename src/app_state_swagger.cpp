@@ -9,7 +9,7 @@
 
 using nljson = nlohmann::json;
 
-void AppState::import_swagger_servers(const nljson& servers) noexcept {
+void AppState::import_swagger_servers(const nljson& servers) {
     if (servers.size() <= 0) {
         Log(LogLevel::Warning, "Failed to import swagger servers");
         return;
@@ -49,7 +49,7 @@ void AppState::import_swagger_servers(const nljson& servers) noexcept {
     // NOTE: Missing description
 }
 
-nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) noexcept {
+nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) {
     if (!relative.contains("$ref")) {
         return relative;
     }
@@ -145,7 +145,7 @@ nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) noexce
     return resolved;
 }
 
-nljson import_schema_example(const nljson& schema, const nljson& swagger) noexcept {
+nljson import_schema_example(const nljson& schema, const nljson& swagger) {
     nljson schema_value = resolve_swagger_ref(schema, swagger);
 
     if (schema_value.contains("example")) {
@@ -187,7 +187,7 @@ nljson import_schema_example(const nljson& schema, const nljson& swagger) noexce
 }
 
 std::pair<Variables, Parameters> import_swagger_parameters(const nljson& parameters,
-                                                           const nljson& swagger) noexcept {
+                                                           const nljson& swagger) {
     Variables vars;
     Parameters params;
 
@@ -242,7 +242,7 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
     return {vars, params};
 }
 
-void AppState::import_swagger_paths(const nljson& paths, const nljson& swagger) noexcept {
+void AppState::import_swagger_paths(const nljson& paths, const nljson& swagger) {
     for (auto path = paths.begin(); path != paths.end(); path++) {
         std::string endpoint = "{url}" + path.key();
 
@@ -353,7 +353,7 @@ void AppState::import_swagger_paths(const nljson& paths, const nljson& swagger) 
     }
 }
 
-void AppState::import_swagger(const std::string& swagger_file) noexcept {
+void AppState::import_swagger(const std::string& swagger_file) {
     std::ifstream in(swagger_file);
     if (!in) {
         Log(LogLevel::Error, "Failed to open file %s", swagger_file.c_str());
@@ -413,7 +413,7 @@ struct Parameter {
     std::optional<nljson> example;
 };
 
-void to_json(nljson& j, const Parameter& param) noexcept {
+void to_json(nljson& j, const Parameter& param) {
     j.emplace("name", param.name);
     j.emplace("in", param.in);
     j.emplace("required", true);
@@ -429,7 +429,7 @@ struct RequestBody {
     std::optional<nljson> example;
 };
 
-void to_json(nljson& j, const RequestBody& request_body) noexcept {
+void to_json(nljson& j, const RequestBody& request_body) {
     j.emplace("content", nljson::object());
     j.at("content").emplace(request_body.media_type, nljson::object());
     j.at("content").at(request_body.media_type).emplace("schema", request_body.schema);
@@ -447,7 +447,7 @@ struct Operation {
     std::optional<RequestBody> request_body;
 };
 
-nljson export_example(const std::string& value_str) noexcept {
+nljson export_example(const std::string& value_str) {
     auto value = nljson::parse(value_str, nullptr, false);
     if (value.is_discarded()) {
         return value_str; // String
@@ -482,7 +482,7 @@ nljson export_schema(const nljson& example) {
 }
 } // namespace swagger_export
 
-void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
+void AppState::export_swagger_paths(nlohmann::json& swagger) const {
     using namespace swagger_export;
     std::unordered_map<std::string, Operation> paths;
 
@@ -648,7 +648,7 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const noexcept {
     }
 }
 
-void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {
+void AppState::export_swagger_servers(nlohmann::json& swagger) const {
     VariablesMap root_vars = this->get_test_variables(0);
     if (root_vars.contains("url")) {
         nljson servers = {};
@@ -672,7 +672,7 @@ void AppState::export_swagger_servers(nlohmann::json& swagger) const noexcept {
     }
 }
 
-void AppState::export_swagger(const std::string& swagger_file) const noexcept {
+void AppState::export_swagger(const std::string& swagger_file) const {
     std::ofstream out(swagger_file);
     if (!out) {
         Log(LogLevel::Error, "Failed to open file %s", swagger_file.c_str());

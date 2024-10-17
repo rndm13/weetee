@@ -51,23 +51,23 @@ static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
         }                                                                                          \
     } while (0);
 
-bool arrow(const char* label, ImGuiDir dir) noexcept;
-bool http_type_button(HTTPType type, ImVec2 size = {0, 0}) noexcept;
+bool arrow(const char* label, ImGuiDir dir);
+bool http_type_button(HTTPType type, ImVec2 size = {0, 0});
 
-bool tree_view_context(AppState* app, size_t nested_test_id) noexcept;
-bool tree_view_selectable(AppState* app, size_t id, const char* label) noexcept;
+bool tree_view_context(AppState* app, size_t nested_test_id);
+bool tree_view_selectable(AppState* app, size_t id, const char* label);
 bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min_selectable_rect,
-                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
+                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0);
 bool show_tree_view_row(AppState* app, Test& test, ImVec2& min_selectable_rect,
-                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
+                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0);
 bool show_tree_view_row(AppState* app, Group& group, ImVec2& min_selectable_rect,
-                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0) noexcept;
-void tree_view(AppState* app) noexcept;
+                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0);
+void tree_view(AppState* app);
 
 template <typename Data>
 bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem,
                       const VariablesMap& vars, int32_t flags, const char** hints,
-                      const size_t hint_count) noexcept {
+                      const size_t hint_count) {
     bool changed = false;
 
     auto select_only_this = [pd, elem]() {
@@ -177,21 +177,21 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
     return changed;
 }
 
-bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem, const VariablesMap&) noexcept;
+bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem, const VariablesMap&);
 bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem,
-                           const VariablesMap&) noexcept;
-bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem, const VariablesMap&) noexcept;
+                           const VariablesMap&);
+bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem, const VariablesMap&);
 bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem,
-                           const VariablesMap&) noexcept;
+                           const VariablesMap&);
 bool partial_dict_data_context(AppState*, Variables*, VariablesElement* elem,
-                               const VariablesMap&) noexcept;
+                               const VariablesMap&);
 bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem,
-                           const VariablesMap&) noexcept;
+                           const VariablesMap&);
 
 template <typename Data>
 bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const VariablesMap& vars,
                   uint8_t flags = PARTIAL_DICT_NONE, const char** hints = nullptr,
-                  const size_t hint_count = 0) noexcept {
+                  const size_t hint_count = 0) {
     using DataType = typename PartialDict<Data>::DataType;
 
     bool changed = false;
@@ -260,8 +260,8 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
     return changed;
 }
 
-bool editor_test_request(AppState* app, Test& test) noexcept;
-bool editor_test_response(AppState* app, Test& test) noexcept;
+bool editor_test_request(AppState* app, Test& test);
+bool editor_test_response(AppState* app, Test& test);
 
 enum ModalResult : uint8_t {
     MODAL_NONE,
@@ -270,15 +270,15 @@ enum ModalResult : uint8_t {
     MODAL_CANCEL,
 };
 
-ModalResult unsaved_changes(AppState*) noexcept;
+ModalResult unsaved_changes(AppState*);
 
-bool editor_auth(const std::string& label, const I18N*, AuthVariant* auth) noexcept;
-bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool show_dynamic) noexcept;
+bool editor_auth(const std::string& label, const I18N*, AuthVariant* auth);
+bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool show_dynamic);
 
-void show_httplib_headers(AppState* app, const httplib::Headers& headers) noexcept;
-void show_httplib_cookies(AppState* app, const httplib::Headers& headers) noexcept;
+void show_httplib_headers(AppState* app, const httplib::Headers& headers);
+void show_httplib_cookies(AppState* app, const httplib::Headers& headers);
 
-ModalResult open_result_details(AppState* app, TestResult* tr) noexcept;
+ModalResult open_result_details(AppState* app, TestResult* tr);
 
 enum EditorTabResult : uint8_t {
     TAB_NONE,
@@ -286,26 +286,26 @@ enum EditorTabResult : uint8_t {
     TAB_CHANGED,
 };
 
-EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) noexcept;
-EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) noexcept;
-void tabbed_editor(AppState* app) noexcept;
+EditorTabResult editor_tab_test(AppState* app, EditorTab& tab);
+EditorTabResult editor_tab_group(AppState* app, EditorTab& tab);
+void tabbed_editor(AppState* app);
 
-void testing_results(AppState* app) noexcept;
+void testing_results(AppState* app);
 
-std::vector<HelloImGui::DockingSplit> splits() noexcept;
-std::vector<HelloImGui::DockableWindow> windows(AppState* app) noexcept;
-HelloImGui::DockingParams layout(AppState* app) noexcept;
+std::vector<HelloImGui::DockingSplit> splits();
+std::vector<HelloImGui::DockableWindow> windows(AppState* app);
+HelloImGui::DockingParams layout(AppState* app);
 
-void save_as_file_dialog(AppState* app) noexcept;
-void save_file_dialog(AppState* app) noexcept;
-void open_file_dialog(AppState* app) noexcept;
+void save_as_file_dialog(AppState* app);
+void save_file_dialog(AppState* app);
+void open_file_dialog(AppState* app);
 
-void show_menus(AppState* app) noexcept;
-void show_app_menu_items(AppState* app) noexcept;
-void show_gui(AppState* app) noexcept;
+void show_menus(AppState* app);
+void show_app_menu_items(AppState* app);
+void show_gui(AppState* app);
 
-void pre_frame(AppState* app) noexcept;
+void pre_frame(AppState* app);
 
 // Program leaks those fonts
 // can't do much I guess and not a big deal
-void load_fonts(AppState* app) noexcept;
+void load_fonts(AppState* app);

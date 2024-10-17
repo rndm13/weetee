@@ -2,7 +2,7 @@
 
 using json = nlohmann::json;
 
-std::string replace_variables(const VariablesMap& vars, const std::string& target) noexcept {
+std::string replace_variables(const VariablesMap& vars, const std::string& target) {
     std::string result = target;
 
     bool changed = true;
@@ -33,7 +33,7 @@ std::string replace_variables(const VariablesMap& vars, const std::string& targe
     return result;
 }
 
-json pack_variables(std::string str, const VariablesMap& vars) noexcept {
+json pack_variables(std::string str, const VariablesMap& vars) {
     std::vector<std::pair<size_t, size_t>> var_ranges = encapsulation_ranges(str, '{', '}');
 
     for (size_t i = 0; i < var_ranges.size(); i++) {
@@ -64,7 +64,7 @@ json pack_variables(std::string str, const VariablesMap& vars) noexcept {
     return result;
 }
 
-std::string unpack_variables(const json& schema, size_t indent) noexcept {
+std::string unpack_variables(const json& schema, size_t indent) {
     std::string schema_str;
     schema_str = schema.dump(indent);
 
@@ -94,7 +94,7 @@ std::string unpack_variables(const json& schema, size_t indent) noexcept {
     return result;
 }
 
-const char* json_format_variables(std::string& input, const VariablesMap& vars) noexcept {
+const char* json_format_variables(std::string& input, const VariablesMap& vars) {
     json j = pack_variables(input, vars);
 
     if (j.is_discarded()) {

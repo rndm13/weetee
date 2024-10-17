@@ -25,7 +25,7 @@ enum RequestBodyType : uint8_t {
 
 using RequestBody = std::variant<std::string, MultiPartBody>;
 
-template <RequestBodyType type> constexpr size_t request_body_index() noexcept {
+template <RequestBodyType type> constexpr size_t request_body_index() {
     if constexpr (type == REQUEST_JSON) {
         return 0; // string
     }
@@ -40,11 +40,11 @@ template <RequestBodyType type> constexpr size_t request_body_index() noexcept {
     }
 }
 
-template <RequestBodyType type> constexpr auto request_body_inplace_index() noexcept {
+template <RequestBodyType type> constexpr auto request_body_inplace_index() {
     return std::in_place_index<request_body_index<type>()>;
 }
 
-RequestBodyType request_body_type(const std::string& str) noexcept;
+RequestBodyType request_body_type(const std::string& str);
 
 struct Request {
     RequestBodyType body_type = REQUEST_JSON;
@@ -55,11 +55,11 @@ struct Request {
     Parameters parameters;
     Headers headers;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 
-    constexpr bool operator==(const Request& other) const noexcept {
+    constexpr bool operator==(const Request& other) const {
         return this->body_type == other.body_type &&
                (this->body_type != REQUEST_OTHER || other.body_type != REQUEST_OTHER ||
                 this->other_content_type == other.other_content_type) &&
@@ -85,11 +85,11 @@ struct Response {
     Cookies cookies;
     Headers headers;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 
-    constexpr bool operator==(const Response& other) const noexcept {
+    constexpr bool operator==(const Response& other) const {
         return this->status == other.status &&
                (this->body_type != RESPONSE_OTHER || other.body_type != RESPONSE_OTHER ||
                 this->other_content_type == other.other_content_type) &&
@@ -102,17 +102,17 @@ struct AuthBasic {
     std::string name;
     std::string password;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 
 struct AuthBearerToken {
     std::string token;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 
 using AuthVariant = std::variant<std::monostate, AuthBasic, AuthBearerToken>;
@@ -149,11 +149,11 @@ struct ClientSettings {
     size_t seconds_timeout = 10;
     size_t test_reruns = 1;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 
-    constexpr bool operator==(const ClientSettings& other) const noexcept {
+    constexpr bool operator==(const ClientSettings& other) const {
         return this->flags == other.flags;
     }
 };
@@ -177,14 +177,14 @@ struct Test {
 
     std::optional<ClientSettings> cli_settings;
 
-    std::string label() const noexcept;
+    std::string label() const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 
-void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test) noexcept;
+void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test);
 
 enum TestResultStatus {
     STATUS_OK,
@@ -237,7 +237,7 @@ struct TestResult {
     size_t progress_current = 0;
 
     TestResult(const Test& _original_test, size_t _test_result_idx, bool _running,
-               const VariablesMap& _variables) noexcept
+               const VariablesMap& _variables)
         : running(_running), test_result_idx(_test_result_idx), original_test(_original_test),
           variables(_variables) {}
 };
@@ -259,11 +259,11 @@ struct Group {
     std::vector<size_t> children_ids;
     Variables variables;
 
-    std::string label() const noexcept;
+    std::string label() const;
 
-    void save(SaveState* save) const noexcept;
-    bool can_load(SaveState* save) const noexcept;
-    void load(SaveState* save) noexcept;
+    void save(SaveState* save) const;
+    bool can_load(SaveState* save) const;
+    void load(SaveState* save);
 };
 
 enum NestedTestType : uint8_t {
@@ -272,7 +272,7 @@ enum NestedTestType : uint8_t {
 };
 using NestedTest = std::variant<Test, Group>;
 
-constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept {
+constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) {
     assert(a != nullptr);
     assert(b != nullptr);
 
@@ -308,9 +308,9 @@ constexpr bool nested_test_eq(const NestedTest* a, const NestedTest* b) noexcept
 
 bool test_comp(const std::unordered_map<size_t, NestedTest>& tests, size_t a_id, size_t b_id);
 
-MultiPartBody request_multipart_convert_json(const nlohmann::json& json) noexcept;
+MultiPartBody request_multipart_convert_json(const nlohmann::json& json);
 
-template <RequestBodyType to_type> void request_body_convert(Test* test) noexcept {
+template <RequestBodyType to_type> void request_body_convert(Test* test) {
     using nljson = nlohmann::json;
 
     if (test->request.body.index() == request_body_index<to_type>()) {
@@ -347,20 +347,20 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) noexcep
 }
 
 // Prefer request_body output instead
-ContentType request_content_type(const Request* request) noexcept;
+ContentType request_content_type(const Request* request);
 httplib::Headers request_headers(
     const VariablesMap& vars, const Test* test,
-    const std::unordered_map<std::string, std::string>* overload_cookies = nullptr) noexcept;
-httplib::Params request_params(const VariablesMap& vars, const Test* test) noexcept;
+    const std::unordered_map<std::string, std::string>* overload_cookies = nullptr);
+httplib::Params request_params(const VariablesMap& vars, const Test* test);
 
 struct RequestBodyResult {
     std::string content_type;
     std::string body;
 };
 
-RequestBodyResult request_body(const VariablesMap& vars, const Test* test) noexcept;
-httplib::Headers response_headers(const VariablesMap& vars, const Test* test) noexcept;
-ContentType response_content_type(const Response* response) noexcept;
+RequestBodyResult request_body(const VariablesMap& vars, const Test* test);
+httplib::Headers response_headers(const VariablesMap& vars, const Test* test);
+ContentType response_content_type(const Response* response);
 
 using ClientSettingsVisitor = COPY_GETTER_VISITOR(cli_settings, cli_settings);
 using SetClientSettingsVisitor = SETTER_VISITOR(cli_settings, std::optional<ClientSettings>);

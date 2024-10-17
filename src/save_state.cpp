@@ -1,15 +1,15 @@
 #include "save_state.hpp"
 
-bool SaveState::can_offset(size_t offset) noexcept {
+bool SaveState::can_offset(size_t offset) {
     return this->load_idx + offset <= original_buffer.size();
 }
 
-char* SaveState::load_offset(size_t offset) noexcept {
+char* SaveState::load_offset(size_t offset) {
     assert(this->load_idx + offset <= original_buffer.size());
     return original_buffer.data() + this->load_idx + offset;
 }
 
-void SaveState::save(const std::string& str) noexcept {
+void SaveState::save(const std::string& str) {
     size_t length = str.length();
     this->save(reinterpret_cast<char*>(&length), sizeof(length));
     if (length > 0) {
@@ -18,7 +18,7 @@ void SaveState::save(const std::string& str) noexcept {
     return;
 }
 
-bool SaveState::can_load(const std::string& str) noexcept {
+bool SaveState::can_load(const std::string& str) {
     size_t length = 0;
     if (!this->can_load_reset(length)) {
         return false;
@@ -32,7 +32,7 @@ bool SaveState::can_load(const std::string& str) noexcept {
     return true;
 }
 
-void SaveState::load(std::string& str) noexcept {
+void SaveState::load(std::string& str) {
     size_t length;
     this->load(length);
     if (length > 0) { // To avoid failing 0 size assertion in load
@@ -42,14 +42,14 @@ void SaveState::load(std::string& str) noexcept {
     return;
 }
 
-void SaveState::finish_save() noexcept {
+void SaveState::finish_save() {
     this->original_size = this->original_buffer.size();
     this->original_buffer.shrink_to_fit();
 }
 
-void SaveState::reset_load() noexcept { this->load_idx = 0; }
+void SaveState::reset_load() { this->load_idx = 0; }
 
-bool SaveState::write(std::ostream& os) const noexcept {
+bool SaveState::write(std::ostream& os) const {
     assert(os);
     assert(this->original_size > 0);
     assert(this->original_buffer.size() == this->original_size);
@@ -66,7 +66,7 @@ bool SaveState::write(std::ostream& os) const noexcept {
     return true;
 }
 
-bool SaveState::read(std::istream& is) noexcept {
+bool SaveState::read(std::istream& is) {
     assert(is);
     is.read(reinterpret_cast<char*>(&this->save_version), sizeof(this->save_version));
     if (!is || is.eof()) {
