@@ -16,7 +16,7 @@ TEST(utils, vector_comparison) {
 TEST(utils, find_and_replace) {
     std::string str = "replace this but keep old information.";
 
-    find_and_replace(str, "replace this", "find new information");
+    str_find_and_replace(str, "replace this", "find new information");
 
     EXPECT_EQ(str, "find new information but keep old information.");
 }
@@ -27,16 +27,7 @@ TEST(utils, str_contains) {
     EXPECT_TRUE(str_contains(haystack, "INformAtion"));
     EXPECT_TRUE(str_contains(haystack, "big informAtion"));
     EXPECT_FALSE(str_contains(haystack, "big MISinformAtion"));
-}
-
-TEST(utils, get_filename) {
-#ifndef WIN32
-    std::string file_path = "/path/to/a/file.txt";
-#else
-    std::string file_path = "C:\\path\\to\\a\\file.txt";
-#endif
-
-    EXPECT_EQ(get_full_filename(file_path), "file.txt");
+    EXPECT_FALSE(str_contains(haystack, "biformation"));
 }
 
 TEST(utils, split_string) {
@@ -49,11 +40,22 @@ TEST(utils, split_string) {
 TEST(utils, encapsulation_ranges) {
     std::string str_vars = "Hello {var1} World! {{nested}_variable}";
 
-    std::vector<std::pair<size_t, size_t>> vars = encapsulation_ranges(str_vars, '{', '}');
-    std::vector<std::pair<size_t, size_t>> expected = {{6, 5}, {20, 18}, {21, 7}};
+    std::vector<Range> vars = encapsulation_ranges(str_vars, '{', '}');
+    std::vector<Range> expected = {{6, 5}, {20, 18}, {21, 7}};
 
     EXPECT_EQ(vars, expected);
 }
+
+TEST(utils, get_filename) {
+#ifndef WIN32
+    std::string file_path = "/path/to/a/file.txt";
+#else
+    std::string file_path = "C:\\path\\to\\a\\file.txt";
+#endif
+
+    EXPECT_EQ(get_filename(file_path), "file.txt");
+}
+
 
 TEST(utils, MapKeyIterator) {
     std::unordered_map<std::string, std::string> map = {

@@ -1632,7 +1632,7 @@ void make_local_backup(AppState* app) {
 
     std::string dir = app->conf.backup.get_local_dir();
 
-    std::string name = get_filename(get_saved_path(app->saved_file));
+    std::string name = get_filename_noext(get_saved_path(app->saved_file));
     int64_t max_id = 0;
 
     // Find a max ID of a backup
@@ -1689,7 +1689,7 @@ void make_remote_backup(AppState* app) {
             return;
         }
 
-        std::string name = get_filename(get_saved_path(app->saved_file));
+        std::string name = get_filename_noext(get_saved_path(app->saved_file));
         int64_t max_id = 0;
 
         // Find a max ID of a backup

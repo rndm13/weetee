@@ -8,7 +8,7 @@ std::string replace_variables(const VariablesMap& vars, const std::string& targe
     bool changed = true;
     size_t iterations = 0;
     while (iterations < REPLACE_VARIABLES_MAX_NEST && changed) {
-        std::vector<std::pair<size_t, size_t>> params_idx = encapsulation_ranges(result, '{', '}');
+        std::vector<Range> params_idx = encapsulation_ranges(result, '{', '}');
 
         changed = false;
         iterations++;
@@ -34,7 +34,7 @@ std::string replace_variables(const VariablesMap& vars, const std::string& targe
 }
 
 json pack_variables(std::string str, const VariablesMap& vars) {
-    std::vector<std::pair<size_t, size_t>> var_ranges = encapsulation_ranges(str, '{', '}');
+    std::vector<Range> var_ranges = encapsulation_ranges(str, '{', '}');
 
     for (size_t i = 0; i < var_ranges.size(); i++) {
         auto [idx, size] = var_ranges[i];

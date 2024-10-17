@@ -24,7 +24,8 @@ struct SaveState {
     std::vector<char> original_buffer;
 
     // helpers
-    template <class T = void> void save(const char* ptr, size_t size = sizeof(T)) {
+    template <class T = void>
+    void save(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
         std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
@@ -33,7 +34,8 @@ struct SaveState {
     bool can_offset(size_t offset = 0);
 
     // modifies index, should be called before load and then reset
-    template <class T = void> bool can_load(const char* ptr, size_t size = sizeof(T)) {
+    template <class T = void>
+    bool can_load(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
         if (!can_offset(size)) {
@@ -44,7 +46,8 @@ struct SaveState {
         return true;
     }
 
-    template <class T = void> bool can_load_reset(const char* ptr, size_t size = sizeof(T)) {
+    template <class T = void>
+    bool can_load_reset(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
         if (!can_offset(size)) {
@@ -56,7 +59,8 @@ struct SaveState {
 
     char* load_offset(size_t offset = 0);
 
-    template <class T = void> void load(char* ptr, size_t size = sizeof(T)) {
+    template <class T = void>
+    void load(char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
         assert(size > 0);
 
@@ -93,10 +97,13 @@ struct SaveState {
     void load(std::string& str);
 
     void save(const std::monostate&) {}
-    bool can_load(const std::monostate&) { return true; }
+    bool can_load(const std::monostate&) {
+        return true;
+    }
     void load(std::monostate&) {}
 
-    template <class T> void save(const std::optional<T>& opt) {
+    template <class T>
+    void save(const std::optional<T>& opt) {
         bool has_value = opt.has_value();
         this->save(has_value);
 
@@ -105,7 +112,8 @@ struct SaveState {
         }
     }
 
-    template <class T> bool can_load(const std::optional<T>& opt) {
+    template <class T>
+    bool can_load(const std::optional<T>& opt) {
         bool has_value;
         this->load(has_value);
 
@@ -116,7 +124,8 @@ struct SaveState {
         return true;
     }
 
-    template <class T> void load(std::optional<T>& opt) {
+    template <class T>
+    void load(std::optional<T>& opt) {
         bool has_value;
         this->load(has_value);
 
@@ -128,7 +137,8 @@ struct SaveState {
         }
     }
 
-    template <class K, class V> void save(const std::unordered_map<K, V>& map) {
+    template <class K, class V>
+    void save(const std::unordered_map<K, V>& map) {
         size_t size = map.size();
         this->save(size);
 
@@ -138,7 +148,8 @@ struct SaveState {
         }
     }
 
-    template <class K, class V> bool can_load(const std::unordered_map<K, V>&) {
+    template <class K, class V>
+    bool can_load(const std::unordered_map<K, V>&) {
         size_t size;
         if (!this->can_load_reset(size)) {
             return false;
@@ -162,7 +173,8 @@ struct SaveState {
         return true;
     }
 
-    template <class K, class V> void load(std::unordered_map<K, V>& map) {
+    template <class K, class V>
+    void load(std::unordered_map<K, V>& map) {
         size_t size;
         this->load(size);
 
@@ -177,7 +189,8 @@ struct SaveState {
         }
     }
 
-    template <class... T> void save(const std::variant<T...>& variant) {
+    template <class... T>
+    void save(const std::variant<T...>& variant) {
         assert(variant.index() != std::variant_npos);
         size_t index = variant.index();
         this->save(index);
@@ -185,7 +198,8 @@ struct SaveState {
         std::visit([this](const auto& s) { this->save(s); }, variant);
     }
 
-    template <class... T> bool can_load(const std::variant<T...>& variant) {
+    template <class... T>
+    bool can_load(const std::variant<T...>& variant) {
         size_t index;
         if (!this->can_load_reset(index)) {
             return false;
@@ -193,30 +207,31 @@ struct SaveState {
 
         this->load(index);
 
-        if (!valid_variant_from_index<std::variant<T...>>(index)) {
-            return false;
-        }
+        std::optional<std::variant<T...>> var = variant_from_index<std::variant<T...>>(index);
 
-        if (!valid_variant_from_index<std::variant<T...>>(index)) {
+        if (!var.has_value()) {
             return false;
-        }
-        auto var = variant_from_index<std::variant<T...>>(index);
+        };
 
-        return std::visit([this](const auto& s) { return this->can_load(s); }, var);
+        return std::visit([this](const auto& s) { return this->can_load(s); }, var.value());
     }
 
-    template <class... T> void load(std::variant<T...>& variant) {
+    template <class... T>
+    void load(std::variant<T...>& variant) {
         size_t index;
         this->load(index);
         assert(index != std::variant_npos);
 
-        assert(valid_variant_from_index<std::variant<T...>>(index));
-        variant = variant_from_index<std::variant<T...>>(index);
+        auto variant_opt = variant_from_index<std::variant<T...>>(index);
+        assert(variant_opt.has_value());
+
+        variant = variant_opt.value();
 
         std::visit([this](auto& s) { this->load(s); }, variant);
     }
 
-    template <class Element> void save(const std::vector<Element>& vec) {
+    template <class Element>
+    void save(const std::vector<Element>& vec) {
         size_t size = vec.size();
         this->save(size);
 
@@ -225,7 +240,8 @@ struct SaveState {
         }
     }
 
-    template <class Element> bool can_load(const std::vector<Element>& vec) {
+    template <class Element>
+    bool can_load(const std::vector<Element>& vec) {
         size_t size;
         if (!this->can_load_reset(size)) {
             return false;
@@ -245,7 +261,8 @@ struct SaveState {
         return true;
     }
 
-    template <class Element> void load(std::vector<Element>& vec) {
+    template <class Element>
+    void load(std::vector<Element>& vec) {
         size_t size;
         this->load(size);
 
@@ -297,7 +314,8 @@ struct UndoHistory {
     std::vector<SaveState> undo_history = {};
 
     // should be called after every edit
-    template <class T> void push_undo_history(const T* obj) {
+    template <class T>
+    void push_undo_history(const T* obj) {
         assert(obj);
 
         if (this->undo_idx + 1 < this->undo_history.size()) {
@@ -312,16 +330,20 @@ struct UndoHistory {
         this->undo_idx = this->undo_history.size() - 1;
     }
 
-    template <class T> void reset_undo_history(const T* obj) {
+    template <class T>
+    void reset_undo_history(const T* obj) {
         // add initial undo
         this->undo_history.clear();
         this->undo_idx = 0;
         this->push_undo_history(obj);
     }
 
-    constexpr bool can_undo() const { return this->undo_idx > 0; }
+    constexpr bool can_undo() const {
+        return this->undo_idx > 0;
+    }
 
-    template <class T> void undo(T* obj) {
+    template <class T>
+    void undo(T* obj) {
         assert(this->can_undo());
 
         this->undo_idx--;
@@ -333,7 +355,8 @@ struct UndoHistory {
         return this->undo_idx < this->undo_history.size() - 1;
     }
 
-    template <class T> void redo(T* obj) {
+    template <class T>
+    void redo(T* obj) {
         assert(this->can_redo());
 
         this->undo_idx++;
@@ -342,7 +365,10 @@ struct UndoHistory {
     }
 
     UndoHistory() {}
-    template <class T> UndoHistory(const T* obj) { reset_undo_history(obj); }
+    template <class T>
+    UndoHistory(const T* obj) {
+        reset_undo_history(obj);
+    }
 
     UndoHistory(const UndoHistory&) = default;
     UndoHistory(UndoHistory&&) = default;

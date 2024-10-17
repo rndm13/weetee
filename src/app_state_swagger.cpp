@@ -126,8 +126,8 @@ nljson resolve_swagger_ref(const nljson& relative, const nljson& swagger) {
     std::vector<std::string> locals = split_string(local, "/");
 
     for (std::string& name : locals) {
-        find_and_replace(name, "~0", "~");
-        find_and_replace(name, "~1", "/");
+        str_find_and_replace(name, "~0", "~");
+        str_find_and_replace(name, "~1", "/");
 
         if (resolved.contains(name)) {
             resolved = resolved.at(name);
@@ -217,7 +217,7 @@ std::pair<Variables, Parameters> import_swagger_parameters(const nljson& paramet
             }
         } else if (param_value.contains("schema")) {
             value = unpack_variables(import_schema_example(param_value.at("schema"), swagger), 0);
-            find_and_replace(value, "\n", "");
+            str_find_and_replace(value, "\n", "");
         }
 
         if (value.front() == '"' && value.back() == '"') {
@@ -513,9 +513,9 @@ void AppState::export_swagger_paths(nlohmann::json& swagger) const {
                 std::string path = split_endpoint(it_test->endpoint).second;
 
                 std::string name = lower_http_type_label(it_test->type) + "_" + path;
-                find_and_replace(name, "/", "_");
-                find_and_replace(name, "{", "");
-                find_and_replace(name, "}", "");
+                str_find_and_replace(name, "/", "_");
+                str_find_and_replace(name, "{", "");
+                str_find_and_replace(name, "}", "");
 
                 if (!paths.contains(name)) {
                     Operation op = {.path = path, .type = it_test->type};

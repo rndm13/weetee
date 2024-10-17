@@ -41,10 +41,11 @@ static constexpr ImGuiDragDropFlags DRAG_SOURCE_FLAGS =
         size_t type = (variant).index();                                                           \
         if (ImGui::BeginCombo((label), (variant_labels)[type])) {                                  \
             for (size_t i = 0; i < ARRAY_SIZE((variant_labels)); i++) {                            \
+                assert(valid_variant_from_index<variant_type>(i));                                 \
                 if (ImGui::Selectable((variant_labels)[i], i == type)) {                           \
                     (changed) = true;                                                              \
                     type = static_cast<size_t>(i);                                                 \
-                    (variant) = variant_from_index<variant_type>(type);                            \
+                    (variant) = variant_from_index<variant_type>(type).value();                    \
                 }                                                                                  \
             }                                                                                      \
             ImGui::EndCombo();                                                                     \
@@ -56,18 +57,38 @@ bool http_type_button(HTTPType type, ImVec2 size = {0, 0});
 
 bool tree_view_context(AppState* app, size_t nested_test_id);
 bool tree_view_selectable(AppState* app, size_t id, const char* label);
-bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min_selectable_rect,
-                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0);
-bool show_tree_view_row(AppState* app, Test& test, ImVec2& min_selectable_rect,
-                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0);
-bool show_tree_view_row(AppState* app, Group& group, ImVec2& min_selectable_rect,
-                    ImVec2& max_selectable_rect, size_t idx = 0, float indentation = 0);
+bool show_tree_view_row(
+    AppState* app,
+    NestedTest& nt,
+    ImVec2& min_selectable_rect,
+    ImVec2& max_selectable_rect,
+    size_t idx = 0,
+    float indentation = 0);
+bool show_tree_view_row(
+    AppState* app,
+    Test& test,
+    ImVec2& min_selectable_rect,
+    ImVec2& max_selectable_rect,
+    size_t idx = 0,
+    float indentation = 0);
+bool show_tree_view_row(
+    AppState* app,
+    Group& group,
+    ImVec2& min_selectable_rect,
+    ImVec2& max_selectable_rect,
+    size_t idx = 0,
+    float indentation = 0);
 void tree_view(AppState* app);
 
 template <typename Data>
-bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<Data>* elem,
-                      const VariablesMap& vars, int32_t flags, const char** hints,
-                      const size_t hint_count) {
+bool partial_dict_row(
+    AppState* app,
+    PartialDict<Data>* pd,
+    PartialDictElement<Data>* elem,
+    const VariablesMap& vars,
+    int32_t flags,
+    const char** hints,
+    const size_t hint_count) {
     bool changed = false;
 
     auto select_only_this = [pd, elem]() {
@@ -87,8 +108,11 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
         }
 
         ImGui::SameLine();
-        if (ImGui::Selectable("##element", elem->flags & PARTIAL_DICT_ELEM_SELECTED,
-                              SELECTABLE_FLAGS, ImVec2(0, 0))) {
+        if (ImGui::Selectable(
+                "##element",
+                elem->flags & PARTIAL_DICT_ELEM_SELECTED,
+                SELECTABLE_FLAGS,
+                ImVec2(0, 0))) {
             auto& io = ImGui::GetIO();
             if (io.KeyCtrl) {
                 elem->flags ^= PARTIAL_DICT_ELEM_SELECTED;
@@ -178,20 +202,22 @@ bool partial_dict_row(AppState* app, PartialDict<Data>* pd, PartialDictElement<D
 }
 
 bool partial_dict_data_row(AppState*, Cookies*, CookiesElement* elem, const VariablesMap&);
-bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem,
-                           const VariablesMap&);
+bool partial_dict_data_row(AppState*, Parameters*, ParametersElement* elem, const VariablesMap&);
 bool partial_dict_data_row(AppState*, Headers*, HeadersElement* elem, const VariablesMap&);
-bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem,
-                           const VariablesMap&);
-bool partial_dict_data_context(AppState*, Variables*, VariablesElement* elem,
-                               const VariablesMap&);
-bool partial_dict_data_row(AppState*, MultiPartBody*, MultiPartBodyElement* elem,
-                           const VariablesMap&);
+bool partial_dict_data_row(AppState*, Variables*, VariablesElement* elem, const VariablesMap&);
+bool partial_dict_data_context(AppState*, Variables*, VariablesElement* elem, const VariablesMap&);
+bool partial_dict_data_row(
+    AppState*, MultiPartBody*, MultiPartBodyElement* elem, const VariablesMap&);
 
 template <typename Data>
-bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const VariablesMap& vars,
-                  uint8_t flags = PARTIAL_DICT_NONE, const char** hints = nullptr,
-                  const size_t hint_count = 0) {
+bool partial_dict(
+    AppState* app,
+    PartialDict<Data>* pd,
+    const char* label,
+    const VariablesMap& vars,
+    uint8_t flags = PARTIAL_DICT_NONE,
+    const char** hints = nullptr,
+    const size_t hint_count = 0) {
     using DataType = typename PartialDict<Data>::DataType;
 
     bool changed = false;
@@ -213,10 +239,10 @@ bool partial_dict(AppState* app, PartialDict<Data>* pd, const char* label, const
             ImGui::TableNextRow();
             ImGui::PushID(static_cast<int32_t>(i));
 
-            uint8_t row_flags = flags | (
-                    elem->flags & PARTIAL_DICT_ELEM_REQUIRED
-                    ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE | PARTIAL_DICT_NO_KEY_CHANGE
-                    : PARTIAL_DICT_NONE);
+            uint8_t row_flags = flags | (elem->flags & PARTIAL_DICT_ELEM_REQUIRED
+                                             ? PARTIAL_DICT_NO_ENABLE | PARTIAL_DICT_NO_DELETE |
+                                                   PARTIAL_DICT_NO_KEY_CHANGE
+                                             : PARTIAL_DICT_NONE);
 
             changed |= partial_dict_row(app, pd, elem, vars, row_flags, hints, hint_count);
             deletion |= elem->flags & PARTIAL_DICT_ELEM_TO_DELETE;

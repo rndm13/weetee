@@ -9,6 +9,8 @@ ColumnLimit: 100
 AllowShortEnumsOnASingleLine: False
 AllowShortFunctionsOnASingleLine: Empty
 BreakBeforeBinaryOperators: None
+# BreakBeforeConceptDeclarations: Always
+AlwaysBreakTemplateDeclarations: true
 # BreakBinaryOperations: Never only in clang-format 20
 
 AccessModifierOffset: -4

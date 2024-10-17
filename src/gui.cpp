@@ -712,7 +712,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
         if (ImGui::MenuItem("None", nullptr, elem->data.separator == std::nullopt)) {
             changed = true;
 
-            find_and_replace(elem->data.data, "\n", " ");
+            str_find_and_replace(elem->data.data, "\n", " ");
 
             elem->data.separator = std::nullopt;
         }
@@ -721,7 +721,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
             changed = true;
 
             if (elem->data.separator.has_value()) {
-                find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, "\n");
+                str_find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, "\n");
             }
 
             elem->data.separator = '\n';
@@ -737,7 +737,7 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
             changed = true;
 
             if (elem->data.separator.has_value()) {
-                find_and_replace(elem->data.data, std::string{elem->data.separator.value()},
+                str_find_and_replace(elem->data.data, std::string{elem->data.separator.value()},
                                  separator);
             }
 
