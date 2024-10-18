@@ -29,37 +29,7 @@ template <typename Data> struct PartialDictElement {
     // do not save
     std::optional<ComboFilterState> cfs; // If hints are given
 
-    void save(SaveState* save) const {
-        assert(save);
-
-        save->save(this->flags);
-        save->save(this->key);
-        save->save(this->data);
-    }
-
-    bool can_load(SaveState* save) const {
-        assert(save);
-
-        if (!save->can_load(this->flags)) {
-            return false;
-        }
-        if (!save->can_load(this->key)) {
-            return false;
-        }
-        if (!save->can_load(this->data)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    void load(SaveState* save) {
-        assert(save);
-
-        save->load(this->flags);
-        save->load(this->key);
-        save->load(this->data);
-    }
+    OBJ_SAVE_IMPL(flags, 0, key, 0, data, 0);
 
     bool operator!=(const PartialDictElement<Data>& other) const {
         return this->flags != other.flags || this->data != other.data;
@@ -80,20 +50,7 @@ template <typename Data> struct PartialDict {
         return this->elements == other.elements;
     }
 
-    void save(SaveState* save) const {
-        assert(save);
-        save->save(this->elements);
-    }
-
-    bool can_load(SaveState* save) const {
-        assert(save);
-        return save->can_load(this->elements);
-    }
-
-    void load(SaveState* save) {
-        assert(save);
-        return save->load(this->elements);
-    }
+    OBJ_SAVE_IMPL(elements, 0);
 
     constexpr bool empty() const { return this->elements.empty(); }
 };
@@ -127,6 +84,8 @@ struct MultiPartBodyElementData {
 
     bool operator==(const MultiPartBodyElementData& other) const;
 
+    OBJ_SAVE_IMPL(type, 0, data, 0, content_type, 0);
+
     void save(SaveState* save) const;
     bool can_load(SaveState* save) const;
     void load(SaveState* save);
@@ -145,9 +104,7 @@ struct CookiesElementData {
 
     bool operator!=(const CookiesElementData& other) const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(data, 0);
 };
 using Cookies = PartialDict<CookiesElementData>;
 using CookiesElement = Cookies::ElementType;
@@ -161,9 +118,7 @@ struct ParametersElementData {
 
     bool operator!=(const ParametersElementData& other) const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(data, 0);
 };
 using Parameters = PartialDict<ParametersElementData>;
 using ParametersElement = Parameters::ElementType;
@@ -176,9 +131,7 @@ struct HeadersElementData {
 
     bool operator!=(const HeadersElementData& other) const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(data, 0);
 };
 using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
@@ -192,9 +145,7 @@ struct VariablesElementData {
 
     bool operator!=(const VariablesElementData& other) const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(data, 0, separator, 0);
 };
 
 using Variables = PartialDict<VariablesElementData>;

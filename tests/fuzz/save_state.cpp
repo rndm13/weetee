@@ -3,21 +3,15 @@
 #include "hello_imgui/runner_params.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size) {
-    if (Size == 0) {
-        return 0;
-    }
-
     HelloImGui::RunnerParams params = {};
     AppState app(&params, true);
-    SaveState ss = {};
+    SaveState save = {};
 
-    ss.save(reinterpret_cast<const char*>(Data), Size);
-    ss.finish_save();
+    save.save(reinterpret_cast<const char*>(Data), Size);
+    save.finish_save();
+    save.reset_load();
 
-    if (ss.can_load(app) && ss.load_idx == ss.original_size) {
-        ss.reset_load();
-        ss.load(app);
-    } else {
+    if (!save.load(app) || save.load_idx != save.original_size) {
         return -1;
     }
 

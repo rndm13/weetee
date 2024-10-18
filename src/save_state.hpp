@@ -15,57 +15,84 @@
 #include "variant"
 #include "vector"
 
+#define PARENS ()
+#define EXPAND(...) EXPAND4(EXPAND4(EXPAND4(EXPAND4(__VA_ARGS__))))
+#define EXPAND4(...) EXPAND3(EXPAND3(EXPAND3(EXPAND3(__VA_ARGS__))))
+#define EXPAND3(...) EXPAND2(EXPAND2(EXPAND2(EXPAND2(__VA_ARGS__))))
+#define EXPAND2(...) EXPAND1(EXPAND1(EXPAND1(EXPAND1(__VA_ARGS__))))
+#define EXPAND1(...) __VA_ARGS__
+
+#define FOR_EACH(macro, ...) __VA_OPT__(EXPAND(FOR_EACH_HELPER(macro, __VA_ARGS__)))
+#define FOR_EACH_HELPER(macro, a1, a2, ...)                                                        \
+    macro(a1, a2) __VA_OPT__(FOR_EACH_AGAIN PARENS(macro, __VA_ARGS__))
+#define FOR_EACH_AGAIN() FOR_EACH_HELPER
+
 static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
+#define TRY_LOAD(...)                                                                              \
+    if (!this->load(__VA_ARGS__)) {                                                                \
+        return false;                                                                              \
+    }
+
+#define OBJ_SAVE_FIELD(field_name, version)                                                        \
+    if (version <= 0 || ss.save_version >= version) {                                              \
+        ss.save(this->field_name);                                                                 \
+    }
+
+#define OBJ_LOAD_FIELD(field_name, version)                                                        \
+    {                                                                                              \
+        auto old_field = field_name;                                                               \
+        if (version <= 0 || ss.save_version >= version) {                                          \
+            if (!ss.load(this->field_name)) {                                                      \
+                field_name = old_field;                                                            \
+                return false;                                                                      \
+            }                                                                                      \
+        }                                                                                          \
+    }
+
+#define OBJ_SAVE_IMPL(...)                                                                         \
+    inline void save(SaveState& ss) const {                                                        \
+        FOR_EACH(OBJ_SAVE_FIELD, __VA_ARGS__)                                                      \
+    }                                                                                              \
+    inline bool load(SaveState& ss) {                                                              \
+        FOR_EACH(OBJ_LOAD_FIELD, __VA_ARGS__)                                                      \
+        return true;                                                                               \
+    }
 
 struct SaveState {
-    size_t save_version = {2};
-    size_t original_size = {};
-    size_t load_idx = {};
-    std::vector<char> original_buffer;
+    size_t save_version = 2;
+    size_t original_size = 0;
+    size_t load_idx = 0;
+    std::vector<char> buffer;
 
     // helpers
     template <class T = void>
     void save(const char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
-        assert(size > 0);
-        std::copy(ptr, ptr + size, std::back_inserter(this->original_buffer));
+        if (this->buffer.capacity() < this->buffer.size() + size) {
+            this->buffer.reserve(this->buffer.capacity() * 2);
+        }
+
+        size_t orig_size = this->buffer.size();
+
+        this->buffer.resize(orig_size + size);
+
+        memcpy(this->buffer.data() + orig_size, ptr, size);
     }
 
-    bool can_offset(size_t offset = 0);
-
-    // modifies index, should be called before load and then reset
     template <class T = void>
-    bool can_load(const char* ptr, size_t size = sizeof(T)) {
+    bool load(char* ptr, size_t size = sizeof(T)) {
         assert(ptr);
-        assert(size > 0);
-        if (!can_offset(size)) {
+
+        if (this->load_idx + size > buffer.size()) {
             return false;
         }
 
-        this->load_idx += size;
-        return true;
-    }
+        const char* begin = this->buffer.data() + this->load_idx;
 
-    template <class T = void>
-    bool can_load_reset(const char* ptr, size_t size = sizeof(T)) {
-        assert(ptr);
-        assert(size > 0);
-        if (!can_offset(size)) {
-            return false;
-        }
+        memcpy(ptr, begin, size);
+        this->load_idx += size;
 
         return true;
-    }
-
-    char* load_offset(size_t offset = 0);
-
-    template <class T = void>
-    void load(char* ptr, size_t size = sizeof(T)) {
-        assert(ptr);
-        assert(size > 0);
-
-        std::copy(this->load_offset(), this->load_offset(size), ptr);
-        this->load_idx += size;
     }
 
     template <class T>
@@ -76,31 +103,17 @@ struct SaveState {
 
     template <class T>
         requires(std::is_trivially_copyable<T>::value)
-    bool can_load(const T& trivial) {
-        return this->can_load(reinterpret_cast<const char*>(&trivial), sizeof(T));
-    }
-
-    template <class T>
-        requires(std::is_trivially_copyable<T>::value)
-    bool can_load_reset(const T& trivial) {
-        return this->can_load_reset(reinterpret_cast<const char*>(&trivial), sizeof(T));
-    }
-
-    template <class T>
-        requires(std::is_trivially_copyable<T>::value)
-    void load(T& trivial) {
-        this->load(reinterpret_cast<char*>(&trivial), sizeof(T));
+    bool load(T& trivial) {
+        return this->load(reinterpret_cast<char*>(&trivial), sizeof(T));
     }
 
     void save(const std::string& str);
-    bool can_load(const std::string& str);
-    void load(std::string& str);
+    bool load(std::string& str);
 
     void save(const std::monostate&) {}
-    bool can_load(const std::monostate&) {
+    bool load(std::monostate&) {
         return true;
     }
-    void load(std::monostate&) {}
 
     template <class T>
     void save(const std::optional<T>& opt) {
@@ -113,28 +126,18 @@ struct SaveState {
     }
 
     template <class T>
-    bool can_load(const std::optional<T>& opt) {
+    bool load(std::optional<T>& opt) {
         bool has_value;
-        this->load(has_value);
-
-        if (has_value) {
-            return this->can_load(T{});
-        }
-
-        return true;
-    }
-
-    template <class T>
-    void load(std::optional<T>& opt) {
-        bool has_value;
-        this->load(has_value);
+        TRY_LOAD(has_value);
 
         if (has_value) {
             opt = T{};
-            this->load(opt.value());
+            TRY_LOAD(opt.value());
         } else {
             opt = std::nullopt;
         }
+
+        return true;
     }
 
     template <class K, class V>
@@ -149,44 +152,21 @@ struct SaveState {
     }
 
     template <class K, class V>
-    bool can_load(const std::unordered_map<K, V>&) {
+    bool load(std::unordered_map<K, V>& map) {
         size_t size;
-        if (!this->can_load_reset(size)) {
-            return false;
-        }
-        this->load(size);
-        if (size > SAVE_STATE_MAX_SIZE) {
-            return false;
-        }
-
-        for (size_t i = 0; i < size; i++) {
-            K k = {};
-            V v = {};
-            if (!this->can_load(k)) {
-                return false;
-            }
-            if (!this->can_load(v)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    template <class K, class V>
-    void load(std::unordered_map<K, V>& map) {
-        size_t size;
-        this->load(size);
+        TRY_LOAD(size);
 
         map.clear();
         for (size_t i = 0; i < size; i++) {
             K k;
             V v;
-            this->load(k);
-            this->load(v);
-            assert(!map.contains(k));
-            map.emplace(k, v);
+            TRY_LOAD(k);
+            TRY_LOAD(v);
+
+            map.insert_or_assign(k, v);
         }
+
+        return true;
     }
 
     template <class... T>
@@ -199,35 +179,19 @@ struct SaveState {
     }
 
     template <class... T>
-    bool can_load(const std::variant<T...>& variant) {
+    bool load(std::variant<T...>& variant) {
         size_t index;
-        if (!this->can_load_reset(index)) {
+        TRY_LOAD(index);
+
+        auto variant_opt = variant_from_index<std::variant<T...>>(index);
+
+        if (!variant_opt.has_value()) {
             return false;
         }
 
-        this->load(index);
-
-        std::optional<std::variant<T...>> var = variant_from_index<std::variant<T...>>(index);
-
-        if (!var.has_value()) {
-            return false;
-        };
-
-        return std::visit([this](const auto& s) { return this->can_load(s); }, var.value());
-    }
-
-    template <class... T>
-    void load(std::variant<T...>& variant) {
-        size_t index;
-        this->load(index);
-        assert(index != std::variant_npos);
-
-        auto variant_opt = variant_from_index<std::variant<T...>>(index);
-        assert(variant_opt.has_value());
-
         variant = variant_opt.value();
 
-        std::visit([this](auto& s) { this->load(s); }, variant);
+        return std::visit([this](auto& s) { return this->load(s); }, variant);
     }
 
     template <class Element>
@@ -241,30 +205,9 @@ struct SaveState {
     }
 
     template <class Element>
-    bool can_load(const std::vector<Element>& vec) {
+    bool load(std::vector<Element>& vec) {
         size_t size;
-        if (!this->can_load_reset(size)) {
-            return false;
-        }
-        this->load(size);
-        if (size > SAVE_STATE_MAX_SIZE) {
-            return false;
-        }
-
-        for (size_t i = 0; i < size; i++) {
-            Element elem = {};
-            if (!this->can_load(elem)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    template <class Element>
-    void load(std::vector<Element>& vec) {
-        size_t size;
-        this->load(size);
+        TRY_LOAD(size);
 
         vec.clear();
         if (size != 0) {
@@ -273,29 +216,24 @@ struct SaveState {
         vec.resize(size);
 
         for (auto& elem : vec) {
-            this->load(elem);
+            TRY_LOAD(elem);
         }
+
+        return true;
     }
 
     // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
     void save(const T& any) {
-        any.save(this);
+        any.save(*this);
     }
 
     // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
     template <class T>
         requires(!std::is_trivially_copyable<T>::value)
-    bool can_load(const T& any) {
-        return any.can_load(this);
-    }
-
-    // YOU HAVE TO BE CAREFUL NOT TO PASS POINTERS!
-    template <class T>
-        requires(!std::is_trivially_copyable<T>::value)
-    void load(T& any) {
-        any.load(this);
+    bool load(T& any) {
+        return any.load(*this);
     }
 
     void finish_save();
@@ -315,7 +253,7 @@ struct UndoHistory {
 
     // should be called after every edit
     template <class T>
-    void push_undo_history(const T* obj) {
+    void push_undo_history(const T& obj) {
         assert(obj);
 
         if (this->undo_idx + 1 < this->undo_history.size()) {
@@ -323,15 +261,15 @@ struct UndoHistory {
             this->undo_history.resize(this->undo_idx + 1);
         }
 
-        SaveState* new_save = &this->undo_history.emplace_back();
-        new_save->save(*obj);
-        new_save->finish_save();
+        SaveState& new_save = this->undo_history.emplace_back();
+        new_save.save(*obj);
+        new_save.finish_save();
 
         this->undo_idx = this->undo_history.size() - 1;
     }
 
     template <class T>
-    void reset_undo_history(const T* obj) {
+    void reset_undo_history(const T& obj) {
         // add initial undo
         this->undo_history.clear();
         this->undo_idx = 0;
@@ -343,12 +281,19 @@ struct UndoHistory {
     }
 
     template <class T>
-    void undo(T* obj) {
-        assert(this->can_undo());
+    bool undo(T& obj) {
+        if (!this->can_undo()) {
+            return false;
+        }
 
         this->undo_idx--;
-        this->undo_history[this->undo_idx].load(*obj);
+        if (!this->undo_history[this->undo_idx].load(obj)) {
+            this->undo_idx++;
+            return false;
+        }
+
         this->undo_history[this->undo_idx].reset_load();
+        return true;
     }
 
     constexpr bool can_redo() const {
@@ -356,17 +301,24 @@ struct UndoHistory {
     }
 
     template <class T>
-    void redo(T* obj) {
-        assert(this->can_redo());
+    bool redo(T& obj) {
+        if (!this->can_redo()) {
+            return false;
+        }
 
         this->undo_idx++;
-        this->undo_history[this->undo_idx].load(*obj);
+        if (!this->undo_history[this->undo_idx].load(obj)) {
+            this->undo_idx--;
+            return false;
+        }
+
         this->undo_history[this->undo_idx].reset_load();
+        return true;
     }
 
     UndoHistory() {}
     template <class T>
-    UndoHistory(const T* obj) {
+    UndoHistory(const T& obj) {
         reset_undo_history(obj);
     }
 

@@ -18,43 +18,6 @@
 #include "iterator"
 #include <cstdio>
 
-void BackupConfig::save(SaveState* save) const {
-    assert(save);
-
-    save->save(this->time_to_backup);
-    save->save(this->local_to_keep);
-    save->save(this->remote_to_keep);
-    save->save(this->local_dir);
-}
-
-bool BackupConfig::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(this->time_to_backup)) {
-        return false;
-    }
-    if (!save->can_load(this->local_to_keep)) {
-        return false;
-    }
-    if (!save->can_load(this->remote_to_keep)) {
-        return false;
-    }
-    if (!save->can_load(this->local_dir)) {
-        return false;
-    }
-
-    return true;
-}
-
-void BackupConfig::load(SaveState* save) {
-    assert(save);
-
-    save->load(this->time_to_backup);
-    save->load(this->local_to_keep);
-    save->load(this->remote_to_keep);
-    save->load(this->local_dir);
-}
-
 std::string BackupConfig::get_default_local_dir() const {
     return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH
            "backups" FS_SLASH;
@@ -62,61 +25,6 @@ std::string BackupConfig::get_default_local_dir() const {
 
 std::string BackupConfig::get_local_dir() const {
     return this->local_dir.value_or(this->get_default_local_dir());
-}
-
-void UserConfig::save(SaveState* save) const {
-    assert(save);
-
-    save->save(this->sync_hostname);
-    save->save(this->sync_session.status);
-    save->save(this->sync_session.data);
-    save->save(this->sync_name);
-    save->save(this->sync_password); // Save a password clientside for future encryption
-                                     // Worry about it being in plain text?
-    save->save(this->language);
-    save->save(this->backup);
-}
-
-bool UserConfig::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(this->sync_hostname)) {
-        return false;
-    }
-    if (!save->can_load(this->sync_session.status)) {
-        return false;
-    }
-    if (!save->can_load(this->sync_session.data)) {
-        return false;
-    }
-    if (!save->can_load(this->sync_name)) {
-        return false;
-    }
-    if (!save->can_load(this->sync_password)) {
-        return false;
-    }
-    if (!save->can_load(this->language)) {
-        return false;
-    }
-    if (save->save_version >= 2 && !save->can_load(this->backup)) {
-        return false;
-    }
-
-    return true;
-}
-
-void UserConfig::load(SaveState* save) {
-    assert(save);
-
-    save->load(this->sync_hostname);
-    save->load(this->sync_session.status);
-    save->load(this->sync_session.data);
-    save->load(this->sync_name);
-    save->load(this->sync_password);
-    save->load(this->language);
-    if (save->save_version >= 2) {
-        save->load(this->backup);
-    }
 }
 
 void UserConfig::open_file() {
@@ -131,7 +39,7 @@ void UserConfig::open_file() {
     }
 
     SaveState save{};
-    if (!save.read(in) || !save.can_load(*this) || save.load_idx != save.original_size) {
+    if (!save.read(in) || !save.load(*this) || save.load_idx != save.original_size) {
         Log(LogLevel::Error,
             "Failed to read user config in '%s', likely file is invalid or size exceeds maximum",
             filename.c_str());
@@ -150,9 +58,6 @@ void UserConfig::open_file() {
         *this = {};
         this->save_file();
     }
-
-    save.reset_load();
-    save.load(*this);
 }
 
 void UserConfig::save_file() {
@@ -224,36 +129,6 @@ bool AppState::is_running_tests() const {
     return false;
 }
 
-void AppState::save(SaveState* save) const {
-    assert(save);
-
-    // This save is obviously going to be pretty big so reserve instantly for speed
-    save->original_buffer.reserve(4096);
-
-    save->save(this->id_counter);
-    save->save(this->tests);
-}
-
-bool AppState::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(this->id_counter)) {
-        return false;
-    }
-    if (!save->can_load(this->tests)) {
-        return false;
-    }
-
-    return true;
-}
-
-void AppState::load(SaveState* save) {
-    assert(save);
-
-    save->load(this->id_counter);
-    save->load(this->tests);
-}
-
 void AppState::editor_open_tab(size_t id) {
     assert(this->tests.contains(id));
 
@@ -318,14 +193,18 @@ void AppState::post_undo() {
 
 void AppState::undo() {
     auto old_tests = this->tests;
-    this->undo_history.undo(this);
+    if (!this->undo_history.undo(*this)) {
+        Log(LogLevel::Error, "Failed to undo");
+    }
     this->focus_diff_tests(&old_tests);
     this->post_undo();
 }
 
 void AppState::redo() {
     auto old_tests = this->tests;
-    this->undo_history.redo(this);
+    if (!this->undo_history.redo(*this)) {
+        Log(LogLevel::Error, "Failed to redo");
+    }
     this->focus_diff_tests(&old_tests);
     this->post_undo();
 }
@@ -797,13 +676,11 @@ bool AppState::open_file(std::istream& in) {
         return false;
     }
 
-    if (!save.can_load(*this) || save.load_idx != save.original_size) {
+    if (!save.load(*this) || save.load_idx != save.original_size) {
         Log(LogLevel::Error, "Failed to load, likely file is invalid");
         return false;
     }
 
-    save.reset_load();
-    save.load(*this);
     this->post_open();
     return true;
 }

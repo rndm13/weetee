@@ -5,6 +5,7 @@
 #include "http.hpp"
 #include "json.hpp"
 #include "partial_dict.hpp"
+#include "save_state.hpp"
 #include "variables.hpp"
 #include "utils.hpp"
 
@@ -55,9 +56,13 @@ struct Request {
     Parameters parameters;
     Headers headers;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            body_type, 0,
+            other_content_type, 0,
+            body, 0,
+            cookies, 0,
+            parameters, 0,
+            headers, 0);
 
     constexpr bool operator==(const Request& other) const {
         return this->body_type == other.body_type &&
@@ -85,9 +90,13 @@ struct Response {
     Cookies cookies;
     Headers headers;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            status, 0,
+            body_type, 0,
+            other_content_type, 0,
+            body, 0,
+            cookies, 0,
+            headers, 0);
 
     constexpr bool operator==(const Response& other) const {
         return this->status == other.status &&
@@ -102,17 +111,15 @@ struct AuthBasic {
     std::string name;
     std::string password;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            name, 0,
+            password, 0);
 };
 
 struct AuthBearerToken {
     std::string token;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(token, 0);
 };
 
 using AuthVariant = std::variant<std::monostate, AuthBasic, AuthBearerToken>;
@@ -149,9 +156,14 @@ struct ClientSettings {
     size_t seconds_timeout = 10;
     size_t test_reruns = 1;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            flags, 0,
+            auth, 0,
+            proxy_host, 0,
+            proxy_port, 0,
+            proxy_auth, 0,
+            seconds_timeout, 0,
+            test_reruns, 0);
 
     constexpr bool operator==(const ClientSettings& other) const {
         return this->flags == other.flags;
@@ -179,9 +191,16 @@ struct Test {
 
     std::string label() const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            id, 0,
+            parent_id, 0,
+            type, 0,
+            flags, 0,
+            endpoint, 0,
+            variables, 0,
+            request, 0,
+            response, 0,
+            cli_settings, 0);
 };
 
 void test_resolve_url_variables(const VariablesMap& parent_vars, Test* test);
@@ -261,9 +280,14 @@ struct Group {
 
     std::string label() const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            id, 0,
+            parent_id, 0,
+            flags, 0,
+            name, 0,
+            children_ids, 0,
+            cli_settings, 0,
+            variables, 0);
 };
 
 enum NestedTestType : uint8_t {

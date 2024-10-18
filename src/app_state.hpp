@@ -55,9 +55,11 @@ struct BackupConfig {
     std::string get_default_local_dir() const;
     std::string get_local_dir() const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            time_to_backup, 0,
+            local_to_keep, 0,
+            remote_to_keep, 0,
+            local_dir, 0);
 };
 
 struct UserConfig {
@@ -72,9 +74,14 @@ struct UserConfig {
 
     static constexpr const char* filename = FS_SLASH "weetee" FS_SLASH "user_config.wt";
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(
+            sync_hostname, 0,
+            sync_session.status, 0,
+            sync_session.data, 0,
+            sync_name, 0,
+            sync_password, 0,
+            language, 0,
+            backup, 2);
 
     void open_file();
     void save_file();
@@ -182,9 +189,7 @@ struct AppState {
 
     bool is_running_tests() const;
 
-    void save(SaveState* save) const;
-    bool can_load(SaveState* save) const;
-    void load(SaveState* save);
+    OBJ_SAVE_IMPL(id_counter, 0, tests, 0);
 
     void editor_open_tab(size_t id);
 

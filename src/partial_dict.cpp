@@ -4,38 +4,6 @@ bool MultiPartBodyElementData::operator==(const MultiPartBodyElementData& other)
     return this->type != other.type && this->data != other.data;
 }
 
-void MultiPartBodyElementData::save(SaveState* save) const {
-    assert(save);
-
-    save->save(this->type);
-    save->save(this->data);
-    save->save(this->content_type);
-}
-
-bool MultiPartBodyElementData::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(this->type)) {
-        return false;
-    }
-    if (!save->can_load(this->data)) {
-        return false;
-    }
-    if (!save->can_load(this->content_type)) {
-        return false;
-    }
-
-    return true;
-}
-
-void MultiPartBodyElementData::load(SaveState* save) {
-    assert(save);
-
-    save->load(this->type);
-    save->load(this->data);
-    save->load(this->content_type);
-}
-
 void MultiPartBodyElementData::resolve_content_type() {
     switch (this->type) {
     case MPBD_FILES: {
@@ -71,28 +39,6 @@ bool CookiesElementData::operator!=(const CookiesElementData& other) const {
     return this->data != other.data;
 }
 
-void CookiesElementData::save(SaveState* save) const {
-    assert(save);
-
-    save->save(data);
-}
-
-bool CookiesElementData::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(data)) {
-        return false;
-    }
-
-    return true;
-}
-
-void CookiesElementData::load(SaveState* save) {
-    assert(save);
-
-    save->load(data);
-}
-
 std::array<const char*, CookiesElementData::field_count>
 CookiesElementData::field_labels(const I18N* i18n) {
     return {
@@ -102,28 +48,6 @@ CookiesElementData::field_labels(const I18N* i18n) {
 
 bool ParametersElementData::operator!=(const ParametersElementData& other) const {
     return this->data != other.data;
-}
-
-void ParametersElementData::save(SaveState* save) const {
-    assert(save);
-
-    save->save(data);
-}
-
-bool ParametersElementData::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(data)) {
-        return false;
-    }
-
-    return true;
-}
-
-void ParametersElementData::load(SaveState* save) {
-    assert(save);
-
-    save->load(data);
 }
 
 std::array<const char*, ParametersElementData::field_count>
@@ -137,28 +61,6 @@ bool HeadersElementData::operator!=(const HeadersElementData& other) const {
     return this->data != other.data;
 }
 
-void HeadersElementData::save(SaveState* save) const {
-    assert(save);
-
-    save->save(data);
-}
-
-bool HeadersElementData::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(data)) {
-        return false;
-    }
-
-    return true;
-}
-
-void HeadersElementData::load(SaveState* save) {
-    assert(save);
-
-    save->load(data);
-}
-
 std::array<const char*, HeadersElementData::field_count>
 HeadersElementData::field_labels(const I18N* i18n) {
     return {
@@ -166,37 +68,9 @@ HeadersElementData::field_labels(const I18N* i18n) {
     };
 }
 
-void VariablesElementData::save(SaveState* save) const {
-    assert(save);
-
-    save->save(this->data);
-    save->save(this->separator);
-}
-
-bool VariablesElementData::can_load(SaveState* save) const {
-    assert(save);
-
-    if (!save->can_load(this->data)) {
-        return false;
-    }
-    if (!save->can_load(this->separator)) {
-        return false;
-    }
-
-    return true;
-}
-
-void VariablesElementData::load(SaveState* save) {
-    assert(save);
-
-    save->load(this->data);
-    save->load(this->separator);
-}
-
 bool VariablesElementData::operator!=(const VariablesElementData& other) const {
     return this->data != other.data;
 }
-
 
 std::array<const char*, VariablesElementData::field_count>
 VariablesElementData::field_labels(const I18N* i18n) {

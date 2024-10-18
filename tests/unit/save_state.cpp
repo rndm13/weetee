@@ -9,52 +9,59 @@ struct TestData {
     std::optional<int64_t> average_points = 3;
     std::unordered_map<int32_t, std::string> dictionary = {{1, "one"}, {2, "two"}, {3, "three"}};
 
-    void save(SaveState* save) const noexcept {
-        assert(save);
-
-        save->save(this->id);
-        save->save(this->name);
-        save->save(this->password);
-        save->save(this->points);
-        save->save(this->average_points);
-        save->save(this->dictionary);
+    inline void save(SaveState& ss) const {
+        if (0 <= 0 || ss.save_version >= 0) {
+            ss.save(this->id);
+        }
+        if (0 <= 0 || ss.save_version >= 0) {
+            ss.save(this->name);
+        }
+        if (0 <= 0 || ss.save_version >= 0) {
+            ss.save(this->password);
+        }
+        if (0 <= 0 || ss.save_version >= 0) {
+            ss.save(this->points);
+        }
+        if (0 <= 0 || ss.save_version >= 0) {
+            ss.save(this->average_points);
+        }
+        if (0 <= 0 || ss.save_version >= 0) {
+            ss.save(this->dictionary);
+        }
     }
-
-    bool can_load(SaveState* save) const noexcept {
-        assert(save);
-
-        if (!save->can_load(this->id)) {
-            return false;
+    inline bool load(SaveState& ss) {
+        if (0 <= 0 || ss.save_version >= 0) {
+            if (!ss.load(this->id)) {
+                return false;
+            }
         }
-        if (!save->can_load(this->name)) {
-            return false;
+        if (0 <= 0 || ss.save_version >= 0) {
+            if (!ss.load(this->name)) {
+                return false;
+            }
         }
-        if (!save->can_load(this->password)) {
-            return false;
+        if (0 <= 0 || ss.save_version >= 0) {
+            if (!ss.load(this->password)) {
+                return false;
+            }
         }
-        if (!save->can_load(this->points)) {
-            return false;
+        if (0 <= 0 || ss.save_version >= 0) {
+            if (!ss.load(this->points)) {
+                return false;
+            }
         }
-        if (!save->can_load(this->average_points)) {
-            return false;
+        if (0 <= 0 || ss.save_version >= 0) {
+            if (!ss.load(this->average_points)) {
+                return false;
+            }
         }
-        if (!save->can_load(this->dictionary)) {
-            return false;
+        if (0 <= 0 || ss.save_version >= 0) {
+            if (!ss.load(this->dictionary)) {
+                return false;
+            }
         }
-
         return true;
-    }
-
-    void load(SaveState* save) noexcept {
-        assert(save);
-
-        save->load(this->id);
-        save->load(this->name);
-        save->load(this->password);
-        save->load(this->points);
-        save->load(this->average_points);
-        save->load(this->dictionary);
-    }
+    };
 };
 
 bool operator==(const TestData& first, const TestData& second) {
@@ -71,46 +78,6 @@ TEST(save_state, save) {
     ss.finish_save();
 }
 
-TEST(save_state, can_load) {
-    // std::unordered_map<int32_t, std::string> data = {{1, "one"}, {2, "two"}, {3, "three"}};
-
-    // SaveState ss = {};
-    // ss.save(data);
-    // ss.finish_save();
-    // ss.reset_load();
-
-    // std::unordered_map<int32_t, std::string> got = {};
-
-    // ASSERT_TRUE(ss.can_load(got) && ss.load_idx == ss.original_size);
-    // ss.reset_load();
-
-    // ss.original_buffer[0] = 123;
-    // ss.original_buffer[1] = 103;
-    // ss.original_buffer[2] = 23;
-
-    // ASSERT_FALSE(ss.can_load(got) && ss.load_idx == ss.original_size);
-    // ss.reset_load();
-
-    TestData input = {};
-
-    SaveState ss = {};
-    ss.save(input);
-    ss.finish_save();
-    ss.reset_load();
-
-    TestData got = {};
-
-    ASSERT_TRUE(ss.can_load(got) && ss.load_idx == ss.original_size);
-    ss.reset_load();
-
-    ss.original_buffer[0] = 123;
-    ss.original_buffer[1] = 103;
-    ss.original_buffer[2] = 23;
-
-    ASSERT_FALSE(ss.can_load(got) && ss.load_idx == ss.original_size);
-    ss.reset_load();
-}
-
 TEST(save_state, load) {
     TestData input = {};
 
@@ -120,10 +87,8 @@ TEST(save_state, load) {
     ss.reset_load();
 
     TestData got = {};
-
-    ASSERT_TRUE(ss.can_load(got) && ss.load_idx == ss.original_size);
-    ss.reset_load();
-    ss.load(got);
+    ASSERT_TRUE(ss.load(got));
+    EXPECT_EQ(ss.load_idx, ss.original_size);
     EXPECT_EQ(input, got);
 }
 
@@ -142,8 +107,7 @@ TEST(save_state, load_alt_data) {
 
     TestData got = {};
 
-    ASSERT_TRUE(ss.can_load(got) && ss.load_idx == ss.original_size);
-    ss.reset_load();
-    ss.load(got);
+    ASSERT_TRUE(ss.load(got));
+    EXPECT_EQ(ss.load_idx, ss.original_size);
     EXPECT_EQ(input, got);
 }

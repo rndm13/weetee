@@ -1,4 +1,6 @@
 #include "gtest/gtest.h"
+#include <variant>
+#include <optional>
 
 #include "../../src/utils.hpp"
 
@@ -67,4 +69,11 @@ TEST(utils, MapKeyIterator) {
     for (auto it = MapKeyIterator<std::string, std::string>(map.begin()); it != MapKeyIterator<std::string, std::string>(map.end()); it++) {
         EXPECT_TRUE(map.contains(*it));
     }
+}
+
+TEST(utils, variant_from_index) {
+    using Var = std::variant<std::string, int32_t>;
+    EXPECT_TRUE(variant_from_index<Var>(0).has_value());
+    EXPECT_TRUE(variant_from_index<Var>(1).has_value());
+    EXPECT_FALSE(variant_from_index<Var>(2).has_value());
 }
