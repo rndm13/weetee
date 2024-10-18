@@ -40,10 +40,18 @@ static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
 
 #define OBJ_LOAD_FIELD(field_name, version)                                                        \
     {                                                                                              \
-        auto old_field = field_name;                                                               \
         if (version <= 0 || ss.save_version >= version) {                                          \
             if (!ss.load(this->field_name)) {                                                      \
-                field_name = old_field;                                                            \
+                return false;                                                                      \
+            }                                                                                      \
+        }                                                                                          \
+    }
+
+#define OBJ_RECOVER_LOAD_FIELD(field_name, version)                                                \
+    {                                                                                              \
+        if (version <= 0 || ss.save_version >= version) {                                          \
+            if (!ss.load(this->field_name)) {                                                      \
+                this->recover();                                                                   \
                 return false;                                                                      \
             }                                                                                      \
         }                                                                                          \
@@ -57,6 +65,34 @@ static constexpr size_t SAVE_STATE_MAX_SIZE = 0x10000000;
         FOR_EACH(OBJ_LOAD_FIELD, __VA_ARGS__)                                                      \
         return true;                                                                               \
     }
+
+#define OBJ_RECOVER_SAVE_IMPL(...)                                                                 \
+    inline void save(SaveState& ss) const {                                                              \
+        FOR_EACH(OBJ_SAVE_FIELD, __VA_ARGS__)                                                      \
+    }                                                                                              \
+    inline bool load(SaveState& ss) {                                                              \
+        FOR_EACH(OBJ_LOAD_FIELD, __VA_ARGS__)                                                      \
+        return true;                                                                               \
+    }
+
+#define OBJ_DEF_PRE_SAVE_FIELD(field_type, field_name)                                             \
+    static std::optional<field_type> __pre_save_##field_name = std::nullopt;
+
+#define OBJ_RECOVER_FIELD(field_type, field_name)                                                  \
+    if (__pre_save_##field_name.has_value()) { \
+        this->field_name = __pre_save_##field_name.value(); \
+        __pre_save_##field_name = std::nullopt; \
+    } else { \
+        __pre_save_##field_name = this->field_name; \
+    }
+
+#define OBJ_POST_LOAD_FIELD(field_type, field_name) __pre_save_##field_name = std::nullopt;
+
+#define OBJ_RECOVER_IMPL(...)                                                                      \
+    inline void recover() {                                                                        \
+        FOR_EACH(OBJ_DEF_PRE_SAVE_FIELD, __VA_ARGS__)                                              \
+        FOR_EACH(OBJ_RECOVER_FIELD, __VA_ARGS__)                                                   \
+    }                                                                                              \
 
 struct SaveState {
     size_t save_version = 2;
@@ -156,6 +192,10 @@ struct SaveState {
         size_t size;
         TRY_LOAD(size);
 
+        if (size > SAVE_STATE_MAX_SIZE) {
+            return false;
+        }
+
         map.clear();
         for (size_t i = 0; i < size; i++) {
             K k;
@@ -209,10 +249,12 @@ struct SaveState {
         size_t size;
         TRY_LOAD(size);
 
-        vec.clear();
-        if (size != 0) {
-            vec.reserve(size);
+        if (size > SAVE_STATE_MAX_SIZE) {
+            return false;
         }
+
+        vec.clear();
+        vec.reserve(size);
         vec.resize(size);
 
         for (auto& elem : vec) {

@@ -156,7 +156,8 @@ struct AppState {
 
     static const Group root_initial;
 
-    std::unordered_map<size_t, NestedTest> tests = {{0, root_initial}};
+    using TestsType = std::unordered_map<size_t, NestedTest>;
+    TestsType tests = {{0, root_initial}};
     std::unordered_map<size_t, std::vector<TestResult>> test_results = {};
 
     UserConfig conf = {};
@@ -189,7 +190,8 @@ struct AppState {
 
     bool is_running_tests() const;
 
-    OBJ_SAVE_IMPL(id_counter, 0, tests, 0);
+    OBJ_RECOVER_SAVE_IMPL(id_counter, 0, tests, 0);
+    OBJ_RECOVER_IMPL(size_t, id_counter, TestsType, tests);
 
     void editor_open_tab(size_t id);
 

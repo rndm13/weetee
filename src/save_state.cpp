@@ -13,6 +13,10 @@ bool SaveState::load(std::string& str) {
     size_t length;
     TRY_LOAD(length);
 
+    if (length > SAVE_STATE_MAX_SIZE) {
+        return false;
+    }
+
     if (length > 0) { // To avoid failing 0 size assertion in load
         str.resize(length);
 
