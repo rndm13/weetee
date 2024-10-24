@@ -75,6 +75,20 @@ endif()
 add_library(BS_thread_pool INTERFACE)
 target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}/include)
 
+# Add Save State
+# ===============
+
+FetchContent_Declare(
+  save_state
+  GIT_REPOSITORY git@github.com:rndm13/save_state.git
+  GIT_TAG "main"
+)
+
+set(SAVE_STATE_BUILD_TESTS, OFF)
+set(SAVE_STATE_BUILD_SHARED, OFF)
+
+FetchContent_MakeAvailable(save_state)
+
 # Add GTest
 # ===============
 

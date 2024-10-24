@@ -5,7 +5,7 @@
 #include "http.hpp"
 #include "json.hpp"
 #include "partial_dict.hpp"
-#include "save_state.hpp"
+#include "save_state_incl.hpp"
 #include "variables.hpp"
 #include "utils.hpp"
 
@@ -56,7 +56,7 @@ struct Request {
     Parameters parameters;
     Headers headers;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             body_type, 0,
             other_content_type, 0,
             body, 0,
@@ -90,7 +90,7 @@ struct Response {
     Cookies cookies;
     Headers headers;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             status, 0,
             body_type, 0,
             other_content_type, 0,
@@ -111,7 +111,7 @@ struct AuthBasic {
     std::string name;
     std::string password;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             name, 0,
             password, 0);
 };
@@ -119,7 +119,7 @@ struct AuthBasic {
 struct AuthBearerToken {
     std::string token;
 
-    OBJ_SAVE_IMPL(token, 0);
+    SAVE_STATE_SAVE_IMPL(token, 0);
 };
 
 using AuthVariant = std::variant<std::monostate, AuthBasic, AuthBearerToken>;
@@ -156,7 +156,7 @@ struct ClientSettings {
     size_t seconds_timeout = 10;
     size_t test_reruns = 1;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             flags, 0,
             auth, 0,
             proxy_host, 0,
@@ -191,7 +191,7 @@ struct Test {
 
     std::string label() const;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             id, 0,
             parent_id, 0,
             type, 0,
@@ -280,7 +280,7 @@ struct Group {
 
     std::string label() const;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             id, 0,
             parent_id, 0,
             flags, 0,

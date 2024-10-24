@@ -1,7 +1,7 @@
 #pragma once
 
 #include "i18n.hpp"
-#include "save_state.hpp"
+#include "save_state_incl.hpp"
 #include "textinputcombo.hpp"
 
 #include "cmath"
@@ -29,7 +29,7 @@ template <typename Data> struct PartialDictElement {
     // do not save
     std::optional<ComboFilterState> cfs; // If hints are given
 
-    OBJ_SAVE_IMPL(flags, 0, key, 0, data, 0);
+    SAVE_STATE_SAVE_IMPL(flags, 0, key, 0, data, 0);
 
     bool operator!=(const PartialDictElement<Data>& other) const {
         return this->flags != other.flags || this->data != other.data;
@@ -50,7 +50,7 @@ template <typename Data> struct PartialDict {
         return this->elements == other.elements;
     }
 
-    OBJ_SAVE_IMPL(elements, 0);
+    SAVE_STATE_SAVE_IMPL(elements, 0);
 
     constexpr bool empty() const { return this->elements.empty(); }
 };
@@ -84,7 +84,7 @@ struct MultiPartBodyElementData {
 
     bool operator==(const MultiPartBodyElementData& other) const;
 
-    OBJ_SAVE_IMPL(type, 0, data, 0, content_type, 0);
+    SAVE_STATE_SAVE_IMPL(type, 0, data, 0, content_type, 0);
 
     void save(SaveState* save) const;
     bool can_load(SaveState* save) const;
@@ -104,7 +104,7 @@ struct CookiesElementData {
 
     bool operator!=(const CookiesElementData& other) const;
 
-    OBJ_SAVE_IMPL(data, 0);
+    SAVE_STATE_SAVE_IMPL(data, 0);
 };
 using Cookies = PartialDict<CookiesElementData>;
 using CookiesElement = Cookies::ElementType;
@@ -118,7 +118,7 @@ struct ParametersElementData {
 
     bool operator!=(const ParametersElementData& other) const;
 
-    OBJ_SAVE_IMPL(data, 0);
+    SAVE_STATE_SAVE_IMPL(data, 0);
 };
 using Parameters = PartialDict<ParametersElementData>;
 using ParametersElement = Parameters::ElementType;
@@ -131,7 +131,7 @@ struct HeadersElementData {
 
     bool operator!=(const HeadersElementData& other) const;
 
-    OBJ_SAVE_IMPL(data, 0);
+    SAVE_STATE_SAVE_IMPL(data, 0);
 };
 using Headers = PartialDict<HeadersElementData>;
 using HeadersElement = Headers::ElementType;
@@ -145,7 +145,7 @@ struct VariablesElementData {
 
     bool operator!=(const VariablesElementData& other) const;
 
-    OBJ_SAVE_IMPL(data, 0, separator, 0);
+    SAVE_STATE_SAVE_IMPL(data, 0, separator, 0);
 };
 
 using Variables = PartialDict<VariablesElementData>;

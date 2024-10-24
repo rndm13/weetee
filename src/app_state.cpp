@@ -6,17 +6,21 @@
 
 #include "hello_imgui/internal/platform/ini_folder_locations.h"
 #include "hello_imgui/runner_params.h"
+
 #include "http.hpp"
 #include "partial_dict.hpp"
 #include "tests.hpp"
-#include "utility"
+
+#include "save_state_incl.hpp"
+
 #include "utils.hpp"
 
 #include "algorithm"
 #include "filesystem"
 #include "fstream"
 #include "iterator"
-#include <cstdio>
+#include "utility"
+#include "cstdio"
 
 std::string BackupConfig::get_default_local_dir() const {
     return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH
@@ -216,7 +220,8 @@ VariablesMap AppState::get_test_variables(size_t id) const {
         const auto& test = this->tests.at(id);
         const Variables& vars_input = std::visit(VariablesVisitor(), test);
         std::for_each(
-            vars_input.elements.begin(), vars_input.elements.end(),
+            vars_input.elements.begin(),
+            vars_input.elements.end(),
             [&result](const VariablesElement& elem) {
                 if (elem.flags & PARTIAL_DICT_ELEM_ENABLED && !result.contains(elem.key)) {
 
@@ -225,8 +230,8 @@ VariablesMap AppState::get_test_variables(size_t id) const {
                     } else {
                         std::vector<std::string> possible_values =
                             split_string(elem.data.data, std::string{elem.data.separator.value()});
-                        result.emplace(elem.key,
-                                       possible_values.at(rand() % possible_values.size()));
+                        result.emplace(
+                            elem.key, possible_values.at(rand() % possible_values.size()));
                     }
                 }
             });
@@ -446,10 +451,10 @@ void AppState::group_selected(size_t common_parent_id) {
     auto& parent_group = std::get<Group>(*parent_test);
 
     // remove selected from old parent
-    size_t count = std::erase_if(parent_group.children_ids,
-                                 [&sel_tests = this->tree_view.selected_tests](size_t child_id) {
-                                     return sel_tests.contains(child_id);
-                                 });
+    size_t count = std::erase_if(
+        parent_group.children_ids, [&sel_tests = this->tree_view.selected_tests](size_t child_id) {
+            return sel_tests.contains(child_id);
+        });
     assert(count >= 1);
 
     auto id = ++this->id_counter;
@@ -464,21 +469,26 @@ void AppState::group_selected(size_t common_parent_id) {
     };
 
     // Copy selected to new group
-    std::copy_if(this->tree_view.selected_tests.begin(), this->tree_view.selected_tests.end(),
-                 std::back_inserter(new_group.children_ids), [this](size_t selected_id) {
-                     assert(this->tests.contains(selected_id));
-                     return !this->parent_selected(selected_id);
-                 });
+    std::copy_if(
+        this->tree_view.selected_tests.begin(),
+        this->tree_view.selected_tests.end(),
+        std::back_inserter(new_group.children_ids),
+        [this](size_t selected_id) {
+            assert(this->tests.contains(selected_id));
+            return !this->parent_selected(selected_id);
+        });
 
     // Set selected parent id to new group's id
-    std::for_each(this->tree_view.selected_tests.begin(), this->tree_view.selected_tests.end(),
-                  [this, id](size_t test_id) {
-                      assert(this->tests.contains(test_id));
+    std::for_each(
+        this->tree_view.selected_tests.begin(),
+        this->tree_view.selected_tests.end(),
+        [this, id](size_t test_id) {
+            assert(this->tests.contains(test_id));
 
-                      if (!this->parent_selected(test_id)) {
-                          std::visit(SetParentIDVisitor{id}, this->tests.at(test_id));
-                      }
-                  });
+            if (!this->parent_selected(test_id)) {
+                std::visit(SetParentIDVisitor{id}, this->tests.at(test_id));
+            }
+        });
 
     // Add new group to original parent's children
     parent_group.children_ids.push_back(id);
@@ -516,10 +526,10 @@ void AppState::paste(Group* group) {
     // for groups should also update all children parent_id
 
     for (size_t iterations = 0; iterations < to_paste.size(); iterations++) {
-        auto it = std::find_if(to_paste.begin(), to_paste.end(),
-                               [this](std::pair<const size_t, NestedTest>& kv) {
-                                   return this->tests.contains(kv.first);
-                               });
+        auto it = std::find_if(
+            to_paste.begin(), to_paste.end(), [this](std::pair<const size_t, NestedTest>& kv) {
+                return this->tests.contains(kv.first);
+            });
 
         if (it == to_paste.end()) {
             // If the id is free don't do anything
@@ -603,8 +613,8 @@ void AppState::move(Group* group, size_t idx) {
         if (idx >= group->children_ids.size()) {
             group->children_ids.push_back(id);
         } else {
-            group->children_ids.insert(group->children_ids.begin() + static_cast<uint32_t>(idx),
-                                       id);
+            group->children_ids.insert(
+                group->children_ids.begin() + static_cast<uint32_t>(idx), id);
             idx += 1;
         }
     }
@@ -613,8 +623,9 @@ void AppState::move(Group* group, size_t idx) {
 }
 
 void AppState::sort(Group& group) {
-    std::sort(group.children_ids.begin(), group.children_ids.end(),
-              [this](size_t a, size_t b) { return test_comp(this->tests, a, b); });
+    std::sort(group.children_ids.begin(), group.children_ids.end(), [this](size_t a, size_t b) {
+        return test_comp(this->tests, a, b);
+    });
 }
 
 bool AppState::filter(Group& group) {
@@ -693,7 +704,8 @@ void AppState::load_i18n() {
 }
 
 AppState::AppState(HelloImGui::RunnerParams* _runner_params, bool _unit_testing)
-    : runner_params(_runner_params), unit_testing(_unit_testing) {
+    : runner_params(_runner_params),
+      unit_testing(_unit_testing) {
     this->undo_history.reset_undo_history(this);
 
     std::string conf_path =
@@ -730,8 +742,7 @@ bool status_match(const std::string& match, int status) {
     return true;
 }
 
-const char* body_match(const VariablesMap& vars, const Test* test,
-                       const httplib::Result& result) {
+const char* body_match(const VariablesMap& vars, const Test* test, const httplib::Result& result) {
     if (test->response.body_type == RESPONSE_ANY) {
         return nullptr; // Skip checks
     }
@@ -764,8 +775,8 @@ const char* body_match(const VariablesMap& vars, const Test* test,
 }
 
 // TODO: Add wildcards to header matching (easy)
-const char* header_match(const VariablesMap& vars, const Test* test,
-                         const httplib::Result& result) {
+const char*
+header_match(const VariablesMap& vars, const Test* test, const httplib::Result& result) {
     httplib::Headers headers = response_headers(vars, test);
     for (const auto& elem : test->response.cookies.elements) {
         if (elem.flags & PARTIAL_DICT_ELEM_ENABLED) {
@@ -790,8 +801,12 @@ const char* header_match(const VariablesMap& vars, const Test* test,
     return nullptr;
 }
 
-bool test_analysis(AppState*, const Test* test, TestResult* test_result,
-                   httplib::Result&& http_result, const VariablesMap& vars) {
+bool test_analysis(
+    AppState*,
+    const Test* test,
+    TestResult* test_result,
+    httplib::Result&& http_result,
+    const VariablesMap& vars) {
     bool success = true;
     switch (http_result.error()) {
     case httplib::Error::Success: {
@@ -888,8 +903,12 @@ httplib::Client make_client(const std::string& hostname, const ClientSettings& s
     return cli;
 }
 
-bool execute_test(AppState* app, const Test* test, size_t test_result_idx, httplib::Client& cli,
-                  const std::unordered_map<std::string, std::string>* overload_cookies) {
+bool execute_test(
+    AppState* app,
+    const Test* test,
+    size_t test_result_idx,
+    httplib::Client& cli,
+    const std::unordered_map<std::string, std::string>* overload_cookies) {
     TestResult* test_result = &app->test_results.at(test->id).at(test_result_idx);
 
     const auto params = request_params(test_result->variables, test);
@@ -1014,8 +1033,8 @@ bool is_parent_id(const AppState* app, size_t group_id, size_t needle) {
 
 // TODO: Replace existing similar functionality with calls to this function
 // TODO: Add tests for this function
-void iterate_over_nested_children(const AppState* app, size_t* id, size_t* child_idx,
-                                  size_t breakpoint_group) {
+void iterate_over_nested_children(
+    const AppState* app, size_t* id, size_t* child_idx, size_t breakpoint_group) {
     assert(app->tests.contains(*id));
     const NestedTest& nt = app->tests.at(*id);
 
@@ -1159,8 +1178,9 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) {
             results.emplace_back(*test, rerun, true, vars);
         }
 
-        assert(!app->test_results.contains(test_queue_ids.at(idx)) &&
-               !new_test_results.contains(test_queue_ids.at(idx)));
+        assert(
+            !app->test_results.contains(test_queue_ids.at(idx)) &&
+            !new_test_results.contains(test_queue_ids.at(idx)));
         new_test_results.try_emplace(test_queue_ids.at(idx), std::move(results));
     }
 
@@ -1170,57 +1190,58 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) {
     // Mutates cookies
 
     for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
-        app->thr_pool.detach_task([app, hostname, test_queue, cli_settings = cli_settings,
-                                   rerun]() {
-            bool keep_running = true;
-            httplib::Client cli = make_client(hostname, cli_settings);
-            std::unordered_map<std::string, std::string> cookies = {};
+        app->thr_pool.detach_task(
+            [app, hostname, test_queue, cli_settings = cli_settings, rerun]() {
+                bool keep_running = true;
+                httplib::Client cli = make_client(hostname, cli_settings);
+                std::unordered_map<std::string, std::string> cookies = {};
 
-            for (size_t idx = 0; idx < test_queue.size(); idx++) {
-                size_t id = test_queue.at(idx).id;
+                for (size_t idx = 0; idx < test_queue.size(); idx++) {
+                    size_t id = test_queue.at(idx).id;
 
-                if (app->test_results.contains(id)) {
-                    TestResult* result = &app->test_results.at(id).at(rerun);
+                    if (app->test_results.contains(id)) {
+                        TestResult* result = &app->test_results.at(id).at(rerun);
 
-                    for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
-                        if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
-                            cookies[cookie.key] = cookie.data.data;
+                        for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
+                            if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                                cookies[cookie.key] = cookie.data.data;
+                            }
                         }
-                    }
 
-                    if (!keep_running) {
-                        result->running.store(false);
-                        result->status.store(STATUS_CANCELLED);
-                        result->verdict = "Previous test failed";
-                        continue;
-                    }
-
-                    if (result->running.load()) {
-                        // Can run test
-
-                        keep_running &=
-                            execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
-
-                        if (result->http_result.has_value() &&
-                            result->http_result->error() == httplib::Error::Success) {
-                            for (const auto& [key, value] : result->http_result.value()->headers) {
-                                if (key != "Set-Cookie") {
-                                    continue;
-                                }
-
-                                size_t key_val_split = value.find("=");
-                                std::string cookie_name = value.substr(0, key_val_split);
-                                std::string cookie_value = value.substr(key_val_split + 1);
-
-                                cookies[cookie_name] = cookie_value;
-                            };
+                        if (!keep_running) {
+                            result->running.store(false);
+                            result->status.store(STATUS_CANCELLED);
+                            result->verdict = "Previous test failed";
+                            continue;
                         }
-                    } else {
-                        keep_running = false;
+
+                        if (result->running.load()) {
+                            // Can run test
+
+                            keep_running &=
+                                execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
+
+                            if (result->http_result.has_value() &&
+                                result->http_result->error() == httplib::Error::Success) {
+                                for (const auto& [key, value] :
+                                     result->http_result.value()->headers) {
+                                    if (key != "Set-Cookie") {
+                                        continue;
+                                    }
+
+                                    size_t key_val_split = value.find("=");
+                                    std::string cookie_name = value.substr(0, key_val_split);
+                                    std::string cookie_value = value.substr(key_val_split + 1);
+
+                                    cookies[cookie_name] = cookie_value;
+                                };
+                            }
+                        } else {
+                            keep_running = false;
+                        }
                     }
                 }
-            }
-        });
+            });
     }
 }
 
@@ -1247,8 +1268,11 @@ void run_test(AppState* app, size_t test_id) {
 
         for (size_t rerun = 0; rerun < cli_settings.test_reruns; rerun++) {
             // Copies test and ClientSettings
-            app->thr_pool.detach_task([app, test = test, vars = app->get_test_variables(test.id),
-                                       cli_settings = cli_settings, rerun]() {
+            app->thr_pool.detach_task([app,
+                                       test = test,
+                                       vars = app->get_test_variables(test.id),
+                                       cli_settings = cli_settings,
+                                       rerun]() {
                 std::string host = split_endpoint(replace_variables(vars, test.endpoint)).first;
                 httplib::Client cli = make_client(host, cli_settings);
                 execute_test(app, &test, rerun, cli);
@@ -1345,8 +1369,7 @@ void stop_tests(AppState* app) {
     app->thr_pool.purge();
 }
 
-void remote_file_list(AppState* app, bool sync,
-                      Requestable<std::vector<std::string>>* result) {
+void remote_file_list(AppState* app, bool sync, Requestable<std::vector<std::string>>* result) {
     if (result == nullptr) {
         result = &app->sync.files;
     }
@@ -1376,11 +1399,11 @@ void remote_file_list(AppState* app, bool sync,
     };
 
     if (sync) {
-        execute_requestable_sync(app, *result, HTTP_GET, app->conf.sync_hostname, "/file-list", "",
-                                 params, proc);
+        execute_requestable_sync(
+            app, *result, HTTP_GET, app->conf.sync_hostname, "/file-list", "", params, proc);
     } else {
-        execute_requestable_async(app, *result, HTTP_GET, app->conf.sync_hostname, "/file-list", "",
-                                  params, proc);
+        execute_requestable_async(
+            app, *result, HTTP_GET, app->conf.sync_hostname, "/file-list", "", params, proc);
     }
 }
 
@@ -1394,8 +1417,8 @@ void remote_file_open(AppState* app, const std::string& name) {
 
         requestable.data = data;
     };
-    execute_requestable_async(app, app->sync.file_open, HTTP_GET, app->conf.sync_hostname, "/file",
-                              "", params, proc);
+    execute_requestable_async(
+        app, app->sync.file_open, HTTP_GET, app->conf.sync_hostname, "/file", "", params, proc);
 };
 
 void remote_file_delete(AppState* app, const std::string& name, bool sync) {
@@ -1414,16 +1437,29 @@ void remote_file_delete(AppState* app, const std::string& name, bool sync) {
     };
 
     if (sync) {
-        execute_requestable_sync(app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname,
-                                 "/file", "", params, proc);
+        execute_requestable_sync(
+            app,
+            app->sync.file_delete,
+            HTTP_DELETE,
+            app->conf.sync_hostname,
+            "/file",
+            "",
+            params,
+            proc);
     } else {
-        execute_requestable_async(app, app->sync.file_delete, HTTP_DELETE, app->conf.sync_hostname,
-                                  "/file", "", params, proc);
+        execute_requestable_async(
+            app,
+            app->sync.file_delete,
+            HTTP_DELETE,
+            app->conf.sync_hostname,
+            "/file",
+            "",
+            params,
+            proc);
     }
 };
 
-void remote_file_rename(AppState* app, const std::string& old_name,
-                        const std::string& new_name) {
+void remote_file_rename(AppState* app, const std::string& old_name, const std::string& new_name) {
     httplib::Params params = {
         {"session_token", app->conf.sync_session.data},
         {"file_name", old_name},
@@ -1444,12 +1480,12 @@ void remote_file_rename(AppState* app, const std::string& old_name,
 
         requestable.data = true;
     };
-    execute_requestable_async(app, app->sync.file_delete, HTTP_PATCH, app->conf.sync_hostname,
-                              "/file", "", params, proc);
+    execute_requestable_async(
+        app, app->sync.file_delete, HTTP_PATCH, app->conf.sync_hostname, "/file", "", params, proc);
 };
 
-void remote_file_save(AppState* app, const std::string& name, bool sync,
-                      Requestable<bool>* result) {
+void remote_file_save(
+    AppState* app, const std::string& name, bool sync, Requestable<bool>* result) {
     if (result == nullptr) {
         result = &app->sync.file_save;
     }
@@ -1473,11 +1509,11 @@ void remote_file_save(AppState* app, const std::string& name, bool sync,
     };
 
     if (sync) {
-        execute_requestable_sync(app, *result, HTTP_POST, app->conf.sync_hostname, "/file", body,
-                                 params, proc);
+        execute_requestable_sync(
+            app, *result, HTTP_POST, app->conf.sync_hostname, "/file", body, params, proc);
     } else {
-        execute_requestable_async(app, *result, HTTP_POST, app->conf.sync_hostname, "/file", body,
-                                  params, proc);
+        execute_requestable_async(
+            app, *result, HTTP_POST, app->conf.sync_hostname, "/file", body, params, proc);
     }
 };
 

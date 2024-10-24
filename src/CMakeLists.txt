@@ -1,9 +1,6 @@
 add_library(utils STATIC utils.hpp utils.cpp)
 target_link_libraries(utils PUBLIC httplib::httplib imgui)
 
-add_library(save_state save_state.hpp save_state.cpp)
-target_link_libraries(save_state PUBLIC utils hello_imgui portable_file_dialogs)
-
 add_library(json STATIC json.hpp json.cpp)
 # Not having i18n here makes i18n not compile because missing hello_imgui????????????
 target_link_libraries(json PUBLIC i18n utils nljson)

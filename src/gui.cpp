@@ -45,7 +45,9 @@ void begin_transparent_button() {
     ImGui::PushStyleColor(ImGuiCol_BorderShadow, 0x00000000);
 }
 
-void end_transparent_button() { ImGui::PopStyleColor(5); }
+void end_transparent_button() {
+    ImGui::PopStyleColor(5);
+}
 
 bool arrow(const char* label, ImGuiDir dir) {
     assert(label);
@@ -72,7 +74,8 @@ bool http_type_button(HTTPType type, ImVec2 size) {
     return pressed;
 }
 
-template <class... Args> void tooltip(const char* format, Args... args) {
+template <class... Args>
+void tooltip(const char* format, Args... args) {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip(format, args...);
     }
@@ -95,7 +98,8 @@ std::string load_from_file() {
     return "";
 }
 
-template <class... Args> bool hint(const char* format, Args... args) {
+template <class... Args>
+bool hint(const char* format, Args... args) {
     bool result = ImGui::Button(ICON_FA_QUESTION);
     tooltip(format, args...);
     return result;
@@ -115,13 +119,19 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
 
         auto analysis = app->select_analysis();
 
-        if (ImGui::MenuItem(app->i18n.tv_edit.c_str(), "Enter", false,
-                            analysis.top_selected_count == 1 && !changed)) {
+        if (ImGui::MenuItem(
+                app->i18n.tv_edit.c_str(),
+                "Enter",
+                false,
+                analysis.top_selected_count == 1 && !changed)) {
             app->editor_open_tab(nested_test_id);
         }
 
-        if (ImGui::MenuItem(app->i18n.tv_delete.c_str(), "Delete", false,
-                            !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem(
+                app->i18n.tv_delete.c_str(),
+                "Delete",
+                false,
+                !analysis.selected_root && !changed)) {
             changed = true;
 
             app->delete_selected();
@@ -148,8 +158,8 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
                     continue;
                 }
 
-                if (ImGui::MenuItem(std::visit(LabelVisitor(), nt).c_str(), nullptr, false,
-                                    !changed)) {
+                if (ImGui::MenuItem(
+                        std::visit(LabelVisitor(), nt).c_str(), nullptr, false, !changed)) {
                     changed = true;
 
                     assert(std::holds_alternative<Group>(nt));
@@ -164,15 +174,15 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
             app->copy();
         }
 
-        if (ImGui::MenuItem(app->i18n.tv_cut.c_str(), "Ctrl + X", false,
-                            !analysis.selected_root && !changed)) {
+        if (ImGui::MenuItem(
+                app->i18n.tv_cut.c_str(), "Ctrl + X", false, !analysis.selected_root && !changed)) {
             changed = true;
 
             app->cut();
         }
 
-        if (ImGui::MenuItem(app->i18n.tv_paste.c_str(), "Ctrl + V", false,
-                            app->can_paste() && !changed)) {
+        if (ImGui::MenuItem(
+                app->i18n.tv_paste.c_str(), "Ctrl + V", false, app->can_paste() && !changed)) {
             changed = true;
 
             NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -194,8 +204,11 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
 
         // only groups without tests
         if (analysis.group && !analysis.test) {
-            if (ImGui::MenuItem(app->i18n.tv_sort.c_str(), nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(
+                    app->i18n.tv_sort.c_str(),
+                    nullptr,
+                    false,
+                    analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -205,8 +218,11 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
                 app->sort(selected_group);
             }
 
-            if (ImGui::MenuItem(app->i18n.tv_new_test.c_str(), nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(
+                    app->i18n.tv_new_test.c_str(),
+                    nullptr,
+                    false,
+                    analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -229,8 +245,11 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
                 app->editor_open_tab(id);
             }
 
-            if (ImGui::MenuItem(app->i18n.tv_new_group.c_str(), nullptr, false,
-                                analysis.top_selected_count == 1 && !changed)) {
+            if (ImGui::MenuItem(
+                    app->i18n.tv_new_group.c_str(),
+                    nullptr,
+                    false,
+                    analysis.top_selected_count == 1 && !changed)) {
                 changed = true;
 
                 NestedTest* nested_test = &app->tests.at(nested_test_id);
@@ -249,8 +268,11 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
                 selected_group.children_ids.push_back(id);
             }
 
-            if (ImGui::MenuItem(app->i18n.tv_ungroup.c_str(), nullptr, false,
-                                !analysis.selected_root && !changed)) {
+            if (ImGui::MenuItem(
+                    app->i18n.tv_ungroup.c_str(),
+                    nullptr,
+                    false,
+                    !analysis.selected_root && !changed)) {
                 changed = true;
 
                 for (auto selected_id : app->select_top_layer()) {
@@ -266,8 +288,11 @@ bool tree_view_context(AppState* app, size_t nested_test_id) {
         }
 
         if (analysis.same_parent) {
-            if (ImGui::MenuItem(app->i18n.tv_group.c_str(), nullptr, false,
-                                !analysis.selected_root && !changed)) {
+            if (ImGui::MenuItem(
+                    app->i18n.tv_group.c_str(),
+                    nullptr,
+                    false,
+                    !analysis.selected_root && !changed)) {
                 changed = true;
 
                 app->group_selected(analysis.parent_id);
@@ -368,8 +393,7 @@ bool tree_view_dnd_target(AppState* app, size_t nested_test_id, size_t idx) {
     return changed;
 }
 
-bool tree_view_dnd_target_row(AppState* app, size_t nested_test_id, size_t idx,
-                              float indentation) {
+bool tree_view_dnd_target_row(AppState* app, size_t nested_test_id, size_t idx, float indentation) {
     ImGui::TableNextRow(ImGuiTableRowFlags_None, 5);
     ImGui::PushID(static_cast<int32_t>(nested_test_id));
     ImGui::TableNextColumn();
@@ -387,8 +411,8 @@ bool vec2_intersect(ImVec2 point, ImVec2 min, ImVec2 max) {
     return point.x > min.x && point.x < max.x && point.y > min.y && point.y < max.y;
 }
 
-bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx,
-                    float indentation) {
+bool show_tree_view_row(
+    AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max, size_t idx, float indentation) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {ImGui::GetStyle().FramePadding.x, 0});
     auto visitor = [app, &min, &max, idx, indentation](auto& val) {
         return show_tree_view_row(app, val, min, max, idx, indentation);
@@ -398,8 +422,8 @@ bool show_tree_view_row(AppState* app, NestedTest& nt, ImVec2& min, ImVec2& max,
     return changed;
 }
 
-bool show_tree_view_row(AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx,
-                    float indentation) {
+bool show_tree_view_row(
+    AppState* app, Test& test, ImVec2& min, ImVec2& max, size_t idx, float indentation) {
     size_t id = test.id;
     bool changed = false;
 
@@ -479,8 +503,8 @@ bool show_tree_view_row(AppState* app, Test& test, ImVec2& min, ImVec2& max, siz
     return changed;
 }
 
-bool show_tree_view_row(AppState* app, Group& group, ImVec2& min, ImVec2& max, size_t idx,
-                    float indentation) {
+bool show_tree_view_row(
+    AppState* app, Group& group, ImVec2& min, ImVec2& max, size_t idx, float indentation) {
     size_t id = group.id;
     bool changed = false;
 
@@ -595,8 +619,8 @@ bool show_tree_view_row(AppState* app, Group& group, ImVec2& min, ImVec2& max, s
         for (size_t child_id : group.children_ids) {
             assert(app->tests.contains(child_id));
 
-            changed |= show_tree_view_row(app, app->tests.at(child_id), min, max, index,
-                                      indentation + INDENTATION_INCREMENT);
+            changed |= show_tree_view_row(
+                app, app->tests.at(child_id), min, max, index, indentation + INDENTATION_INCREMENT);
 
             if (changed) {
                 break;
@@ -650,8 +674,8 @@ void tree_view(AppState* app) {
     ImGui::PopFont();
 }
 
-bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem,
-                           const VariablesMap& vars) {
+bool partial_dict_data_row(
+    AppState* app, Cookies*, CookiesElement* elem, const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -661,8 +685,8 @@ bool partial_dict_data_row(AppState* app, Cookies*, CookiesElement* elem,
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem,
-                           const VariablesMap& vars) {
+bool partial_dict_data_row(
+    AppState* app, Parameters*, ParametersElement* elem, const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -672,8 +696,8 @@ bool partial_dict_data_row(AppState* app, Parameters*, ParametersElement* elem,
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
-                           const VariablesMap& vars) {
+bool partial_dict_data_row(
+    AppState* app, Headers*, HeadersElement* elem, const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -683,8 +707,8 @@ bool partial_dict_data_row(AppState* app, Headers*, HeadersElement* elem,
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, Variables* vars_pd, VariablesElement* elem,
-                           const VariablesMap& vars) {
+bool partial_dict_data_row(
+    AppState* app, Variables* vars_pd, VariablesElement* elem, const VariablesMap& vars) {
     bool changed = false;
     if (ImGui::TableNextColumn()) {
         ImGui::SetNextItemWidth(-1);
@@ -704,8 +728,8 @@ bool partial_dict_data_row(AppState* app, Variables* vars_pd, VariablesElement* 
     return changed;
 }
 
-bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem,
-                               const VariablesMap& vars) {
+bool partial_dict_data_context(
+    AppState* app, Variables*, VariablesElement* elem, const VariablesMap& vars) {
     bool changed = false;
 
     if (ImGui::BeginMenu("Fuzzing Separator")) {
@@ -721,7 +745,8 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
             changed = true;
 
             if (elem->data.separator.has_value()) {
-                str_find_and_replace(elem->data.data, std::string{elem->data.separator.value()}, "\n");
+                str_find_and_replace(
+                    elem->data.data, std::string{elem->data.separator.value()}, "\n");
             }
 
             elem->data.separator = '\n';
@@ -737,8 +762,8 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
             changed = true;
 
             if (elem->data.separator.has_value()) {
-                str_find_and_replace(elem->data.data, std::string{elem->data.separator.value()},
-                                 separator);
+                str_find_and_replace(
+                    elem->data.data, std::string{elem->data.separator.value()}, separator);
             }
 
             elem->data.separator = *separator;
@@ -759,8 +784,8 @@ bool partial_dict_data_context(AppState* app, Variables*, VariablesElement* elem
     return changed;
 }
 
-bool partial_dict_data_row(AppState* app, MultiPartBody*, MultiPartBodyElement* elem,
-                           const VariablesMap& vars) {
+bool partial_dict_data_row(
+    AppState* app, MultiPartBody*, MultiPartBodyElement* elem, const VariablesMap& vars) {
     bool changed = false;
 
     if (ImGui::TableNextColumn()) { // type
@@ -856,11 +881,12 @@ bool editor_test_request(AppState* app, Test& test) {
 
         if (test.type != HTTP_GET && ImGui::BeginTabItem(app->i18n.ed_rq_body.c_str())) {
             bool body_type_changed = false;
-            if (ImGui::BeginCombo(app->i18n.ed_rq_body_type.c_str(),
-                                  app->i18n.ed_rq_body_types[test.request.body_type].c_str())) {
+            if (ImGui::BeginCombo(
+                    app->i18n.ed_rq_body_type.c_str(),
+                    app->i18n.ed_rq_body_types[test.request.body_type].c_str())) {
                 for (size_t i = 0; i < app->i18n.ed_rq_body_types.size(); i++) {
-                    if (ImGui::Selectable(app->i18n.ed_rq_body_types[i].c_str(),
-                                          i == test.request.body_type)) {
+                    if (ImGui::Selectable(
+                            app->i18n.ed_rq_body_types[i].c_str(), i == test.request.body_type)) {
                         body_type_changed = true;
                         test.request.body_type = static_cast<RequestBodyType>(i);
                     }
@@ -947,9 +973,14 @@ bool editor_test_request(AppState* app, Test& test) {
 
         if (ImGui::BeginTabItem(app->i18n.ed_rq_headers.c_str())) {
             ImGui::PushFont(app->mono_font);
-            changed = changed | partial_dict(app, &test.request.headers, "headers", vars,
-                                             PARTIAL_DICT_NONE, RequestHeadersLabels,
-                                             ARRAY_SIZE(RequestHeadersLabels));
+            changed = changed | partial_dict(
+                                    app,
+                                    &test.request.headers,
+                                    "headers",
+                                    vars,
+                                    PARTIAL_DICT_NONE,
+                                    RequestHeadersLabels,
+                                    ARRAY_SIZE(RequestHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -971,18 +1002,23 @@ bool editor_test_response(AppState* app, Test& test) {
 
         if (ImGui::BeginTabItem(app->i18n.ed_rs_response.c_str())) {
             static ComboFilterState s{};
-            ComboFilter(app->i18n.ed_rs_status.c_str(), &test.response.status, HTTPStatusLabels,
-                        ARRAY_SIZE(HTTPStatusLabels), &s);
+            ComboFilter(
+                app->i18n.ed_rs_status.c_str(),
+                &test.response.status,
+                HTTPStatusLabels,
+                ARRAY_SIZE(HTTPStatusLabels),
+                &s);
             ImGui::Text("%s", app->i18n.ed_rs_response_text.c_str());
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem(app->i18n.ed_rs_body.c_str())) {
-            if (ImGui::BeginCombo(app->i18n.ed_rs_body_type.c_str(),
-                                  app->i18n.ed_rs_body_types[test.response.body_type].c_str())) {
+            if (ImGui::BeginCombo(
+                    app->i18n.ed_rs_body_type.c_str(),
+                    app->i18n.ed_rs_body_types[test.response.body_type].c_str())) {
                 for (size_t i = 0; i < app->i18n.ed_rs_body_types.size(); i++) {
-                    if (ImGui::Selectable(app->i18n.ed_rs_body_types[i].c_str(),
-                                          i == test.response.body_type)) {
+                    if (ImGui::Selectable(
+                            app->i18n.ed_rs_body_types[i].c_str(), i == test.response.body_type)) {
                         changed = true;
                         test.response.body_type = static_cast<ResponseBodyType>(i);
                     }
@@ -1039,8 +1075,14 @@ bool editor_test_response(AppState* app, Test& test) {
 
         if (ImGui::BeginTabItem(app->i18n.ed_rs_headers.c_str())) {
             ImGui::PushFont(app->mono_font);
-            changed |= partial_dict(app, &test.response.headers, "headers", vars, PARTIAL_DICT_NONE,
-                                    ResponseHeadersLabels, ARRAY_SIZE(ResponseHeadersLabels));
+            changed |= partial_dict(
+                app,
+                &test.response.headers,
+                "headers",
+                vars,
+                PARTIAL_DICT_NONE,
+                ResponseHeadersLabels,
+                ARRAY_SIZE(ResponseHeadersLabels));
             ImGui::PopFont();
             ImGui::EndTabItem();
         }
@@ -1094,8 +1136,10 @@ bool editor_auth(const std::string& label, const I18N* i18n, AuthVariant* auth) 
         AuthBasic* basic = &std::get<AuthBasic>(*auth);
         changed |=
             ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_name).c_str(), &basic->name);
-        changed |= ImGui::InputText((idless_label + " " + i18n->ed_cli_auth_password).c_str(),
-                                    &basic->password, ImGuiInputTextFlags_Password);
+        changed |= ImGui::InputText(
+            (idless_label + " " + i18n->ed_cli_auth_password).c_str(),
+            &basic->password,
+            ImGuiInputTextFlags_Password);
     } break;
     case AUTH_BEARER_TOKEN: {
         assert(std::holds_alternative<AuthBearerToken>(*auth));
@@ -1140,11 +1184,11 @@ bool editor_client_settings(const I18N* i18n, ClientSettings* set, bool enable_d
     }
 
     size_t step = 1;
-    changed |= ImGui::InputScalar(i18n->ed_cli_reruns.c_str(), ImGuiDataType_U64, &set->test_reruns,
-                                  &step);
+    changed |= ImGui::InputScalar(
+        i18n->ed_cli_reruns.c_str(), ImGuiDataType_U64, &set->test_reruns, &step);
 
-    changed |= ImGui::InputScalar(i18n->ed_cli_timeout.c_str(), ImGuiDataType_U64,
-                                  &set->seconds_timeout, &step);
+    changed |= ImGui::InputScalar(
+        i18n->ed_cli_timeout.c_str(), ImGuiDataType_U64, &set->seconds_timeout, &step);
 
     return changed;
 }
@@ -1161,14 +1205,14 @@ void show_httplib_headers(AppState* app, const httplib::Headers& headers) {
             if (ImGui::TableNextColumn()) {
                 ImGui::SetNextItemWidth(-1);
                 // is given readonly flag so const_cast is fine
-                ImGui::InputText("##key", &const_cast<std::string&>(key),
-                                 ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputText(
+                    "##key", &const_cast<std::string&>(key), ImGuiInputTextFlags_ReadOnly);
             }
             if (ImGui::TableNextColumn()) {
                 ImGui::SetNextItemWidth(-1);
                 // is given readonly flag so const_cast is fine
-                ImGui::InputText("##value", &const_cast<std::string&>(value),
-                                 ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputText(
+                    "##value", &const_cast<std::string&>(value), ImGuiInputTextFlags_ReadOnly);
             }
             ImGui::PopID();
         }
@@ -1305,8 +1349,10 @@ ModalResult open_result_details(AppState* app, TestResult* tr) {
                     } else {
                         if (ImGui::BeginTabBar("response_details")) {
                             if (ImGui::BeginTabItem("Body")) {
-                                ImGui::Text("%d - %s", http_result->status,
-                                            httplib::status_message(http_result->status));
+                                ImGui::Text(
+                                    "%d - %s",
+                                    http_result->status,
+                                    httplib::status_message(http_result->status));
 
                                 ImGui::SameLine();
                                 hint("Expected: %s", tr->original_test.response.status.c_str());
@@ -1316,16 +1362,20 @@ ModalResult open_result_details(AppState* app, TestResult* tr) {
                                     ImGui::PushFont(app->mono_font);
                                     // Is given readonly flag so const_cast is fine
                                     ImGui::InputTextMultiline(
-                                        "##response_body", &const_cast<std::string&>(tr->res_body),
-                                        ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
+                                        "##response_body",
+                                        &const_cast<std::string&>(tr->res_body),
+                                        ImVec2(-1, 300),
+                                        ImGuiInputTextFlags_ReadOnly);
 
                                     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                                         ResponseBodyType body_type =
                                             tr->original_test.response.body_type;
                                         std::string body_type_str =
                                             app->i18n.ed_rs_body_types[body_type];
-                                        ImGui::SetTooltip("Expected: %s\n%s", body_type_str.c_str(),
-                                                          tr->original_test.response.body.c_str());
+                                        ImGui::SetTooltip(
+                                            "Expected: %s\n%s",
+                                            body_type_str.c_str(),
+                                            tr->original_test.response.body.c_str());
                                     }
                                     ImGui::PopFont();
                                 }
@@ -1359,8 +1409,10 @@ ModalResult open_result_details(AppState* app, TestResult* tr) {
 
                 ImGui::Text("Endpoint: ");
                 ImGui::SameLine();
-                ImGui::InputText("##request_endpoint", &const_cast<std::string&>(tr->req_endpoint),
-                                 ImGuiInputTextFlags_ReadOnly);
+                ImGui::InputText(
+                    "##request_endpoint",
+                    &const_cast<std::string&>(tr->req_endpoint),
+                    ImGuiInputTextFlags_ReadOnly);
 
                 if (ImGui::BeginTabBar("request_details")) {
                     if (ImGui::BeginTabItem("Body")) {
@@ -1368,8 +1420,10 @@ ModalResult open_result_details(AppState* app, TestResult* tr) {
                             ImGui::PushFont(app->mono_font);
                             // Is given readonly flag so const_cast is fine
                             ImGui::InputTextMultiline(
-                                "##response_body", &const_cast<std::string&>(tr->req_body),
-                                ImVec2(-1, 300), ImGuiInputTextFlags_ReadOnly);
+                                "##response_body",
+                                &const_cast<std::string&>(tr->req_body),
+                                ImVec2(-1, 300),
+                                ImGuiInputTextFlags_ReadOnly);
 
                             ImGui::PopFont();
                         }
@@ -1417,7 +1471,8 @@ EditorTabResult editor_tab_test(AppState* app, EditorTab& tab) {
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(
-            (tab.name + "###" + to_string(tab.original_idx)).c_str(), &open,
+            (tab.name + "###" + to_string(tab.original_idx)).c_str(),
+            &open,
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("test", ImVec2(0, 0), ImGuiChildFlags_None)) {
@@ -1525,7 +1580,8 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) {
     EditorTabResult result = TAB_NONE;
     bool open = true;
     if (ImGui::BeginTabItem(
-            (tab.name + "###" + to_string(tab.original_idx)).c_str(), &open,
+            (tab.name + "###" + to_string(tab.original_idx)).c_str(),
+            &open,
             (tab.just_opened ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None))) {
 
         if (ImGui::BeginChild("group", ImVec2(0, 0), ImGuiChildFlags_None)) {
@@ -1588,8 +1644,9 @@ EditorTabResult editor_tab_group(AppState* app, EditorTab& tab) {
 
                         assert(child_idx < iterated_group->children_ids.size());
                         assert(app->tests.contains(iterated_group->children_ids.at(child_idx)));
-                        std::visit(SetClientSettingsVisitor{std::nullopt},
-                                   app->tests.at(iterated_group->children_ids.at(child_idx)));
+                        std::visit(
+                            SetClientSettingsVisitor{std::nullopt},
+                            app->tests.at(iterated_group->children_ids.at(child_idx)));
 
                         iterate_over_nested_children(app, &id, &child_idx, group.parent_id);
                     }
@@ -1625,8 +1682,9 @@ void tabbed_editor(AppState* app) {
     }
 
     if (ImGui::BeginTabBar("editor", ImGuiTabBarFlags_Reorderable)) {
-        if (ImGui::BeginTabItem(app->i18n.ed_home.c_str(),
-                                app->editor.open_tabs.size() > 0 ? &show_homepage : nullptr)) {
+        if (ImGui::BeginTabItem(
+                app->i18n.ed_home.c_str(),
+                app->editor.open_tabs.size() > 0 ? &show_homepage : nullptr)) {
             ImGui::Text("%s", app->i18n.ed_home_content.c_str());
             ImGui::EndTabItem();
         }
@@ -1670,8 +1728,7 @@ void tabbed_editor(AppState* app) {
     ImGui::PopFont();
 }
 
-void testing_result_row(AppState* app, size_t result_id,
-                        std::vector<TestResult>& results) {
+void testing_result_row(AppState* app, size_t result_id, std::vector<TestResult>& results) {
     auto deselect_all = [app]() {
         for (auto& [_, results] : app->test_results) {
             for (auto& result : results) {
@@ -1722,8 +1779,11 @@ void testing_result_row(AppState* app, size_t result_id,
             http_type_button(result.original_test.type);
             ImGui::SameLine();
 
-            if (ImGui::Selectable(result.original_test.endpoint.c_str(), result.selected,
-                                  SELECTABLE_FLAGS, ImVec2(0, 0))) {
+            if (ImGui::Selectable(
+                    result.original_test.endpoint.c_str(),
+                    result.selected,
+                    SELECTABLE_FLAGS,
+                    ImVec2(0, 0))) {
                 if (ImGui::GetIO().MouseDoubleClicked[ImGuiMouseButton_Left]) {
                     result.open = true;
                 }
@@ -1772,9 +1832,12 @@ void testing_result_row(AppState* app, size_t result_id,
                     }
                 }
 
-                if (ImGui::MenuItem(ICON_FA_REDO " Rerun tests"
-                                                 "###rerun_tests",
-                                    nullptr, false, any_not_running)) {
+                if (ImGui::MenuItem(
+                        ICON_FA_REDO " Rerun tests"
+                                     "###rerun_tests",
+                        nullptr,
+                        false,
+                        any_not_running)) {
                     for (auto& [_, results] : app->test_results) {
                         for (auto& rt : results) {
                             if (rt.selected && !rt.running.load()) {
@@ -1784,9 +1847,12 @@ void testing_result_row(AppState* app, size_t result_id,
                     }
                 }
 
-                if (ImGui::MenuItem(ICON_FA_STOP " Stop tests"
-                                                 "###stop_tests",
-                                    nullptr, false, any_running)) {
+                if (ImGui::MenuItem(
+                        ICON_FA_STOP " Stop tests"
+                                     "###stop_tests",
+                        nullptr,
+                        false,
+                        any_running)) {
                     for (auto& [_, results] : app->test_results) {
                         for (auto& rt : results) {
                             if (rt.selected && rt.running.load()) {
@@ -1808,10 +1874,10 @@ void testing_result_row(AppState* app, size_t result_id,
         // Verdict
         if (ImGui::TableNextColumn()) {
             if (result.status.load() == STATUS_RUNNING) {
-                ImGui::ProgressBar(result.progress_total == 0
-                                       ? 0
-                                       : static_cast<float>(result.progress_current) /
-                                             result.progress_total);
+                ImGui::ProgressBar(
+                    result.progress_total == 0
+                        ? 0
+                        : static_cast<float>(result.progress_current) / result.progress_total);
             } else {
                 ImGui::Text("%s", result.verdict.c_str());
             }
@@ -1869,7 +1935,8 @@ bool show_requestable_wait(const Requestable<Data>& requestable, std::string mes
     return requestable.status != REQUESTABLE_WAIT;
 }
 
-template <class Data> bool show_requestable_error(const Requestable<Data>& requestable) {
+template <class Data>
+bool show_requestable_error(const Requestable<Data>& requestable) {
     if (requestable.status == REQUESTABLE_ERROR) {
         ImGui::TextColored({1, 0, 0, 1}, "%s", requestable.error.c_str());
         return true;
@@ -1879,15 +1946,16 @@ template <class Data> bool show_requestable_error(const Requestable<Data>& reque
 }
 
 void remote_auth(AppState* app) {
-    if (show_requestable_wait(app->conf.sync_session,
-                              "Please wait, your authentication request is being processed")) {
+    if (show_requestable_wait(
+            app->conf.sync_session,
+            "Please wait, your authentication request is being processed")) {
         ImGui::Text("Login/Register");
         ImGui::TextColored({1, 0, 0, 1}, "%s", app->conf.sync_session.error.c_str());
 
         ImGui::InputText("Name##name", &app->conf.sync_name);
 
-        ImGui::InputText("Password##password", &app->conf.sync_password,
-                         ImGuiInputTextFlags_Password);
+        ImGui::InputText(
+            "Password##password", &app->conf.sync_password, ImGuiInputTextFlags_Password);
 
         ImGui::Checkbox("Remember Me##remember", &app->sync.remember_me);
 
@@ -1897,12 +1965,18 @@ void remote_auth(AppState* app) {
                 {"password", app->conf.sync_password},
                 {"remember_me", app->sync.remember_me ? "1" : "0"},
             };
-            execute_requestable_async(app, app->conf.sync_session, HTTP_GET,
-                                      app->conf.sync_hostname, "/login", "", params,
-                                      [app](auto& sync_session, std::string data) {
-                                          sync_session.data = data;
-                                          app->conf.save_file();
-                                      });
+            execute_requestable_async(
+                app,
+                app->conf.sync_session,
+                HTTP_GET,
+                app->conf.sync_hostname,
+                "/login",
+                "",
+                params,
+                [app](auto& sync_session, std::string data) {
+                    sync_session.data = data;
+                    app->conf.save_file();
+                });
         }
 
         ImGui::SameLine();
@@ -1913,7 +1987,12 @@ void remote_auth(AppState* app) {
                 {"password", app->conf.sync_password},
             };
             execute_requestable_async(
-                app, app->conf.sync_session, HTTP_GET, app->conf.sync_hostname, "/register", "",
+                app,
+                app->conf.sync_session,
+                HTTP_GET,
+                app->conf.sync_hostname,
+                "/register",
+                "",
                 params,
                 [](auto& requestable, const std::string& data) { requestable.data = data; });
         }
@@ -1955,8 +2034,10 @@ void remote_file_editor(AppState* app) {
 
                 ImGui::PushID(name.c_str());
 
-                if (ImGui::Selectable((name + "##selectable").c_str(), false,
-                                      ImGuiSelectableFlags_AllowDoubleClick)) {
+                if (ImGui::Selectable(
+                        (name + "##selectable").c_str(),
+                        false,
+                        ImGuiSelectableFlags_AllowDoubleClick)) {
                     remote_file_open(app, name);
                 }
 
@@ -2025,11 +2106,17 @@ void remote_file_sync(AppState* app) {
                 httplib::Params params = {
                     {"session_token", app->conf.sync_session.data},
                 };
-                execute_requestable_async(app, app->conf.sync_session, HTTP_GET,
-                                          app->conf.sync_hostname, "/logout", "", params,
-                                          [app](auto& requestable, std::string data) {
-                                              app->conf.sync_session.status = REQUESTABLE_NONE;
-                                          });
+                execute_requestable_async(
+                    app,
+                    app->conf.sync_session,
+                    HTTP_GET,
+                    app->conf.sync_hostname,
+                    "/logout",
+                    "",
+                    params,
+                    [app](auto& requestable, std::string data) {
+                        app->conf.sync_session.status = REQUESTABLE_NONE;
+                    });
                 app->conf.sync_session.data = "";
                 app->sync = {.show = true};
             }
@@ -2074,21 +2161,25 @@ void settings(AppState* app) {
                 {
                     uint32_t time = app->conf.backup.time_to_backup;
                     static char buffer[32] = {0};
-                    snprintf(buffer, 31, "%02d:%02d:%02d", time / 3600 % 24, time / 60 % 60,
-                             time % 60);
+                    snprintf(
+                        buffer, 31, "%02d:%02d:%02d", time / 3600 % 24, time / 60 % 60, time % 60);
 
                     uint32_t min = 60;
                     uint32_t max = 60 * 60;
 
-                    changed |=
-                        ImGui::SliderScalar("Time to backup", ImGuiDataType_U32,
-                                            &app->conf.backup.time_to_backup, &min, &max, buffer);
+                    changed |= ImGui::SliderScalar(
+                        "Time to backup",
+                        ImGuiDataType_U32,
+                        &app->conf.backup.time_to_backup,
+                        &min,
+                        &max,
+                        buffer);
                 }
 
-                changed |= ImGui::InputScalar("Local backups", ImGuiDataType_U8,
-                                              &app->conf.backup.local_to_keep);
-                changed |= ImGui::InputScalar("Remote backups", ImGuiDataType_U8,
-                                              &app->conf.backup.remote_to_keep);
+                changed |= ImGui::InputScalar(
+                    "Local backups", ImGuiDataType_U8, &app->conf.backup.local_to_keep);
+                changed |= ImGui::InputScalar(
+                    "Remote backups", ImGuiDataType_U8, &app->conf.backup.remote_to_keep);
 
                 static bool override = app->conf.backup.local_dir.has_value();
 
@@ -2108,9 +2199,9 @@ void settings(AppState* app) {
                 static std::string default_local_dir = app->conf.backup.get_default_local_dir();
 
                 ImGui::BeginDisabled(!override);
-                changed |=
-                    ImGui::InputText("##local_dir", override ? &app->conf.backup.local_dir.value()
-                                                             : &default_local_dir);
+                changed |= ImGui::InputText(
+                    "##local_dir",
+                    override ? &app->conf.backup.local_dir.value() : &default_local_dir);
                 ImGui::EndDisabled();
 
                 if (changed) {
@@ -2132,17 +2223,17 @@ std::vector<HelloImGui::DockingSplit> splits() {
 }
 
 std::vector<HelloImGui::DockableWindow> windows(AppState* app) {
-    auto tab_editor_window = HelloImGui::DockableWindow("Editor###win_editor", "MainDockSpace",
-                                                        [app]() { tabbed_editor(app); });
+    auto tab_editor_window = HelloImGui::DockableWindow(
+        "Editor###win_editor", "MainDockSpace", [app]() { tabbed_editor(app); });
 
-    auto tests_window = HelloImGui::DockableWindow("Tests###win_tests", "SideBarDockSpace",
-                                                   [app]() { tree_view(app); });
+    auto tests_window = HelloImGui::DockableWindow(
+        "Tests###win_tests", "SideBarDockSpace", [app]() { tree_view(app); });
 
-    auto results_window = HelloImGui::DockableWindow("Results###win_results", "MainDockSpace",
-                                                     [app]() { testing_results(app); });
+    auto results_window = HelloImGui::DockableWindow(
+        "Results###win_results", "MainDockSpace", [app]() { testing_results(app); });
 
-    auto logs_window = HelloImGui::DockableWindow("Logs###win_logs", "LogDockSpace",
-                                                  [app]() { HelloImGui::LogGui(); });
+    auto logs_window = HelloImGui::DockableWindow(
+        "Logs###win_logs", "LogDockSpace", [app]() { HelloImGui::LogGui(); });
 
     return {tests_window, tab_editor_window, results_window, logs_window};
 }
@@ -2253,11 +2344,17 @@ void show_menus(AppState* app) {
     }
 
     if (ImGui::BeginMenu(app->i18n.menu_edit.c_str())) {
-        if (ImGui::MenuItem(app->i18n.menu_edit_undo.c_str(), "Ctrl + Z", nullptr,
-                            app->undo_history.can_undo())) {
+        if (ImGui::MenuItem(
+                app->i18n.menu_edit_undo.c_str(),
+                "Ctrl + Z",
+                nullptr,
+                app->undo_history.can_undo())) {
             app->undo();
-        } else if (ImGui::MenuItem(app->i18n.menu_edit_redo.c_str(), "Ctrl + Shift + Z", nullptr,
-                                   app->undo_history.can_redo())) {
+        } else if (ImGui::MenuItem(
+                       app->i18n.menu_edit_redo.c_str(),
+                       "Ctrl + Shift + Z",
+                       nullptr,
+                       app->undo_history.can_redo())) {
             app->redo();
         }
         ImGui::EndMenu();
@@ -2273,9 +2370,10 @@ void show_menus(AppState* app) {
 
     ImGui::PushStyleColor(ImGuiCol_Text, HTTPTypeColor[HTTP_GET]);
     if (!app->is_running_tests() && arrow("start", ImGuiDir_Right)) {
-        std::vector<size_t> tests_to_run =
-            get_tests_to_run(app, MapKeyIterator<size_t, NestedTest>(app->tests.begin()),
-                             MapKeyIterator<size_t, NestedTest>(app->tests.end()));
+        std::vector<size_t> tests_to_run = get_tests_to_run(
+            app,
+            MapKeyIterator<size_t, NestedTest>(app->tests.begin()),
+            MapKeyIterator<size_t, NestedTest>(app->tests.end()));
 
         run_tests(app, tests_to_run);
     }
@@ -2336,8 +2434,9 @@ void show_gui(AppState* app) {
     if (app->undo_history.can_undo() && io.KeyCtrl && !io.KeyShift &&
         ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->undo();
-    } else if (app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift &&
-               ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    } else if (
+        app->undo_history.can_redo() && io.KeyCtrl && io.KeyShift &&
+        ImGui::IsKeyPressed(ImGuiKey_Z)) {
         app->redo();
     }
 
@@ -2346,8 +2445,9 @@ void show_gui(AppState* app) {
         // Copy pasting
         if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) {
             app->copy();
-        } else if (!app->tree_view.selected_tests.contains(0) && io.KeyCtrl &&
-                   ImGui::IsKeyPressed(ImGuiKey_X)) {
+        } else if (
+            !app->tree_view.selected_tests.contains(0) && io.KeyCtrl &&
+            ImGui::IsKeyPressed(ImGuiKey_X)) {
             changed = true;
 
             app->cut();

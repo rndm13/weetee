@@ -10,7 +10,7 @@
 #include "BS_thread_pool.hpp"
 
 #include "partial_dict.hpp"
-#include "save_state.hpp"
+#include "save_state_incl.hpp"
 #include "tests.hpp"
 
 #include "cmath"
@@ -55,7 +55,7 @@ struct BackupConfig {
     std::string get_default_local_dir() const;
     std::string get_local_dir() const;
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             time_to_backup, 0,
             local_to_keep, 0,
             remote_to_keep, 0,
@@ -74,7 +74,7 @@ struct UserConfig {
 
     static constexpr const char* filename = FS_SLASH "weetee" FS_SLASH "user_config.wt";
 
-    OBJ_SAVE_IMPL(
+    SAVE_STATE_SAVE_IMPL(
             sync_hostname, 0,
             sync_session.status, 0,
             sync_session.data, 0,
@@ -190,8 +190,8 @@ struct AppState {
 
     bool is_running_tests() const;
 
-    OBJ_RECOVER_SAVE_IMPL(id_counter, 0, tests, 0);
-    OBJ_RECOVER_IMPL(size_t, id_counter, TestsType, tests);
+    SAVE_STATE_RECOVER_SAVE_IMPL(id_counter, 0, tests, 0);
+    SAVE_STATE_RECOVER_IMPL(size_t, id_counter, TestsType, tests);
 
     void editor_open_tab(size_t id);
 
