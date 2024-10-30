@@ -912,7 +912,11 @@ bool execute_test(
     TestResult* test_result = &app->test_results.at(test->id).at(test_result_idx);
 
     const auto params = request_params(test_result->variables, test);
-    const auto headers = request_headers(test_result->variables, test, overload_cookies);
+    auto headers = request_headers(test_result->variables, test, overload_cookies);
+
+    if (overload_cookies->contains("XSRF-TOKEN")) {
+        headers.emplace("X-XSRF-TOKEN", overload_cookies->at("XSRF-TOKEN"));
+    }
 
     const auto req_body = request_body(test_result->variables, test);
     std::string content_type = req_body.content_type;
@@ -931,6 +935,8 @@ bool execute_test(
     test_result->req_content_type = content_type;
     test_result->req_endpoint = host + params_dest;
     test_result->req_headers = headers;
+
+
 
     auto progress = [app, test, test_result](size_t current, size_t total) -> bool {
         // Missing
@@ -1199,45 +1205,53 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) {
                 for (size_t idx = 0; idx < test_queue.size(); idx++) {
                     size_t id = test_queue.at(idx).id;
 
-                    if (app->test_results.contains(id)) {
-                        TestResult* result = &app->test_results.at(id).at(rerun);
+                    if (!app->test_results.contains(id)) {
+                        continue;
+                    }
 
-                        for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
-                            if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
-                                cookies[cookie.key] = cookie.data.data;
-                            }
+                    TestResult* result = &app->test_results.at(id).at(rerun);
+
+                    for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
+                        if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                            cookies[cookie.key] = cookie.data.data;
                         }
+                    }
 
-                        if (!keep_running) {
-                            result->running.store(false);
-                            result->status.store(STATUS_CANCELLED);
-                            result->verdict = "Previous test failed";
-                            continue;
-                        }
+                    if (!keep_running) {
+                        result->running.store(false);
+                        result->status.store(STATUS_CANCELLED);
+                        result->verdict = "Previous test failed";
+                        continue;
+                    }
 
-                        if (result->running.load()) {
-                            // Can run test
+                    if (!result->running.load()) {
+                        keep_running = false;
+                        continue;
+                    }
 
-                            keep_running &=
-                                execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
+                    // Can run test
 
-                            if (result->http_result.has_value() &&
-                                result->http_result->error() == httplib::Error::Success) {
-                                for (const auto& [key, value] :
-                                     result->http_result.value()->headers) {
-                                    if (key != "Set-Cookie") {
-                                        continue;
-                                    }
+                    keep_running &=
+                        execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
 
-                                    size_t key_val_split = value.find("=");
-                                    std::string cookie_name = value.substr(0, key_val_split);
-                                    std::string cookie_value = value.substr(key_val_split + 1);
-
-                                    cookies[cookie_name] = cookie_value;
-                                };
+                    if (result->http_result.has_value() &&
+                        result->http_result->error() == httplib::Error::Success) {
+                        for (const auto& [key, value] : result->http_result.value()->headers) {
+                            if (key != "Set-Cookie") {
+                                continue;
                             }
-                        } else {
-                            keep_running = false;
+
+                            size_t key_val_split = value.find("=");
+                            size_t val_end = value.find(";", key_val_split);
+                            std::string cookie_name = value.substr(0, key_val_split);
+                            std::string cookie_value = value.substr(key_val_split + 1, val_end - (key_val_split + 1));
+
+                            cookies[cookie_name] = cookie_value;
+                            Log(LogLevel::Debug, "Set cookies %s to %s", cookie_name.c_str(), cookie_value.c_str());
+                        };
+
+                        for (const auto& [key, value] : cookies) {
+                            Log(LogLevel::Debug, "cookies[%s] = %s", key.c_str(), value.c_str());
                         }
                     }
                 }
