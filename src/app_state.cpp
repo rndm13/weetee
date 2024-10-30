@@ -1557,7 +1557,7 @@ void make_local_backup(AppState* app) {
 
     // Find a max ID of a backup
     for (const auto& entry : fs::directory_iterator(dir)) {
-        std::optional<BackupInfo> opt_info = get_backup_info(entry.path());
+        std::optional<BackupInfo> opt_info = get_backup_info(entry.path().string());
         if (!opt_info.has_value()) {
             continue;
         }
@@ -1582,7 +1582,7 @@ void make_local_backup(AppState* app) {
 
     // Remove entries with lower id
     for (const auto& entry : fs::directory_iterator(dir)) {
-        std::optional<BackupInfo> opt_info = get_backup_info(entry.path());
+        std::optional<BackupInfo> opt_info = get_backup_info(entry.path().string());
         if (!opt_info.has_value()) {
             continue;
         }

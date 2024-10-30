@@ -39,6 +39,7 @@ target_link_libraries(weetee PRIVATE
 # ==================
 
 set(OPENSSL_USE_STATIC_LIBS TRUE)
+set(HTTPLIB_REQUIRE_OPENSSL TRUE)
 
 find_package(httplib COMPONENTS OpenSSL ZLIB Brotli)
 if (NOT httplib_FOUND)

@@ -346,7 +346,7 @@ template <RequestBodyType to_type> void request_body_convert(Test* test) {
         assert(std::holds_alternative<MultiPartBody>(test->request.body));
         MultiPartBody mpb = std::get<MultiPartBody>(test->request.body);
 
-        std::unordered_multimap<std::string, MultiPartBodyData> map;
+        std::unordered_map<std::string, MultiPartBodyData> map;
         for (const auto& elem : mpb.elements) {
             if (!(elem.flags & PARTIAL_DICT_ELEM_ENABLED)) {
                 continue;

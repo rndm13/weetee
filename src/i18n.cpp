@@ -8,12 +8,12 @@
 
 #define I18N_LOAD_ARR(j, i18n, id)                                                                 \
     if ((j).contains(#id)) {                                                                       \
-        (i18n.id) = std::vector<std::string>((j).at(#id));                                         \
+        (i18n.id) = (j).at(#id).template get<std::vector<std::string>>();                                         \
     }
 
 #define I18N_LOAD_OBJ(j, i18n, id)                                                                 \
     if ((j).contains(#id)) {                                                                       \
-        (i18n.id) = std::unordered_map<std::string, std::string>((j).at(#id));                     \
+        (i18n.id) = (j).at(#id).template get<std::unordered_map<std::string, std::string>>();                     \
     }
 
 #define I18N_LOAD_ID(j, i18n, icon, id)                                                            \
