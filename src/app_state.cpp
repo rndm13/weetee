@@ -1209,18 +1209,18 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) {
 
                     TestResult* result = &app->test_results.at(id).at(rerun);
 
-                    for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
-                        if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
-                            cookies[cookie.key] = cookie.data.data;
+                        for (const auto& cookie : test_queue.at(idx).request.cookies.elements) {
+                            if (cookie.flags & PARTIAL_DICT_ELEM_ENABLED) {
+                                cookies[cookie.key] = cookie.data.data;
+                            }
                         }
-                    }
 
-                    if (!keep_running) {
-                        result->running.store(false);
-                        result->status.store(STATUS_CANCELLED);
-                        result->verdict = "Previous test failed";
-                        continue;
-                    }
+                        if (!keep_running) {
+                            result->running.store(false);
+                            result->status.store(STATUS_CANCELLED);
+                            result->verdict = "Previous test failed";
+                            continue;
+                        }
 
                     if (!result->running.load()) {
                         keep_running = false;

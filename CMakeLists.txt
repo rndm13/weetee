@@ -81,7 +81,7 @@ target_include_directories(BS_thread_pool INTERFACE ${BS_thread_pool_SOURCE_DIR}
 
 FetchContent_Declare(
   save_state
-  GIT_REPOSITORY git@github.com:rndm13/save_state.git
+  GIT_REPOSITORY "https://github.com/rndm13/save_state.git"
   GIT_TAG "main"
 )
 
@@ -92,6 +92,7 @@ FetchContent_MakeAvailable(save_state)
 
 # Add GTest
 # ===============
+
 
 FetchContent_Declare(
   googletest

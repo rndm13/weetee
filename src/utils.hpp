@@ -7,7 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #endif
-#include <httplib.h>
+#include "../external/cpp-httplib/httplib.h"
 
 #include "imgui.h"
 
@@ -195,7 +195,8 @@ struct SplitStringIterator {
 
         std::string_view result = this->str.substr(this->idx, next - this->idx);
 
-        this->idx = std::max(next, next + this->separator.size());
+        this->idx = next >= next + this->separator.size() ? next : next + this->separator.size();
+        // this->idx = std::max(next, next + this->separator.size());
 
         return result;
     }
@@ -207,12 +208,12 @@ struct SplitStringIterator {
 
 constexpr std::string_view sv_trim(std::string_view sv) {
     size_t begin_idx = 0;
-    while (std::isspace(sv[begin_idx]) && begin_idx < sv.size()) {
+    while (sv[begin_idx] == ' ' && begin_idx < sv.size()) {
         begin_idx++;
     } 
 
     size_t size = 0;
-    while (!std::isspace(sv[begin_idx + size]) && begin_idx + size < sv.size()) {
+    while (sv[begin_idx + size] != ' ' && begin_idx + size < sv.size()) {
         size++;
     } 
 
