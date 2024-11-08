@@ -57,10 +57,6 @@ json pack_variables(std::string str, const VariablesMap& vars) {
 
     json result = json::parse(str, nullptr, false);
 
-    if (result.is_discarded()) {
-        printf("%s\n", str.c_str());
-    }
-
     return result;
 }
 

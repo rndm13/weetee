@@ -16,11 +16,11 @@
 #include "utils.hpp"
 
 #include "algorithm"
+#include "cstdio"
 #include "filesystem"
 #include "fstream"
 #include "iterator"
 #include "utility"
-#include "cstdio"
 
 std::string BackupConfig::get_default_local_dir() const {
     return HelloImGui::IniFolderLocation(HelloImGui::IniFolderType::AppExecutableFolder) + FS_SLASH
@@ -914,7 +914,7 @@ bool execute_test(
     const auto params = request_params(test_result->variables, test);
     auto headers = request_headers(test_result->variables, test, overload_cookies);
 
-    if (overload_cookies->contains("XSRF-TOKEN")) {
+    if (overload_cookies != nullptr && overload_cookies->contains("XSRF-TOKEN")) {
         headers.emplace("X-XSRF-TOKEN", overload_cookies->at("XSRF-TOKEN"));
     }
 
@@ -935,8 +935,6 @@ bool execute_test(
     test_result->req_content_type = content_type;
     test_result->req_endpoint = host + params_dest;
     test_result->req_headers = headers;
-
-
 
     auto progress = [app, test, test_result](size_t current, size_t total) -> bool {
         // Missing
@@ -1231,8 +1229,7 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) {
 
                     // Can run test
 
-                    keep_running &=
-                        execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
+                    keep_running &= execute_test(app, &test_queue.at(idx), rerun, cli, &cookies);
 
                     if (result->http_result.has_value() &&
                         result->http_result->error() == httplib::Error::Success) {
@@ -1244,15 +1241,11 @@ void run_dynamic_tests(AppState* app, const NestedTest& nt) {
                             size_t key_val_split = value.find("=");
                             size_t val_end = value.find(";", key_val_split);
                             std::string cookie_name = value.substr(0, key_val_split);
-                            std::string cookie_value = value.substr(key_val_split + 1, val_end - (key_val_split + 1));
+                            std::string cookie_value =
+                                value.substr(key_val_split + 1, val_end - (key_val_split + 1));
 
                             cookies[cookie_name] = cookie_value;
-                            Log(LogLevel::Debug, "Set cookies %s to %s", cookie_name.c_str(), cookie_value.c_str());
                         };
-
-                        for (const auto& [key, value] : cookies) {
-                            Log(LogLevel::Debug, "cookies[%s] = %s", key.c_str(), value.c_str());
-                        }
                     }
                 }
             });
@@ -1517,7 +1510,7 @@ void remote_file_save(
         requestable.data = true;
 
         if (std::find(app->sync.files.data.begin(), app->sync.files.data.end(), name) ==
-            app->sync.files.data.end()) {
+                app->sync.files.data.end()) {
             app->sync.files.data.push_back(name);
         }
     };
